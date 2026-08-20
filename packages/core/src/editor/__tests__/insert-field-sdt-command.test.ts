@@ -93,6 +93,25 @@ describe('insertFieldSdt command', () => {
     expect(xml).not.toContain('docx-field:name');
   });
 
+  test('Backspace joins a new paragraph after a field control', () => {
+    const editor = mount('before ');
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+
+    editor.surface!.splitParagraph();
+    expect(editor.surface!.session.paragraphIds()).toHaveLength(2);
+
+    editor.surface!.deleteBackward();
+
+    expect(editor.surface!.session.paragraphIds()).toHaveLength(1);
+    expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('before [Name]');
+    expect(editor.surface!.state().lastRejection).toBeNull();
+  });
+
   test('select-all deletion removes a content-locked field control', async () => {
     const editor = mount();
     const paragraphId = editor.surface!.session.paragraphIds()[0]!;

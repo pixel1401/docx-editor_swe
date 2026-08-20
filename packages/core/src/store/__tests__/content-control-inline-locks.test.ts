@@ -437,7 +437,7 @@ describe('the paragraph an inline control sits in is still structural', () => {
     expect(refusal(part, { op: 'deleteBlock', blockId: firstParagraph(part).id })).toBe('locked');
   });
 
-  test('joining two paragraphs is refused when either holds locked content', () => {
+  test('joining two paragraphs is refused when the removed paragraph holds locked content', () => {
     const part = parseDoc(
       `<w:p><w:r><w:t>first</w:t></w:r></w:p>` +
         `<w:p><w:sdt><w:sdtPr><w:tag w:val="f"/><w:lock w:val="contentLocked"/></w:sdtPr>` +
@@ -452,5 +452,22 @@ describe('the paragraph an inline control sits in is still structural', () => {
         secondId: found[1]!.id,
       })
     ).toBe('locked');
+  });
+
+  test('joining an empty paragraph after locked inline content is allowed', () => {
+    const part = parseDoc(
+      `<w:p><w:sdt><w:sdtPr><w:tag w:val="f"/><w:lock w:val="contentLocked"/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>LOCKED</w:t></w:r></w:sdtContent></w:sdt></w:p>` +
+        `<w:p/>`
+    );
+    const body = bodyStoryRoot(part);
+    const found = body ? storyParagraphs(body) : [];
+    expect(
+      refusal(part, {
+        op: 'joinParagraphs',
+        firstId: found[0]!.id,
+        secondId: found[1]!.id,
+      })
+    ).toBeNull();
   });
 });

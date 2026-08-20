@@ -316,13 +316,12 @@ const TREE_OP_REACH: {
       range: { start: offset, end: offset },
     })),
   }),
-  // A join restructures both paragraphs: whatever either one held ends up somewhere else.
+  // A join keeps the first paragraph and its existing children in place. Only the second
+  // paragraph's children move into the first. A locked inline control already in the first
+  // paragraph is therefore not edited by removing the paragraph mark after it.
   joinParagraphs: (op) => ({
     kind: 'nodes',
-    targets: [
-      { nodeId: op.firstId, structural: true },
-      { nodeId: op.secondId, structural: true },
-    ],
+    targets: [{ nodeId: op.firstId }, { nodeId: op.secondId, structural: true }],
   }),
   setParagraphProperties: (op) => whole(op.paragraphId),
   setParagraphMarkProperties: (op) => whole(op.paragraphId),
