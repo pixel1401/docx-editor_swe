@@ -1,0 +1,27388 @@
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { unzipSync, zipSync, strToU8, strFromU8 } from "fflate";
+var FN = Symbol("validated-resolved-font"),
+  su = 64 * 1024 * 1024,
+  du = 256,
+  cu = 128 * 1024 * 1024,
+  Yt = class extends Error {
+    name = "FontResolutionError";
+    request;
+    code;
+    limit;
+    actual;
+    diagnostic;
+    expectedHash;
+    actualHash;
+    constructor(n, t, r = {}) {
+      (super(`Font resolution failed (${n}) for ${Po(t)}`),
+        (this.code = n),
+        (this.request = Or(t)),
+        (this.limit = r.limit),
+        (this.actual = r.actual),
+        (this.diagnostic = r.diagnostic),
+        (this.expectedHash = r.expectedHash),
+        (this.actualHash = r.actualHash));
+    }
+  },
+  fu = (e) => {
+    if (e.family.trim().length === 0)
+      throw new TypeError("Font family must not be empty");
+    if (!Number.isInteger(e.weight) || e.weight < 1 || e.weight > 1e3)
+      throw new RangeError(
+        "Font weight must be an integer from 1 through 1000",
+      );
+    if (e.style !== "normal" && e.style !== "italic")
+      throw new TypeError("Font style must be normal or italic");
+  },
+  Or = (e) => (
+    fu(e),
+    Object.freeze({ family: e.family, weight: e.weight, style: e.style })
+  ),
+  Po = (e) => (fu(e), JSON.stringify([e.family, e.weight, e.style])),
+  vl = class {
+    [FN] = true;
+    id;
+    identity;
+    request;
+    family;
+    byteLength;
+    hash;
+    faceIndex;
+    substitution;
+    constructor(n, t) {
+      if (n.id.length === 0)
+        throw new TypeError("Resolved font id must not be empty");
+      if (!Number.isInteger(n.faceIndex) || n.faceIndex < 0)
+        throw new RangeError("Font face index must be a non-negative integer");
+      ((this.id = n.id),
+        (this.request = Or(n.request)),
+        (this.family = this.request.family),
+        (this.hash = n.hash),
+        (this.faceIndex = n.faceIndex),
+        (this.identity = `${this.hash}#${this.faceIndex}`),
+        (this.byteLength = n.byteLength),
+        (this.substitution = null),
+        t &&
+          (this.substitution = Object.freeze({
+            requested: Or(t.requested),
+            resolved: Or(t.resolved),
+          })),
+        Object.freeze(this));
+    }
+    get bytes() {
+      return hu(this).slice();
+    }
+  },
+  mu = new WeakSet(),
+  pu = new WeakMap(),
+  gu = new WeakMap(),
+  xu = (e, n, t, r) => {
+    let o = new vl(e, r);
+    return (pu.set(o, n), gu.set(o, t), mu.add(o), o);
+  },
+  hu = (e) => {
+    yu(e);
+    let n = pu.get(e);
+    if (!n) throw new TypeError("Resolved font has no owned byte capability");
+    return n;
+  },
+  VN = (e) => {
+    yu(e);
+    let n = gu.get(e);
+    if (!n) throw new TypeError("Resolved font has no admitted table metadata");
+    return n;
+  },
+  yu = (e) => {
+    if (typeof e != "object" || e === null || !mu.has(e))
+      throw new TypeError("Shaping requires a validated resolved font");
+  },
+  WN = new Uint32Array([
+    1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924,
+    528734635, 1541459225,
+  ]),
+  HN = new Uint32Array([
+    1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993,
+    2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987,
+    1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774,
+    264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986,
+    2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+    113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291,
+    1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411,
+    3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344,
+    430227734, 506948616, 659060556, 883997877, 958139571, 1322822218,
+    1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+    2428436474, 2756734187, 3204031479, 3329325298,
+  ]),
+  Kn = (e, n) => (e >>> n) | (e << (32 - n)),
+  Sl = (e) => {
+    let n = Math.ceil((e.byteLength + 9) / 64) * 64,
+      t = new Uint8Array(n);
+    (t.set(e), (t[e.byteLength] = 128));
+    let r = BigInt(e.byteLength) * 8n;
+    for (let a = 0; a < 8; a += 1)
+      t[n - 1 - a] = Number((r >> BigInt(a * 8)) & 0xffn);
+    let o = WN.slice(),
+      i = new Uint32Array(64);
+    for (let a = 0; a < t.length; a += 64) {
+      for (let p = 0; p < 16; p += 1) {
+        let x = a + p * 4;
+        i[p] =
+          ((t[x] << 24) | (t[x + 1] << 16) | (t[x + 2] << 8) | t[x + 3]) >>> 0;
+      }
+      for (let p = 16; p < 64; p += 1) {
+        let x = i[p - 15],
+          h = i[p - 2],
+          N = Kn(x, 7) ^ Kn(x, 18) ^ (x >>> 3),
+          k = Kn(h, 17) ^ Kn(h, 19) ^ (h >>> 10);
+        i[p] = (i[p - 16] + N + i[p - 7] + k) >>> 0;
+      }
+      let l = o[0],
+        s = o[1],
+        d = o[2],
+        c = o[3],
+        u = o[4],
+        f = o[5],
+        m = o[6],
+        g = o[7];
+      for (let p = 0; p < 64; p += 1) {
+        let x = Kn(u, 6) ^ Kn(u, 11) ^ Kn(u, 25),
+          h = (u & f) ^ (~u & m),
+          N = (g + x + h + HN[p] + i[p]) >>> 0,
+          k = Kn(l, 2) ^ Kn(l, 13) ^ Kn(l, 22),
+          O = (l & s) ^ (l & d) ^ (s & d),
+          b = (k + O) >>> 0;
+        ((g = m),
+          (m = f),
+          (f = u),
+          (u = (c + N) >>> 0),
+          (c = d),
+          (d = s),
+          (s = l),
+          (l = (N + b) >>> 0));
+      }
+      ((o[0] = (o[0] + l) >>> 0),
+        (o[1] = (o[1] + s) >>> 0),
+        (o[2] = (o[2] + d) >>> 0),
+        (o[3] = (o[3] + c) >>> 0),
+        (o[4] = (o[4] + u) >>> 0),
+        (o[5] = (o[5] + f) >>> 0),
+        (o[6] = (o[6] + m) >>> 0),
+        (o[7] = (o[7] + g) >>> 0));
+    }
+    return `sha256:${Array.from(o, (a) => a.toString(16).padStart(8, "0")).join("")}`;
+  },
+  Ou = (e, n) => (e[n] << 8) | e[n + 1],
+  Nr = (e, n) =>
+    (e[n] * 16777216 + (e[n + 1] << 16) + (e[n + 2] << 8) + e[n + 3]) >>> 0,
+  uu = (e, n) => {
+    if (n > e.byteLength - 12)
+      return { valid: false, diagnostic: "truncated sfnt header" };
+    let t = String.fromCharCode(e[n], e[n + 1], e[n + 2], e[n + 3]);
+    if (
+      !(e[n] === 0 && e[n + 1] === 1 && e[n + 2] === 0 && e[n + 3] === 0) &&
+      t !== "OTTO" &&
+      t !== "true" &&
+      t !== "typ1"
+    )
+      return { valid: false, diagnostic: "unsupported sfnt signature" };
+    let o = Ou(e, n + 4),
+      i = n + 12 + o * 16;
+    if (!Number.isSafeInteger(i) || i > e.byteLength)
+      return { valid: false, diagnostic: "truncated sfnt table directory" };
+    for (let a = 0; a < o; a += 1) {
+      let l = n + 12 + a * 16,
+        s = Nr(e, l + 8),
+        d = Nr(e, l + 12);
+      if (s > e.byteLength || d > e.byteLength - s)
+        return {
+          valid: false,
+          diagnostic: "sfnt table range exceeds font bytes",
+        };
+    }
+    return { valid: true };
+  },
+  jN = (e, n) => {
+    let r =
+        String.fromCharCode(e[0], e[1], e[2], e[3]) === "ttcf"
+          ? Nr(e, 12 + n * 4)
+          : 0,
+      o = Ou(e, r + 4),
+      i = new Set();
+    for (let a = 0; a < o; a += 1) {
+      let l = r + 12 + a * 16;
+      i.add(String.fromCharCode(e[l], e[l + 1], e[l + 2], e[l + 3]));
+    }
+    return Object.freeze(i);
+  },
+  KN = (e, n) => {
+    if (!Number.isSafeInteger(n) || n < 0)
+      return { valid: false, diagnostic: "invalid font face index" };
+    if (e.byteLength < 12)
+      return { valid: false, diagnostic: "truncated sfnt header" };
+    if (String.fromCharCode(e[0], e[1], e[2], e[3]) !== "ttcf")
+      return n !== 0
+        ? {
+            valid: false,
+            diagnostic: "standalone sfnt has only face index zero",
+          }
+        : uu(e, 0);
+    let r = Nr(e, 4);
+    if (r !== 65536 && r !== 131072)
+      return { valid: false, diagnostic: "unsupported TTC version" };
+    let o = Nr(e, 8),
+      i = 12 + o * 4;
+    if (o === 0 || !Number.isSafeInteger(i) || i > e.byteLength || n >= o)
+      return { valid: false, diagnostic: "invalid TTC face directory" };
+    let a = Nr(e, 12 + n * 4);
+    return a < i
+      ? { valid: false, diagnostic: "invalid TTC face offset" }
+      : uu(e, a);
+  },
+  $N = (e, n, t, r) => {
+    if (e.availability === "forbidden") return { kind: "forbidden" };
+    if (e.bytes.byteLength > n)
+      return { kind: "overLimit", actual: e.bytes.byteLength };
+    let o = e.bytes.slice();
+    (r?.onOwnedByteCopy?.(), r?.onHash?.());
+    let i = Sl(o);
+    if (e.hash !== i)
+      return { kind: "hashMismatch", expectedHash: e.hash, actualHash: i };
+    let a = KN(o, e.faceIndex);
+    if (!a.valid) return { kind: "malformed", diagnostic: a.diagnostic };
+    r?.onTableScan?.();
+    let l = jN(o, e.faceIndex);
+    try {
+      let d = t(o, e.faceIndex);
+      if (!d.valid) return { kind: "malformed", diagnostic: d.diagnostic };
+    } catch (d) {
+      return {
+        kind: "malformed",
+        diagnostic: d instanceof Error ? d.message : "font validator threw",
+      };
+    }
+    let s = {
+      kind: "resolved",
+      font: xu({ ...e, byteLength: o.byteLength }, o, l),
+    };
+    return (r?.onAdmission?.(), s);
+  },
+  yM = (e) => {
+    if (!Number.isSafeInteger(e.epoch) || e.epoch < 0)
+      throw new RangeError(
+        "Font resource epoch must be a non-negative safe integer",
+      );
+    if (
+      !Number.isSafeInteger(e.maxFontBytes) ||
+      e.maxFontBytes <= 0 ||
+      e.maxFontBytes > su
+    )
+      throw new RangeError(
+        `Font byte ceiling must be a positive safe integer no greater than ${su}`,
+      );
+    if (typeof e.validateFont != "function")
+      throw new TypeError("Font snapshot requires a validator");
+    if (e.resources.length > du)
+      throw new RangeError(`Font source count must not exceed ${du}`);
+    let n = 0;
+    for (let s of e.resources) {
+      if (s.bytes.byteLength > cu - n)
+        throw new RangeError(`Aggregate font bytes must not exceed ${cu}`);
+      n += s.bytes.byteLength;
+    }
+    let t = e.epoch,
+      r = e.maxFontBytes,
+      o = e.validateFont,
+      i = new Map();
+    for (let s of e.resources) {
+      let d = Po(s.request);
+      if (i.has(d))
+        throw new TypeError(`Duplicate font resource request: ${d}`);
+      i.set(d, $N(s, r, o, e.instrumentation));
+    }
+    let a = new Map();
+    for (let s of e.substitutions ?? []) {
+      let d = Po(s.from);
+      if (a.has(d))
+        throw new TypeError(`Duplicate font substitution request: ${d}`);
+      a.set(d, Or(s.to));
+    }
+    return Object.freeze({
+      epoch: t,
+      resolve: (s) => {
+        let d = Or(s),
+          c = Po(d),
+          u = a.get(c),
+          f = u ?? d,
+          m = i.get(Po(f));
+        return m
+          ? m.kind === "forbidden"
+            ? new Yt("forbidden", d)
+            : m.kind === "overLimit"
+              ? new Yt("overLimit", d, { limit: r, actual: m.actual })
+              : m.kind === "malformed"
+                ? new Yt("malformed", d, { diagnostic: m.diagnostic })
+                : m.kind === "hashMismatch"
+                  ? new Yt("hashMismatch", d, {
+                      expectedHash: m.expectedHash,
+                      actualHash: m.actualHash,
+                    })
+                  : u
+                    ? xu(
+                        {
+                          request: m.font.request,
+                          id: m.font.id,
+                          hash: m.font.hash,
+                          faceIndex: m.font.faceIndex,
+                          byteLength: m.font.byteLength,
+                        },
+                        hu(m.font),
+                        VN(m.font),
+                        { requested: d, resolved: u },
+                      )
+                    : m.font
+          : new Yt("missing", d);
+      },
+    });
+  };
+var Li = /[\x00-\x1f\x7f]/,
+  GN = new RegExp(Li.source, "g");
+function NM(e) {
+  return e.replace(GN, "");
+}
+var zN = /%(2f|5c)/i,
+  XN = /%2e/i,
+  YN = /^[a-zA-Z]:/;
+function ku(e) {
+  return e.length === 0
+    ? "empty"
+    : Li.test(e)
+      ? "control-char"
+      : e.includes("\\")
+        ? "backslash"
+        : YN.test(e) || e.startsWith("//")
+          ? "drive-or-unc"
+          : zN.test(e)
+            ? "encoded-separator"
+            : XN.test(e)
+              ? "encoded-dot"
+              : null;
+}
+function bu(e) {
+  let n;
+  try {
+    n = decodeURIComponent(e);
+  } catch {
+    return { ok: false, reason: "bad-encoding" };
+  }
+  return Li.test(n)
+    ? { ok: false, reason: "control-char" }
+    : n.includes("\\")
+      ? { ok: false, reason: "backslash" }
+      : { ok: true, value: n };
+}
+function qN(e) {
+  return e.length === 0
+    ? "empty-segment"
+    : e === "." || e === ".."
+      ? "dot-segment"
+      : e.endsWith(".")
+        ? "segment-trailing-dot"
+        : e === "__proto__" || e === "constructor" || e === "prototype"
+          ? "unsafe-key"
+          : null;
+}
+function fe(e) {
+  let n = ku(e);
+  if (n) return { ok: false, reason: n };
+  let t = bu(e);
+  if (!t.ok) return t;
+  let o = (t.value.startsWith("/") ? t.value.slice(1) : t.value).split("/");
+  for (let i of o) {
+    let a = qN(i);
+    if (a) return { ok: false, reason: a };
+  }
+  return { ok: true, partName: "/" + o.join("/") };
+}
+var Nu = fe("word/document.xml"),
+  kM = Nu.ok ? Nu.partName : "/word/document.xml";
+function Al(e) {
+  let n = "";
+  for (let t = 0; t < e.length; t++) {
+    let r = e.charCodeAt(t);
+    n += r >= 65 && r <= 90 ? String.fromCharCode(r + 32) : e[t];
+  }
+  return n;
+}
+function $(e) {
+  return Al(e);
+}
+function bM(e) {
+  let n = new Map(),
+    t = [];
+  for (let o of e) {
+    let i = fe(o);
+    if (!i.ok) {
+      t.push({ raw: o, reason: i.reason });
+      continue;
+    }
+    let a = $(i.partName);
+    n.set(a, (n.get(a) ?? 0) + 1);
+  }
+  return {
+    duplicates: [...n.entries()].filter(([, o]) => o > 1).map(([o]) => o),
+    rejected: t,
+  };
+}
+function Ve(e, n) {
+  let t = ku(n);
+  if (t) return { ok: false, reason: t };
+  let r = bu(n);
+  if (!r.ok) return r;
+  let o = r.value,
+    i = e.replace(/^\//, "").split("/");
+  i.pop();
+  let a = o.startsWith("/") ? [] : [...i];
+  for (let l of (o.startsWith("/") ? o.slice(1) : o).split("/"))
+    if (!(l === "" || l === ".")) {
+      if (l === "..") {
+        if (a.length === 0) return { ok: false, reason: "traversal-escape" };
+        a.pop();
+        continue;
+      }
+      if (l.endsWith(".")) return { ok: false, reason: "segment-trailing-dot" };
+      a.push(l);
+    }
+  return a.length === 0
+    ? { ok: false, reason: "empty-segment" }
+    : { ok: true, partName: "/" + a.join("/") };
+}
+var ZN = /^(javascript|vbscript|data|file):/i,
+  QN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+function kr(e) {
+  return e.length === 0
+    ? { ok: false, reason: "empty" }
+    : Li.test(e)
+      ? { ok: false, reason: "control-char" }
+      : QN.test(e)
+        ? ZN.test(e)
+          ? { ok: false, reason: "unsafe-scheme" }
+          : { ok: true, partName: e }
+        : { ok: false, reason: "not-absolute-uri" };
+}
+var G = "dev.docx-editor.core",
+  me = {
+    mutationHuman: `${G}.origin.mutation.human`,
+    mutationAgent: `${G}.origin.mutation.agent`,
+    mutationRemote: `${G}.origin.mutation.remote`,
+    mutationUndo: `${G}.origin.mutation.undo`,
+    mutationRedo: `${G}.origin.mutation.redo`,
+    mutationMigration: `${G}.origin.mutation.migration`,
+    mutationRepair: `${G}.origin.mutation.repair`,
+    mutationServer: `${G}.origin.mutation.server`,
+    projection: `${G}.origin.projection`,
+    awareness: `${G}.origin.awareness`,
+  },
+  wM = [
+    me.mutationHuman,
+    me.mutationAgent,
+    me.mutationRemote,
+    me.mutationUndo,
+    me.mutationRedo,
+    me.mutationMigration,
+    me.mutationRepair,
+    me.mutationServer,
+  ],
+  RM = [me.projection, me.awareness],
+  JN = {
+    applied: `${G}.result.applied`,
+    validation: `${G}.result.validation`,
+    conflict: `${G}.result.conflict`,
+    resource: `${G}.result.resource`,
+    authorization: `${G}.result.authorization`,
+    aborted: `${G}.result.aborted`,
+  },
+  ek = {
+    fonts: `${G}.port.fonts`,
+    shaping: `${G}.port.shaping`,
+    images: `${G}.port.images`,
+    clock: `${G}.port.clock`,
+    identity: `${G}.port.identity`,
+    persistence: `${G}.port.persistence`,
+    transport: `${G}.port.transport`,
+    scheduling: `${G}.port.scheduling`,
+    audit: `${G}.port.audit`,
+    authorization: `${G}.port.authorization`,
+    resourceAccounting: `${G}.port.resource-accounting`,
+    cancellation: `${G}.port.cancellation`,
+    externalResourceConsent: `${G}.port.external-resource-consent`,
+  },
+  qt = {
+    style: `${G}.dep.style`,
+    numbering: `${G}.dep.numbering`,
+    section: `${G}.dep.section`,
+    story: `${G}.dep.story`,
+    font: `${G}.dep.font`,
+    image: `${G}.dep.image`,
+    table: `${G}.dep.table`,
+    field: `${G}.dep.field`,
+    note: `${G}.dep.note`,
+    headerFooter: `${G}.dep.header-footer`,
+    annotation: `${G}.dep.annotation`,
+  },
+  EM = [
+    ...Object.values(me),
+    ...Object.values(JN),
+    ...Object.values(ek),
+    ...Object.values(qt),
+  ];
+var Pu = Object.freeze({
+    maxRecursionDepth: 256,
+    maxElementCount: 5e7,
+    maxPartCount: 1e5,
+    maxDecompressedBytes: 2147483648,
+    maxCompressedBytes: 536870912,
+    maxCompressionRatio: 200,
+    maxChunkBytes: 67108864,
+    maxPaginationPasses: 100,
+    maxQueueDepth: 1e6,
+  }),
+  nk = Object.freeze({
+    maxRecursionDepth: 128,
+    maxElementCount: 1e7,
+    maxPartCount: 1e4,
+    maxDecompressedBytes: 512 * 1024 * 1024,
+    maxCompressedBytes: 128 * 1024 * 1024,
+    maxCompressionRatio: 100,
+    maxChunkBytes: 16 * 1024 * 1024,
+    maxPaginationPasses: 32,
+    maxQueueDepth: 1e5,
+  }),
+  tk = Object.keys(Pu);
+function CM(e) {
+  let n = {};
+  for (let t of tk) {
+    let r = Pu[t],
+      o = e?.[t],
+      i = typeof o == "number" && Number.isFinite(o) && o > 0 ? o : nk[t];
+    n[t] = Math.min(Math.floor(i), r);
+  }
+  return Object.freeze(n);
+}
+var Bi = Object.freeze({
+    maxEncodedBytes: 64 * 1024 * 1024,
+    maxDecodedBytes: 512 * 1024 * 1024,
+    maxPixels: 25e7,
+    maxDimension: 65536,
+    maxPolygonPoints: 16384,
+    maxExternalRedirects: 32,
+  }),
+  rk = Object.freeze({
+    maxEncodedBytes: 32 * 1024 * 1024,
+    maxDecodedBytes: 400 * 1024 * 1024,
+    maxPixels: 1e8,
+    maxDimension: 32768,
+    maxPolygonPoints: 4096,
+    maxExternalRedirects: 8,
+  }),
+  ok = Object.keys(Bi);
+function br(e) {
+  let n = {};
+  for (let t of ok) {
+    let r = Bi[t],
+      o = e?.[t],
+      i = typeof o == "number" && Number.isFinite(o) && o > 0 ? o : rk[t];
+    n[t] = Math.min(Math.floor(i), r);
+  }
+  return Object.freeze(n);
+}
+var Ml = class extends Error {
+    constructor(t, r, o) {
+      super(`${t}: attempted ${o} exceeds limit ${r}`);
+      this.label = t;
+      this.limit = r;
+      this.attempted = o;
+      this.name = "LimitExceededError";
+    }
+    label;
+    limit;
+    attempted;
+  },
+  Fi = class {
+    constructor(n, t) {
+      this.label = n;
+      this.limit = t;
+      if (!Number.isFinite(t) || t < 0)
+        throw new Error(
+          `BoundedCounter limit must be a finite non-negative number, got ${t}`,
+        );
+    }
+    label;
+    limit;
+    value = 0;
+    get current() {
+      return this.value;
+    }
+    get remaining() {
+      return this.limit - this.value;
+    }
+    add(n = 1) {
+      if (!Number.isFinite(n) || n < 0)
+        throw new Error(
+          `${this.label}: increment must be a finite non-negative number, got ${n}`,
+        );
+      if (
+        n > Number.MAX_SAFE_INTEGER - this.value ||
+        this.value + n > this.limit
+      )
+        throw new Ml(this.label, this.limit, this.value + n);
+      return ((this.value += n), this.value);
+    }
+    canAdd(n = 1) {
+      return (
+        Number.isFinite(n) &&
+        n >= 0 &&
+        n <= Number.MAX_SAFE_INTEGER - this.value &&
+        this.value + n <= this.limit
+      );
+    }
+    release(n) {
+      if (!Number.isFinite(n) || n < 0)
+        throw new Error(`${this.label}: release must be finite >= 0`);
+      this.value = Math.max(0, this.value - n);
+    }
+  };
+var ik = /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/,
+  ak =
+    /^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\s*$/;
+function wu(e) {
+  let n = e.indexOf(";");
+  return n === -1
+    ? ik.test(e)
+    : ak.test(e.slice(0, n))
+      ? e
+          .slice(n + 1)
+          .split(";")
+          .every((t) => t.length > 0)
+      : false;
+}
+function Ru(e) {
+  return Al(e.replace(/^\./, ""));
+}
+function _l(e, n = 1e5) {
+  let t = new Fi("content-type-records", n),
+    r = new Map(),
+    o = new Map();
+  for (let i of e.defaults) {
+    try {
+      t.add(1);
+    } catch {
+      return { ok: false, error: { code: "too-many-records", limit: n } };
+    }
+    if (!wu(i.contentType))
+      return {
+        ok: false,
+        error: { code: "invalid-mime", value: i.contentType },
+      };
+    let a = Ru(i.extension),
+      l = r.get(a);
+    if (l !== void 0 && l !== i.contentType)
+      return {
+        ok: false,
+        error: { code: "conflicting-default", extension: a },
+      };
+    r.set(a, i.contentType);
+  }
+  for (let i of e.overrides) {
+    try {
+      t.add(1);
+    } catch {
+      return { ok: false, error: { code: "too-many-records", limit: n } };
+    }
+    if (!wu(i.contentType))
+      return {
+        ok: false,
+        error: { code: "invalid-mime", value: i.contentType },
+      };
+    let a = fe(i.partName);
+    if (!a.ok)
+      return {
+        ok: false,
+        error: { code: "invalid-override-name", partName: i.partName },
+      };
+    let l = $(a.partName),
+      s = o.get(l);
+    if (s !== void 0 && s !== i.contentType)
+      return { ok: false, error: { code: "duplicate-override", partName: l } };
+    o.set(l, i.contentType);
+  }
+  return { ok: true, index: { defaults: r, overrides: o } };
+}
+function Rt(e, n) {
+  let t = e.overrides.get($(n));
+  if (t !== void 0) return { ok: true, contentType: t, source: "override" };
+  let r = n.lastIndexOf(".");
+  if (r >= 0) {
+    let o = Ru(n.slice(r + 1)),
+      i = e.defaults.get(o);
+    if (i !== void 0) return { ok: true, contentType: i, source: "default" };
+  }
+  return { ok: false, reason: "unknown" };
+}
+var Vi =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+function Eu(e) {
+  let n = new Map(),
+    t = new Map();
+  for (let r of [...e].sort((o, i) => o.order - i.order)) {
+    let o = t.get(r.ownerPart) ?? new Set();
+    if (o.has(r.id))
+      return {
+        ok: false,
+        error: { code: "duplicate-id", ownerPart: r.ownerPart, id: r.id },
+      };
+    (o.add(r.id), t.set(r.ownerPart, o));
+    let i = n.get(r.ownerPart) ?? [];
+    (i.push(r), n.set(r.ownerPart, i));
+  }
+  return { ok: true, byOwner: n };
+}
+function Ee(e) {
+  return e.targetMode === "External"
+    ? { mode: "External", sinkSafe: kr(e.rawTarget), raw: e.rawTarget }
+    : {
+        mode: "Internal",
+        target: Ve(e.ownerPart, e.rawTarget),
+        raw: e.rawTarget,
+      };
+}
+function Pr(e, n, t) {
+  if (!e) return { mode: "missing" };
+  for (let r of e) {
+    if (r.ownerPart !== n || r.id !== t) continue;
+    if (r.type !== Vi) return { mode: "missing" };
+    let o = Ee(r);
+    return o.mode === "External"
+      ? { mode: "external", sinkSafe: o.sinkSafe.ok, raw: o.raw }
+      : o.target.ok
+        ? { mode: "internal", partName: o.target.partName, raw: o.raw }
+        : { mode: "missing" };
+  }
+  return { mode: "missing" };
+}
+var lk = ["__proto__", "prototype", "constructor"],
+  sk = new Set(lk),
+  Dl = class extends Error {
+    constructor(t, r) {
+      super(`dangerous key ${JSON.stringify(t)} at ${r || "<root>"}`);
+      this.key = t;
+      this.path = r;
+      this.name = "DangerousKeyError";
+    }
+    key;
+    path;
+  };
+function dk(e) {
+  return sk.has(e);
+}
+function Ll() {
+  return Object.create(null);
+}
+function UM(e, n = "") {
+  return Ul(e, n, new WeakSet());
+}
+function Ul(e, n, t) {
+  if (e === null || typeof e != "object") return e;
+  if (t.has(e)) throw new Error(`cyclic structure at ${n || "<root>"}`);
+  if ((t.add(e), Array.isArray(e))) {
+    let o = e.map((i, a) => Ul(i, `${n}[${a}]`, t));
+    return (t.delete(e), o);
+  }
+  let r = Ll();
+  for (let o of Object.keys(e)) {
+    if (dk(o)) throw new Dl(o, n);
+    r[o] = Ul(e[o], n ? `${n}.${o}` : o, t);
+  }
+  return (t.delete(e), r);
+}
+var ck = new Set(["http", "https", "mailto", "tel", "ftp"]),
+  uk = /^([a-zA-Z][a-zA-Z0-9+.-]*):/;
+function lt(e) {
+  let n = e.replace(/[\t\n\r]/g, "").trim(),
+    t = uk.exec(n);
+  return t && !ck.has(t[1].toLowerCase())
+    ? { ok: false, inert: true }
+    : { ok: true, href: n };
+}
+var Iu = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
+  "\r": "&#xD;",
+};
+function fk(e) {
+  return e.replace(/[&<>"'\r]/g, (n) => Iu[n]);
+}
+var mk = { ...Iu, "\n": "&#xA;", "	": "&#x9;" };
+function pk(e) {
+  return e.replace(/[&<>"'\r\n\t]/g, (n) => mk[n]);
+}
+function gk(e) {
+  return e === 9 || e === 10 || e === 13
+    ? false
+    : e < 32
+      ? true
+      : e === 65534 || e === 65535;
+}
+function Z(e) {
+  if (typeof e != "string") return false;
+  for (let n = 0; n < e.length; n++) {
+    let t = e.charCodeAt(n);
+    if (gk(t)) return false;
+    if (t >= 55296 && t <= 56319) {
+      let r = e.charCodeAt(n + 1);
+      if (!(r >= 56320 && r <= 57343)) return false;
+      n++;
+    } else if (t >= 56320 && t <= 57343) return false;
+  }
+  return true;
+}
+function Je(e, n) {
+  if (typeof e != "string")
+    throw new Error(`${n} must be a string scalar (got ${typeof e})`);
+  if (!Z(e)) throw new Error(`${n} contains a character not valid in XML 1.0`);
+  return fk(e);
+}
+function Cu(e, n) {
+  if (typeof e != "string")
+    throw new Error(`${n} must be a string scalar (got ${typeof e})`);
+  if (!Z(e)) throw new Error(`${n} contains a character not valid in XML 1.0`);
+  return pk(e);
+}
+function BM(e) {
+  return e.replace(
+    /[\x00-\x1f\x7f"'\\]/g,
+    (n) => `\\${n.charCodeAt(0).toString(16)} `,
+  );
+}
+function FM(e) {
+  return /url\s*\(|@import/i.test(e);
+}
+var xk = [
+    "field-dde",
+    "field-include",
+    "macro",
+    "activex",
+    "ole",
+    "embedded-object",
+    "executable-relationship",
+  ],
+  hk = new Set(xk);
+function yk(e) {
+  return hk.has(e);
+}
+var Ok = new Set([
+  "PAGE",
+  "NUMPAGES",
+  "PAGEREF",
+  "REF",
+  "SEQ",
+  "TOC",
+  "DATE",
+  "TIME",
+  "STYLEREF",
+]);
+function VM(e) {
+  let n = e.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
+  return Ok.has(n);
+}
+function WM(e) {
+  let n = [],
+    t = [];
+  for (let r of e) (yk(r.kind) ? t : n).push(r);
+  return { kept: n, removed: t, nonLossless: t.length > 0 };
+}
+var wr = 256,
+  Mu = wr,
+  wo = 64 * 1024 * 1024,
+  Tu = 1e6;
+function vu(e) {
+  let n =
+    e.indexOf("&") < 0
+      ? e
+      : e.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (t, r) => {
+          switch (r) {
+            case "amp":
+              return "&";
+            case "lt":
+              return "<";
+            case "gt":
+              return ">";
+            case "quot":
+              return '"';
+            case "apos":
+              return "'";
+            default: {
+              let o =
+                r[1] === "x"
+                  ? parseInt(r.slice(2), 16)
+                  : parseInt(r.slice(1), 10);
+              if (
+                !Number.isSafeInteger(o) ||
+                !(
+                  o === 9 ||
+                  o === 10 ||
+                  o === 13 ||
+                  (o >= 32 && o <= 55295) ||
+                  (o >= 57344 && o <= 65533) ||
+                  (o >= 65536 && o <= 1114111)
+                )
+              )
+                throw new Error(
+                  "numeric reference is not a valid XML 1.0 scalar",
+                );
+              return String.fromCodePoint(o);
+            }
+          }
+        });
+  return _u(n);
+}
+function _u(e) {
+  if (!Z(e)) throw new Error("value is not valid XML 1.0 text");
+  return e;
+}
+var Wi = class extends Error {},
+  Hi = class extends Error {},
+  Su = /&(?!(amp|lt|gt|quot|apos);)[A-Za-z_][\w.-]*;/y;
+function Au(e) {
+  return Number.isFinite(e) && Number.isInteger(e) && e >= 0;
+}
+function bk(e) {
+  for (let n = 0; n < e.length; n += 1) {
+    let t = e.charCodeAt(n);
+    if (!(t !== 60 && t !== 38)) {
+      if (t === 38) {
+        if (((Su.lastIndex = n), Su.test(e))) return "entity-forbidden";
+        continue;
+      }
+      if (e.startsWith("<![CDATA[", n)) {
+        let r = e.indexOf("]]>", n + 9);
+        if (r < 0) return "parse-error";
+        n = r + 2;
+        continue;
+      }
+      if (e.startsWith("<!--", n)) {
+        let r = e.indexOf("-->", n + 4);
+        if (r < 0) return "parse-error";
+        n = r + 2;
+        continue;
+      }
+      if (e.startsWith("<?", n)) {
+        let r = e.indexOf("?>", n + 2);
+        if (r < 0) return "parse-error";
+        n = r + 1;
+        continue;
+      }
+      if (e.startsWith("<!", n)) {
+        let r = e.slice(n, n + 10).toUpperCase();
+        if (r.startsWith("<!DOCTYPE")) return "dtd-forbidden";
+        if (r.startsWith("<!ENTITY")) return "entity-forbidden";
+      }
+    }
+  }
+}
+function Pk(e, n) {
+  let t = 0;
+  for (let r = 0; r < e.length; r += 1) {
+    let o = e.charCodeAt(r);
+    if (o <= 127) t += 1;
+    else if (o <= 2047) t += 2;
+    else if (o >= 55296 && o <= 56319) {
+      let i = e.charCodeAt(r + 1);
+      i >= 56320 && i <= 57343 ? ((t += 4), (r += 1)) : (t += 3);
+    } else t += 3;
+    if (t > n) return true;
+  }
+  return false;
+}
+function wk(e, n) {
+  let t = 0;
+  for (let r = 0; r < e.length; r += 1) {
+    if (e[r] !== "<") continue;
+    if (e.startsWith("<!--", r)) {
+      let l = e.indexOf("-->", r + 4);
+      if (l < 0) return "parse-error";
+      r = l + 2;
+      continue;
+    }
+    if (e.startsWith("<![CDATA[", r)) {
+      let l = e.indexOf("]]>", r + 9);
+      if (l < 0) return "parse-error";
+      r = l + 2;
+      continue;
+    }
+    if (e.startsWith("<?", r)) {
+      let l = e.indexOf("?>", r + 2);
+      if (l < 0) return "parse-error";
+      r = l + 1;
+      continue;
+    }
+    let o = e[r + 1];
+    if (o === "/" || o === "!") continue;
+    if (((t += 1), t > n)) return "too-many-elements";
+    let i,
+      a = false;
+    for (r += 1; r < e.length; r += 1) {
+      let l = e[r];
+      if (i) l === i && (i = void 0);
+      else if (l === '"' || l === "'") i = l;
+      else if (l === ">") {
+        a = true;
+        break;
+      }
+    }
+    if (!a) return "parse-error";
+  }
+}
+function Rk(e) {
+  let n = 0;
+  for (let t = 0; t < e.length; t += 1) {
+    if (e[t] !== "<") continue;
+    if (e.startsWith("<!--", t)) {
+      let a = e.indexOf("-->", t + 4);
+      if (a < 0) return "parse-error";
+      t = a + 2;
+      continue;
+    }
+    if (e.startsWith("<![CDATA[", t)) {
+      let a = e.indexOf("]]>", t + 9);
+      if (a < 0) return "parse-error";
+      t = a + 2;
+      continue;
+    }
+    if (e.startsWith("<?", t)) {
+      let a = e.indexOf("?>", t + 2);
+      if (a < 0) return "parse-error";
+      t = a + 1;
+      continue;
+    }
+    if (e.startsWith("</", t)) {
+      n = Math.max(0, n - 1);
+      let a = e.indexOf(">", t + 2);
+      if (a < 0) return "parse-error";
+      t = a;
+      continue;
+    }
+    if (e.startsWith("<!", t)) continue;
+    let r,
+      o = -1;
+    for (let a = t + 1; a < e.length; a += 1) {
+      let l = e[a];
+      if (r) l === r && (r = void 0);
+      else if (l === '"' || l === "'") r = l;
+      else if (l === ">") {
+        o = a;
+        break;
+      }
+    }
+    if (o < 0) return "parse-error";
+    if (
+      !e
+        .slice(t + 1, o)
+        .trimEnd()
+        .endsWith("/") &&
+      ((n += 1), n > Mu + 1)
+    )
+      return "too-deep";
+    t = o;
+  }
+}
+var Ek = new XMLParser({
+  preserveOrder: true,
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  trimValues: false,
+  parseTagValue: false,
+  parseAttributeValue: false,
+  processEntities: false,
+  htmlEntities: false,
+  cdataPropName: "#cdata",
+  ignoreDeclaration: true,
+  ignorePiTags: true,
+});
+function $n(e, n = { maxBytes: wo }) {
+  if (!Au(n.maxBytes) || (n.maxElements !== void 0 && !Au(n.maxElements)))
+    return { ok: false, reason: "invalid-limits" };
+  let t = Math.min(n.maxBytes, wo),
+    r = Math.min(n.maxElements ?? Tu, Tu);
+  if (Pk(e, t)) return { ok: false, reason: "too-large" };
+  let o = bk(e);
+  if (o) return { ok: false, reason: o };
+  let i = wk(e, r);
+  if (i) return { ok: false, reason: i };
+  let a = Rk(e);
+  if (a) return { ok: false, reason: a };
+  if (XMLValidator.validate(e) !== true)
+    return { ok: false, reason: "parse-error" };
+  let l;
+  try {
+    l = Ek.parse(e);
+  } catch {
+    return { ok: false, reason: "parse-error" };
+  }
+  try {
+    return { ok: !0, nodes: Du(l, 0, { count: 0, maxElements: r }) };
+  } catch (s) {
+    return {
+      ok: false,
+      reason:
+        s instanceof Wi
+          ? "too-deep"
+          : s instanceof Hi
+            ? "too-many-elements"
+            : "parse-error",
+    };
+  }
+}
+function Bl(e, n) {
+  if (typeof e != "string") throw new Error(`non-scalar ${n}`);
+  return e;
+}
+function Ik(e) {
+  if (typeof e == "string") return e;
+  if (!Array.isArray(e)) throw new Error("non-scalar cdata");
+  return e
+    .map((n) => {
+      if (n !== null && typeof n == "object" && "#text" in n)
+        return Bl(n["#text"], "cdata");
+      throw new Error("non-scalar cdata");
+    })
+    .join("");
+}
+function Du(e, n, t) {
+  if (n > Mu) throw new Wi();
+  let r = [];
+  for (let o of e) {
+    if ("#text" in o) {
+      r.push({ type: "text", value: vu(Bl(o["#text"], "text")) });
+      continue;
+    }
+    if ("#cdata" in o) {
+      r.push({ type: "text", value: _u(Ik(o["#cdata"])) });
+      continue;
+    }
+    let i = o[":@"] ?? {},
+      a = Object.keys(o).find((s) => s !== ":@");
+    if (!a) continue;
+    if (((t.count += 1), t.count > t.maxElements)) throw new Hi();
+    let l = Object.create(null);
+    for (let [s, d] of Object.entries(i))
+      l[s.replace(/^@_/, "")] = vu(Bl(d, "attribute"));
+    r.push({
+      type: "element",
+      name: a,
+      attributes: l,
+      children: Du(o[a] ?? [], n + 1, t),
+    });
+  }
+  return r;
+}
+function Ck(e, n) {
+  for (let t of e) {
+    if (t.type !== "element") continue;
+    if (t.name === n) return t;
+    let r = Ck(t.children, n);
+    if (r) return r;
+  }
+}
+function $M(e, n) {
+  return e.children.filter((t) => t.type === "element" && t.name === n);
+}
+function Tk(e) {
+  let n = "";
+  for (let t of e.children) t.type === "text" ? (n += t.value) : (n += Tk(t));
+  return n;
+}
+var vk = /^[A-Za-z_][A-Za-z0-9._-]*$/;
+function he(e) {
+  return vk.test(e);
+}
+function Sk(e) {
+  let n = e.split(":");
+  return n.length === 1
+    ? he(n[0])
+    : n.length === 2
+      ? he(n[0]) && he(n[1])
+      : false;
+}
+function zM(e) {
+  if (!Sk(e))
+    throw new Error(`invalid QName for serialization: ${JSON.stringify(e)}`);
+}
+var Uu = class {
+  byUri = new Map();
+  usedPrefixes = new Set();
+  counter = 0;
+  constructor(n = {}) {
+    for (let [t, r] of Object.entries(n))
+      (this.byUri.set(t, r), this.usedPrefixes.add(r));
+  }
+  prefixFor(n) {
+    let t = this.byUri.get(n);
+    if (t) return t;
+    let r;
+    do ((this.counter += 1), (r = `ns${this.counter}`));
+    while (this.usedPrefixes.has(r));
+    return (this.byUri.set(n, r), this.usedPrefixes.add(r), r);
+  }
+  bindings() {
+    return [...this.byUri.entries()].map(([n, t]) => ({ prefix: t, uri: n }));
+  }
+};
+var Bu = "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+  Ak = "http://schemas.microsoft.com/office/word/2010/wordml",
+  Mk = [
+    "rPr",
+    "alias",
+    "tag",
+    "id",
+    "lock",
+    "placeholder",
+    "temporary",
+    "showingPlcHdr",
+    "dataBinding",
+    "label",
+    "tabIndex",
+  ],
+  Lu = new Map(Mk.map((e, n) => [e, n])),
+  _k = new Set([
+    "equation",
+    "comboBox",
+    "date",
+    "docPartObj",
+    "docPartList",
+    "dropDownList",
+    "picture",
+    "richText",
+    "text",
+    "citation",
+    "group",
+    "bibliography",
+  ]),
+  Dk = new Set([
+    "contentControlDateFormat",
+    "contentControlLid",
+    "contentControlStoreMappedDataAs",
+    "contentControlCalendar",
+  ]),
+  Uk = new Set([
+    "contentControlDateFormat",
+    "contentControlLid",
+    "contentControlStoreMappedDataAs",
+    "contentControlCalendar",
+    "generic",
+  ]),
+  Lk = new Set([
+    "contentControlChecked",
+    "contentControlCheckedState",
+    "contentControlUncheckedState",
+    "generic",
+  ]),
+  Bk = {
+    dateFormat: "contentControlDateFormat",
+    lid: "contentControlLid",
+    storeMappedDataAs: "contentControlStoreMappedDataAs",
+    calendar: "contentControlCalendar",
+  },
+  Fk = {
+    checked: "contentControlChecked",
+    checkedState: "contentControlCheckedState",
+    uncheckedState: "contentControlUncheckedState",
+  },
+  Vk = {
+    sdt: "contentControl",
+    sdtPr: "contentControlProperties",
+    sdtEndPr: "contentControlEndProperties",
+    sdtContent: "contentControlContent",
+    dropDownList: "contentControlDropDownList",
+    comboBox: "contentControlComboBox",
+    listItem: "contentControlListItem",
+    date: "contentControlDate",
+    text: "contentControlText",
+    dataBinding: "contentControlDataBinding",
+  },
+  Wk = { checkbox: "contentControlCheckbox" };
+function Ro(e) {
+  return Dk.has(e);
+}
+function Fu(e, n, t) {
+  if (e === Ak) {
+    if (t === "contentControlCheckbox") {
+      let r = Fk[n];
+      if (r !== void 0) return r;
+    }
+    return Wk[n];
+  }
+  if (e === Bu && !(n === "sdt" && t === "run")) {
+    if (t === "contentControlDate") {
+      let r = Bk[n];
+      if (r !== void 0) return r;
+    }
+    return Vk[n];
+  }
+}
+function Et(e, n) {
+  return e.filter(n).length <= 1;
+}
+function Vu(e) {
+  let n = 0,
+    t = false,
+    r = false,
+    o = false;
+  for (let i of e) {
+    if (i.kind === "contentControlProperties") {
+      if (n > 0 || t) return false;
+      ((t = true), (n = 1));
+      continue;
+    }
+    if (i.kind === "contentControlEndProperties") {
+      if (n > 1 || r) return false;
+      ((r = true), (n = 2));
+      continue;
+    }
+    if (i.kind === "contentControlContent") {
+      if (n > 2 || o) return false;
+      ((o = true), (n = 3));
+      continue;
+    }
+    if (
+      i.kind === "textValue" ||
+      (i.kind !== "generic" &&
+        i.kind !== "bookmarkStart" &&
+        i.kind !== "bookmarkEnd")
+    )
+      return false;
+  }
+  return true;
+}
+function Wu(e) {
+  let n = -1,
+    t = false,
+    r = new Set();
+  for (let o of e) {
+    if (o.kind === "textValue") return false;
+    if (o.kind === "runProperties") {
+      if (r.has(0) || t || 0 < n) return false;
+      (r.add(0), (n = 0));
+      continue;
+    }
+    if (
+      o.kind === "contentControlDropDownList" ||
+      o.kind === "contentControlComboBox" ||
+      o.kind === "contentControlDate" ||
+      o.kind === "contentControlText"
+    ) {
+      if (t) return false;
+      t = true;
+      continue;
+    }
+    if (o.kind === "contentControlDataBinding") {
+      let a = Lu.get("dataBinding");
+      if (r.has(a) || t || a < n) return false;
+      (r.add(a), (n = a));
+      continue;
+    }
+    if (o.kind === "contentControlCheckbox") continue;
+    if (o.kind !== "generic") return false;
+    if (o.namespaceUri !== Bu) continue;
+    let i = Lu.get(o.localName);
+    if (i !== void 0) {
+      if (r.has(i) || t || i < n) return false;
+      (r.add(i), (n = i));
+      continue;
+    }
+    if (_k.has(o.localName)) {
+      if (t) return false;
+      t = true;
+      continue;
+    }
+  }
+  return true;
+}
+function Hu(e) {
+  return (
+    e.every((n) => n.kind === "runProperties" || n.kind === "generic") &&
+    Et(e, (n) => n.kind === "runProperties")
+  );
+}
+function ju(e) {
+  return e.every(
+    (n) =>
+      n.kind === "paragraph" ||
+      n.kind === "table" ||
+      n.kind === "run" ||
+      n.kind === "tableRow" ||
+      n.kind === "tableCell" ||
+      n.kind === "contentControl" ||
+      n.kind === "hyperlink" ||
+      n.kind === "bookmarkStart" ||
+      n.kind === "bookmarkEnd" ||
+      n.kind === "commentRangeStart" ||
+      n.kind === "commentRangeEnd" ||
+      n.kind === "generic",
+  );
+}
+function Ku(e) {
+  return e.every(
+    (n) => n.kind === "contentControlListItem" || n.kind === "generic",
+  );
+}
+function $u(e) {
+  return e.every((n) => Uk.has(n.kind))
+    ? Et(e, (n) => n.kind === "contentControlDateFormat") &&
+        Et(e, (n) => n.kind === "contentControlLid") &&
+        Et(e, (n) => n.kind === "contentControlStoreMappedDataAs") &&
+        Et(e, (n) => n.kind === "contentControlCalendar")
+    : false;
+}
+function Gu(e) {
+  return e.every((n) => Lk.has(n.kind))
+    ? Et(e, (n) => n.kind === "contentControlChecked") &&
+        Et(e, (n) => n.kind === "contentControlCheckedState") &&
+        Et(e, (n) => n.kind === "contentControlUncheckedState")
+    : false;
+}
+function zu(e) {
+  return e.length === 0;
+}
+var tf = "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+  Hk = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+  $i = "http://schemas.openxmlformats.org/drawingml/2006/main",
+  Gi = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+  Wl = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  jk = "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+  Kk = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  Eo = -2147483648,
+  Io = 2147483647,
+  Rr = -27273042329600,
+  Er = 27273042316900,
+  Co = 27273042316900,
+  $k = new Set([
+    "drawing",
+    "inlineDrawing",
+    "anchoredDrawing",
+    "drawingExtent",
+    "drawingEffectExtent",
+    "drawingDocPr",
+    "drawingGraphicFramePr",
+    "drawingGraphic",
+    "drawingGraphicData",
+    "drawingSimplePos",
+    "drawingPositionH",
+    "drawingPositionV",
+    "drawingPositionAlign",
+    "drawingPositionOffset",
+    "drawingWrapNone",
+    "drawingWrapSquare",
+    "drawingWrapTight",
+    "drawingWrapThrough",
+    "drawingWrapTopBottom",
+    "drawingWrapPolygon",
+    "drawingWrapPolygonStart",
+    "drawingWrapPolygonLineTo",
+    "picture",
+    "pictureNvPicPr",
+    "pictureBlipFill",
+    "pictureBlip",
+    "pictureSrcRect",
+    "pictureStretch",
+    "pictureTile",
+    "pictureShapeProperties",
+    "pictureTransform",
+    "pictureTransformOffset",
+    "pictureTransformExtent",
+    "picturePresetGeometry",
+  ]),
+  To = new Set([
+    "character",
+    "column",
+    "insideMargin",
+    "leftMargin",
+    "margin",
+    "outsideMargin",
+    "page",
+    "rightMargin",
+  ]),
+  vo = new Set([
+    "bottomMargin",
+    "insideMargin",
+    "line",
+    "margin",
+    "outsideMargin",
+    "page",
+    "paragraph",
+    "topMargin",
+  ]),
+  Gk = new Set(["bothSides", "left", "right", "largest"]),
+  zk = new Set(["center", "inside", "left", "outside", "right"]),
+  Xk = new Set(["bottom", "center", "inside", "outside", "top"]),
+  Hl = 512;
+function Nn(e) {
+  return $k.has(e);
+}
+function Yk(e, n) {
+  if (!Nn(e)) return true;
+  if (n === void 0) return false;
+  let t = n.kind;
+  if (t === "generic") return false;
+  switch (e) {
+    case "drawing":
+      return n.wmlLocalName === "r";
+    case "inlineDrawing":
+    case "anchoredDrawing":
+      return t === "drawing";
+    case "drawingExtent":
+    case "drawingDocPr":
+    case "drawingGraphicFramePr":
+    case "drawingGraphic":
+      return t === "inlineDrawing" || t === "anchoredDrawing";
+    case "drawingEffectExtent":
+      return (
+        t === "inlineDrawing" ||
+        t === "anchoredDrawing" ||
+        t === "drawingWrapSquare" ||
+        t === "drawingWrapTopBottom"
+      );
+    case "drawingSimplePos":
+    case "drawingPositionH":
+    case "drawingPositionV":
+    case "drawingWrapNone":
+    case "drawingWrapSquare":
+    case "drawingWrapTight":
+    case "drawingWrapThrough":
+    case "drawingWrapTopBottom":
+      return t === "anchoredDrawing";
+    case "drawingPositionAlign":
+    case "drawingPositionOffset":
+      return t === "drawingPositionH" || t === "drawingPositionV";
+    case "drawingWrapPolygon":
+      return t === "drawingWrapTight" || t === "drawingWrapThrough";
+    case "drawingWrapPolygonStart":
+    case "drawingWrapPolygonLineTo":
+      return t === "drawingWrapPolygon";
+    case "drawingGraphicData":
+      return t === "drawingGraphic";
+    case "picture":
+      return (
+        t === "drawingGraphicData" &&
+        n.attributes !== void 0 &&
+        jl(n.attributes)
+      );
+    case "pictureNvPicPr":
+    case "pictureBlipFill":
+    case "pictureShapeProperties":
+      return t === "picture";
+    case "pictureBlip":
+    case "pictureSrcRect":
+    case "pictureStretch":
+    case "pictureTile":
+      return t === "pictureBlipFill";
+    case "pictureTransform":
+    case "picturePresetGeometry":
+      return t === "pictureShapeProperties";
+    case "pictureTransformOffset":
+    case "pictureTransformExtent":
+      return t === "pictureTransform";
+    default:
+      return false;
+  }
+}
+function v(e, n) {
+  for (let t of e)
+    if (t.localName === n && t.namespaceUri === "") return t.value;
+}
+function Xu(e, n) {
+  for (let t of e)
+    if (t.localName === n && t.namespaceUri === jk) return t.value;
+}
+function rf(e) {
+  if (e === void 0 || !/^-?\d+$/.test(e)) return null;
+  let n = Number(e);
+  return Number.isInteger(n) ? n : null;
+}
+function Fl(e, n) {
+  let t = v(e, n),
+    r = rf(t);
+  if (r !== null && !(r < Rr || r > Er)) return t;
+}
+function It(e, n) {
+  return Fl(e, n);
+}
+function Vl(e, n) {
+  let t = v(e, n);
+  if (t === void 0 || !/^\d+$/.test(t)) return;
+  let r = Number(t);
+  if (!(!Number.isFinite(r) || r < 0 || r > 4294967295)) return t;
+}
+function qk(e) {
+  for (let r of ["distT", "distB", "distL", "distR"])
+    if (v(e, r) !== void 0 && Vl(e, r) === void 0) return false;
+  let n = v(e, "simplePos");
+  if (
+    (n !== void 0 && n !== "0" && n !== "1" && n !== "true" && n !== "false") ||
+    Vl(e, "relativeHeight") === void 0
+  )
+    return false;
+  for (let r of ["behindDoc", "locked", "layoutInCell", "allowOverlap"]) {
+    let o = v(e, r);
+    if (o === void 0 || !["0", "1", "true", "false"].includes(o)) return false;
+  }
+  let t = v(e, "hidden");
+  return !(t !== void 0 && !["0", "1", "true", "false"].includes(t));
+}
+function Ct(e, n) {
+  let t = v(e, n);
+  if (t === void 0 || !/^\d+$/.test(t)) return;
+  let r = Number(t);
+  if (!(!Number.isInteger(r) || r < 0 || r > Co)) return t;
+}
+function Yu(e) {
+  let n = e.find((r) => r.kind === "textValue");
+  if (n === void 0 || n.kind !== "textValue") return false;
+  let t = rf(n.value);
+  return t === null ? false : t >= Eo && t <= Io;
+}
+function qu(e, n) {
+  let t = n.find((o) => o.kind === "textValue");
+  return t === void 0 || t.kind !== "textValue"
+    ? false
+    : (e === "drawingPositionH" ? zk : Xk).has(t.value.trim());
+}
+function jl(e) {
+  return v(e, "uri") === Kk;
+}
+function Q(e, n) {
+  let t = 0;
+  for (let r of e) r.kind === n && (t += 1);
+  return t;
+}
+function Zk(e) {
+  let n = 0;
+  for (let t of e)
+    (t.kind === "drawingGraphicData" && (n += 1),
+      t.kind === "generic" &&
+        t.namespaceUri === $i &&
+        t.localName === "graphicData" &&
+        (n += 1));
+  return n;
+}
+function Qk(e) {
+  let n = 0;
+  for (let t of e)
+    ((t.kind === "inlineDrawing" || t.kind === "anchoredDrawing") && (n += 1),
+      t.kind === "generic" &&
+        t.namespaceUri === Gi &&
+        (t.localName === "inline" || t.localName === "anchor") &&
+        (n += 1));
+  return n;
+}
+var of = new Set([
+    "drawingExtent",
+    "drawingEffectExtent",
+    "drawingDocPr",
+    "drawingGraphicFramePr",
+    "drawingGraphic",
+    "drawingSimplePos",
+    "drawingPositionH",
+    "drawingPositionV",
+    "drawingWrapNone",
+    "drawingWrapSquare",
+    "drawingWrapTight",
+    "drawingWrapThrough",
+    "drawingWrapTopBottom",
+    "generic",
+  ]),
+  Jk = new Set([
+    "drawingSimplePos",
+    "drawingPositionH",
+    "drawingPositionV",
+    "drawingWrapNone",
+    "drawingWrapSquare",
+    "drawingWrapTight",
+    "drawingWrapThrough",
+    "drawingWrapTopBottom",
+  ]),
+  Kl = new Set([
+    "drawingWrapNone",
+    "drawingWrapSquare",
+    "drawingWrapTight",
+    "drawingWrapThrough",
+    "drawingWrapTopBottom",
+  ]),
+  eb = new Set([
+    "drawingPositionAlign",
+    "drawingPositionOffset",
+    "generic",
+    "textValue",
+  ]),
+  nb = new Set([
+    "drawingWrapPolygonStart",
+    "drawingWrapPolygonLineTo",
+    "generic",
+  ]),
+  tb = new Set(["drawingEffectExtent", "generic"]),
+  rb = new Set(["drawingEffectExtent", "generic"]),
+  ob = new Set(["drawingWrapPolygon", "generic"]);
+function af(e) {
+  return (
+    e.kind === "drawingEffectExtent" ||
+    (e.kind === "generic" &&
+      e.namespaceUri === Gi &&
+      e.localName === "effectExtent")
+  );
+}
+function lf(e) {
+  return (
+    It(e, "l") !== void 0 &&
+    It(e, "t") !== void 0 &&
+    It(e, "r") !== void 0 &&
+    It(e, "b") !== void 0
+  );
+}
+function ji(e) {
+  let n = e.filter(af);
+  if (n.length > 1) return false;
+  for (let t of n)
+    if (t.kind === "textValue" || !lf(t.attributes)) return false;
+  return true;
+}
+function Zu(e) {
+  return !e.some(af);
+}
+var ib = new Set([
+    "pictureNvPicPr",
+    "pictureBlipFill",
+    "pictureShapeProperties",
+    "generic",
+  ]),
+  ab = new Set([
+    "pictureBlip",
+    "pictureSrcRect",
+    "pictureStretch",
+    "pictureTile",
+    "generic",
+  ]),
+  lb = new Set(["pictureTransform", "picturePresetGeometry", "generic"]),
+  sb = new Set(["pictureTransformOffset", "pictureTransformExtent", "generic"]);
+function Qu(e) {
+  if (Q(e, "drawingWrapPolygonStart") !== 1) return false;
+  let n = 0,
+    t = false;
+  for (let o of e)
+    if (o.kind !== "generic") {
+      if (!nb.has(o.kind)) return false;
+      if (o.kind === "drawingWrapPolygonStart") {
+        if (t || n > 0) return false;
+        n += 1;
+        continue;
+      }
+      if (o.kind === "drawingWrapPolygonLineTo") {
+        if (n === 0) return false;
+        ((t = true), (n += 1));
+      }
+    }
+  return n < 3 || n > Hl
+    ? false
+    : e.find(
+        (o) =>
+          o.kind === "drawingWrapPolygonStart" ||
+          o.kind === "drawingWrapPolygonLineTo",
+      )?.kind === "drawingWrapPolygonStart";
+}
+function Ju(e) {
+  let n = v(e, "wrapText");
+  return n !== void 0 && Gk.has(n);
+}
+var db = [
+    "drawingSimplePos",
+    "drawingPositionH",
+    "drawingPositionV",
+    "drawingExtent",
+  ],
+  cb = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing";
+function ef(e) {
+  return e.kind !== "generic" || e.namespaceUri !== cb
+    ? null
+    : e.localName === "sizeRelH"
+      ? "drawingSizeRelH"
+      : e.localName === "sizeRelV"
+        ? "drawingSizeRelV"
+        : null;
+}
+function ub(e) {
+  if (e.kind === "drawingSimplePos") return "drawingSimplePos";
+  if (e.kind === "drawingPositionH") return "drawingPositionH";
+  if (e.kind === "drawingPositionV") return "drawingPositionV";
+  if (e.kind === "drawingExtent") return "drawingExtent";
+  if (e.kind === "drawingEffectExtent") return "drawingEffectExtent";
+  if (Kl.has(e.kind)) return "drawingWrap";
+  if (e.kind === "drawingDocPr") return "drawingDocPr";
+  if (e.kind === "drawingGraphicFramePr") return "drawingGraphicFramePr";
+  if (e.kind === "drawingGraphic") return "drawingGraphic";
+  if (e.kind !== "generic" || e.namespaceUri !== Gi) return null;
+  switch (e.localName) {
+    case "simplePos":
+      return "drawingSimplePos";
+    case "positionH":
+      return "drawingPositionH";
+    case "positionV":
+      return "drawingPositionV";
+    case "extent":
+      return "drawingExtent";
+    case "effectExtent":
+      return "drawingEffectExtent";
+    case "wrapNone":
+    case "wrapSquare":
+    case "wrapTight":
+    case "wrapThrough":
+    case "wrapTopAndBottom":
+      return "drawingWrap";
+    case "docPr":
+      return "drawingDocPr";
+    case "cNvGraphicFramePr":
+      return "drawingGraphicFramePr";
+    case "graphic":
+      return "drawingGraphic";
+    default:
+      return null;
+  }
+}
+function fb(e) {
+  if (
+    Q(e, "drawingExtent") !== 1 ||
+    Q(e, "drawingGraphic") !== 1 ||
+    !ji(e) ||
+    Q(e, "drawingDocPr") !== 1 ||
+    Q(e, "drawingGraphicFramePr") > 1 ||
+    Q(e, "drawingSimplePos") !== 1 ||
+    Q(e, "drawingPositionH") !== 1 ||
+    Q(e, "drawingPositionV") !== 1
+  )
+    return false;
+  let n = 0;
+  for (let i of e) {
+    if (!of.has(i.kind) && ef(i) === null) return false;
+    Kl.has(i.kind) && (n += 1);
+  }
+  if (n !== 1) return false;
+  let t = e.find((i) => i.kind === "drawingExtent");
+  if (
+    t === void 0 ||
+    t.kind !== "drawingExtent" ||
+    Ct(t.attributes, "cx") === void 0 ||
+    Ct(t.attributes, "cy") === void 0
+  )
+    return false;
+  let r = [];
+  for (let i of e) {
+    let a = ef(i) ?? ub(i);
+    if (a === null) return false;
+    r.push(
+      a === "drawingWrapSquare" ||
+        a === "drawingWrapNone" ||
+        a === "drawingWrapTight" ||
+        a === "drawingWrapThrough" ||
+        a === "drawingWrapTopBottom"
+        ? "drawingWrap"
+        : a,
+    );
+  }
+  let o = 0;
+  for (let i of db) {
+    if (r[o] !== i) return false;
+    o += 1;
+  }
+  return (
+    r[o] === "drawingEffectExtent" && (o += 1),
+    r[o] !== "drawingWrap" ||
+    ((o += 1), r[o] !== "drawingDocPr") ||
+    ((o += 1),
+    r[o] === "drawingGraphicFramePr" && (o += 1),
+    r[o] !== "drawingGraphic")
+      ? false
+      : ((o += 1),
+        r[o] === "drawingSizeRelH" && (o += 1),
+        r[o] === "drawingSizeRelV" && (o += 1),
+        o === r.length)
+  );
+}
+function Ki(e, n) {
+  if (e === "anchoredDrawing") return fb(n);
+  if (
+    Q(n, "drawingExtent") !== 1 ||
+    Q(n, "drawingGraphic") !== 1 ||
+    !ji(n) ||
+    Q(n, "drawingDocPr") > 1 ||
+    Q(n, "drawingGraphicFramePr") > 1
+  )
+    return false;
+  let t = 0;
+  for (let o of n) {
+    if (!of.has(o.kind) || Jk.has(o.kind)) return false;
+    Kl.has(o.kind) && (t += 1);
+  }
+  let r = n.find((o) => o.kind === "drawingExtent");
+  return !(
+    r === void 0 ||
+    r.kind !== "drawingExtent" ||
+    Ct(r.attributes, "cx") === void 0 ||
+    Ct(r.attributes, "cy") === void 0
+  );
+}
+function nf(e) {
+  let n = Q(e, "drawingPositionAlign"),
+    t = Q(e, "drawingPositionOffset");
+  return n + t !== 1 ? false : e.every((r) => eb.has(r.kind));
+}
+function mb(e) {
+  return e.kind !== "generic" || e.namespaceUri !== $i
+    ? false
+    : e.localName === "hlinkClick" ||
+        e.localName === "hlinkHover" ||
+        e.localName === "extLst";
+}
+function pb(e) {
+  return e.kind !== "generic" ||
+    e.namespaceUri !== Wl ||
+    e.localName !== "cNvPr" ||
+    Vl(e.attributes, "id") === void 0
+    ? false
+    : v(e.attributes, "name") !== void 0;
+}
+function gb(e) {
+  if (e.length !== 2) return false;
+  let [n, t] = e;
+  return pb(n)
+    ? t.kind === "generic" &&
+        t.namespaceUri === Wl &&
+        t.localName === "cNvPicPr"
+    : false;
+}
+function xb(e) {
+  let n = e.filter((t) => t.kind !== "generic");
+  return n.length !== 3
+    ? false
+    : n[0].kind === "pictureNvPicPr" &&
+        n[1].kind === "pictureBlipFill" &&
+        n[2].kind === "pictureShapeProperties";
+}
+function sf(e, n) {
+  switch (e) {
+    case "drawing":
+      return (
+        Q(n, "inlineDrawing") + Q(n, "anchoredDrawing") === 1 &&
+        n.every(
+          (t) =>
+            t.kind === "inlineDrawing" ||
+            t.kind === "anchoredDrawing" ||
+            t.kind === "generic",
+        )
+      );
+    case "inlineDrawing":
+      return Ki("inlineDrawing", n);
+    case "anchoredDrawing":
+      return Ki("anchoredDrawing", n);
+    case "drawingGraphic":
+      return Zk(n) === 1;
+    case "pictureBlipFill":
+      return Q(n, "pictureBlip") === 1;
+    default:
+      return true;
+  }
+}
+function df(e, n) {
+  return Nn(e) ? sf(e, n) : false;
+}
+function zi(e, n, t, r, o) {
+  if (!Nn(e)) return true;
+  if (!Yk(e, o) || !sf(e, r)) return false;
+  if (e === "drawing")
+    return n !== "drawing"
+      ? false
+      : Q(r, "inlineDrawing") + Q(r, "anchoredDrawing") === 1 && Qk(r) === 1;
+  if (e === "inlineDrawing") return n === "inline" && Ki("inlineDrawing", r);
+  if (e === "anchoredDrawing")
+    return n === "anchor" && qk(t) && Ki("anchoredDrawing", r);
+  if (e === "drawingExtent")
+    return (
+      n === "extent" &&
+      Ct(t, "cx") !== void 0 &&
+      Ct(t, "cy") !== void 0 &&
+      r.length === 0
+    );
+  if (e === "drawingEffectExtent")
+    return n === "effectExtent" && lf(t) && r.length === 0;
+  if (e === "drawingGraphicFramePr") {
+    if (n !== "cNvGraphicFramePr") return false;
+    let i = 0;
+    for (let a of r) {
+      if (a.kind !== "generic" || a.namespaceUri !== $i) return false;
+      if (a.localName === "graphicFrameLocks") {
+        i += 1;
+        continue;
+      }
+      if (a.localName !== "extLst") return false;
+    }
+    return i <= 1;
+  }
+  if (e === "drawingDocPr") return r.every((i) => mb(i));
+  if (e === "drawingGraphic")
+    return (
+      n === "graphic" &&
+      Q(r, "drawingGraphicData") <= 1 &&
+      r.every((i) => i.kind === "drawingGraphicData" || i.kind === "generic")
+    );
+  if (e === "drawingGraphicData")
+    return (
+      n === "graphicData" &&
+      jl(t) &&
+      Q(r, "picture") <= 1 &&
+      r.every((i) => i.kind === "picture" || i.kind === "generic")
+    );
+  if (e === "drawingSimplePos")
+    return (
+      n === "simplePos" &&
+      Fl(t, "x") !== void 0 &&
+      Fl(t, "y") !== void 0 &&
+      r.length === 0
+    );
+  if (e === "drawingPositionH") {
+    let i = v(t, "relativeFrom");
+    if (n !== "positionH" || i === void 0 || !To.has(i) || !nf(r)) return false;
+    let a = r.find((s) => s.kind === "drawingPositionAlign"),
+      l = r.find((s) => s.kind === "drawingPositionOffset");
+    return !(
+      (a !== void 0 && !qu("drawingPositionH", a.children)) ||
+      (l !== void 0 && !Yu(l.children))
+    );
+  }
+  if (e === "drawingPositionV") {
+    let i = v(t, "relativeFrom");
+    if (n !== "positionV" || i === void 0 || !vo.has(i) || !nf(r)) return false;
+    let a = r.find((s) => s.kind === "drawingPositionAlign"),
+      l = r.find((s) => s.kind === "drawingPositionOffset");
+    return !(
+      (a !== void 0 && !qu("drawingPositionV", a.children)) ||
+      (l !== void 0 && !Yu(l.children))
+    );
+  }
+  if (e === "drawingWrapNone")
+    return n === "wrapNone" && Q(r, "drawingWrapPolygon") === 0 && Zu(r);
+  if (e === "drawingWrapSquare")
+    return (
+      n === "wrapSquare" &&
+      Q(r, "drawingWrapPolygon") === 0 &&
+      ji(r) &&
+      r.every((i) => tb.has(i.kind)) &&
+      Ju(t)
+    );
+  if (e === "drawingWrapTopBottom")
+    return (
+      n === "wrapTopAndBottom" &&
+      Q(r, "drawingWrapPolygon") === 0 &&
+      ji(r) &&
+      r.every((i) => rb.has(i.kind))
+    );
+  if (e === "drawingWrapTight" || e === "drawingWrapThrough") {
+    let i = e === "drawingWrapTight" ? "wrapTight" : "wrapThrough";
+    if (
+      Q(r, "drawingWrapPolygon") !== 1 ||
+      n !== i ||
+      !Ju(t) ||
+      !Zu(r) ||
+      !r.every((s) => ob.has(s.kind))
+    )
+      return false;
+    let l = r.find((s) => s.kind === "drawingWrapPolygon");
+    return l !== void 0 && Qu(l.children);
+  }
+  if (e === "drawingPositionAlign" || e === "drawingPositionOffset")
+    return n !== (e === "drawingPositionAlign" ? "align" : "posOffset")
+      ? false
+      : r.every((i) => i.kind === "textValue" || i.kind === "generic");
+  if (e === "drawingWrapPolygon") return n === "wrapPolygon" && Qu(r);
+  if (e === "drawingWrapPolygonStart" || e === "drawingWrapPolygonLineTo")
+    return (
+      n === (e === "drawingWrapPolygonStart" ? "start" : "lineTo") &&
+      It(t, "x") !== void 0 &&
+      It(t, "y") !== void 0 &&
+      r.length === 0
+    );
+  if (e === "picture")
+    return (
+      n === "pic" &&
+      r.every((i) => ib.has(i.kind)) &&
+      Q(r, "pictureNvPicPr") === 1 &&
+      Q(r, "pictureBlipFill") === 1 &&
+      Q(r, "pictureShapeProperties") === 1 &&
+      xb(r)
+    );
+  if (e === "pictureNvPicPr") return n === "nvPicPr" && gb(r);
+  if (e === "pictureBlipFill") {
+    let i = Q(r, "pictureStretch"),
+      a = Q(r, "pictureTile");
+    return (
+      n === "blipFill" &&
+      r.every((l) => ab.has(l.kind)) &&
+      Q(r, "pictureBlip") === 1 &&
+      Q(r, "pictureSrcRect") <= 1 &&
+      i + a <= 1
+    );
+  }
+  if (e === "pictureBlip") {
+    let i = Xu(t, "embed"),
+      a = Xu(t, "link");
+    return (i === void 0 && a === void 0) || (i !== void 0 && a !== void 0)
+      ? false
+      : n === "blip" && r.every((l) => l.kind === "generic");
+  }
+  return e === "pictureSrcRect"
+    ? n === "srcRect" && r.length === 0
+    : e === "pictureStretch" || e === "pictureTile"
+      ? n === (e === "pictureStretch" ? "stretch" : "tile") &&
+        r.every((a) => a.kind === "generic")
+      : e === "pictureShapeProperties"
+        ? n === "spPr" &&
+          r.every((i) => lb.has(i.kind)) &&
+          Q(r, "pictureTransform") <= 1 &&
+          Q(r, "picturePresetGeometry") <= 1
+        : e === "pictureTransform"
+          ? n === "xfrm" &&
+            r.every((i) => sb.has(i.kind)) &&
+            Q(r, "pictureTransformOffset") <= 1 &&
+            Q(r, "pictureTransformExtent") <= 1
+          : e === "pictureTransformOffset"
+            ? n === "off" &&
+              It(t, "x") !== void 0 &&
+              It(t, "y") !== void 0 &&
+              r.length === 0
+            : e === "pictureTransformExtent"
+              ? n === "ext" &&
+                Ct(t, "cx") !== void 0 &&
+                Ct(t, "cy") !== void 0 &&
+                r.length === 0
+              : e === "picturePresetGeometry"
+                ? n === "prstGeom" && r.every((i) => i.kind === "generic")
+                : false;
+}
+function cf(e, n, t) {
+  if (e === tf && n === "drawing")
+    return t?.wmlLocalName === "r" ? "drawing" : "generic";
+  if (e === Gi) {
+    if (t?.kind === "drawing") {
+      if (n === "inline") return "inlineDrawing";
+      if (n === "anchor") return "anchoredDrawing";
+    }
+    if (t?.kind === "inlineDrawing" || t?.kind === "anchoredDrawing") {
+      if (n === "extent") return "drawingExtent";
+      if (n === "effectExtent") return "drawingEffectExtent";
+      if (n === "docPr") return "drawingDocPr";
+      if (n === "cNvGraphicFramePr") return "drawingGraphicFramePr";
+      if (n === "simplePos" && t.kind === "anchoredDrawing")
+        return "drawingSimplePos";
+      if (n === "positionH" && t.kind === "anchoredDrawing")
+        return "drawingPositionH";
+      if (n === "positionV" && t.kind === "anchoredDrawing")
+        return "drawingPositionV";
+      if (n === "wrapNone" && t.kind === "anchoredDrawing")
+        return "drawingWrapNone";
+      if (n === "wrapSquare" && t.kind === "anchoredDrawing")
+        return "drawingWrapSquare";
+      if (n === "wrapTight" && t.kind === "anchoredDrawing")
+        return "drawingWrapTight";
+      if (n === "wrapThrough" && t.kind === "anchoredDrawing")
+        return "drawingWrapThrough";
+      if (n === "wrapTopAndBottom" && t.kind === "anchoredDrawing")
+        return "drawingWrapTopBottom";
+    }
+    if (t?.kind === "drawingPositionH" || t?.kind === "drawingPositionV") {
+      if (n === "align") return "drawingPositionAlign";
+      if (n === "posOffset") return "drawingPositionOffset";
+    }
+    if (
+      (t?.kind === "drawingWrapTight" || t?.kind === "drawingWrapThrough") &&
+      n === "wrapPolygon"
+    )
+      return "drawingWrapPolygon";
+    if (
+      (t?.kind === "drawingWrapSquare" || t?.kind === "drawingWrapTopBottom") &&
+      n === "effectExtent"
+    )
+      return "drawingEffectExtent";
+    if (t?.kind === "drawingWrapPolygon") {
+      if (n === "start") return "drawingWrapPolygonStart";
+      if (n === "lineTo") return "drawingWrapPolygonLineTo";
+    }
+    return null;
+  }
+  if (e === $i) {
+    if (
+      (t?.kind === "inlineDrawing" || t?.kind === "anchoredDrawing") &&
+      n === "graphic"
+    )
+      return "drawingGraphic";
+    if (t?.kind === "drawingGraphic" && n === "graphicData")
+      return "drawingGraphicData";
+    if (t?.kind === "pictureBlipFill") {
+      if (n === "blip") return "pictureBlip";
+      if (n === "srcRect") return "pictureSrcRect";
+      if (n === "stretch") return "pictureStretch";
+      if (n === "tile") return "pictureTile";
+    }
+    if (t?.kind === "pictureTransform") {
+      if (n === "off") return "pictureTransformOffset";
+      if (n === "ext") return "pictureTransformExtent";
+    }
+    if (t?.kind === "pictureShapeProperties") {
+      if (n === "xfrm") return "pictureTransform";
+      if (n === "prstGeom") return "picturePresetGeometry";
+    }
+    return null;
+  }
+  if (e === Wl) {
+    if (t?.kind === "drawingGraphicData" && n === "pic")
+      return t.attributes !== void 0 && jl(t.attributes)
+        ? "picture"
+        : "generic";
+    if (t?.kind === "picture") {
+      if (n === "nvPicPr") return "pictureNvPicPr";
+      if (n === "blipFill") return "pictureBlipFill";
+      if (n === "spPr") return "pictureShapeProperties";
+    }
+    return null;
+  }
+  return null;
+}
+function hb(e, n) {
+  return (
+    e.namespaceUri === tf &&
+    e.localName === "txbxContent" &&
+    n?.namespaceUri === Hk &&
+    n.localName === "txbx"
+  );
+}
+function $l(e, n) {
+  return e.map((t) => {
+    if (t.kind === "textValue" || hb(t, n)) return t;
+    let r = Nn(t.kind) ? "generic" : t.kind;
+    return { ...t, kind: r, children: $l(t.children, t) };
+  });
+}
+var y = "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+  J = "http://www.w3.org/XML/1998/namespace",
+  Se = "http://www.w3.org/2000/xmlns/",
+  Ie = "http://schemas.openxmlformats.org/markup-compatibility/2006",
+  Ao = "http://www.w3.org/2001/XMLSchema-instance",
+  W = "http://schemas.microsoft.com/office/word/2010/wordml",
+  B = "http://schemas.openxmlformats.org/drawingml/2006/main",
+  M = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+  He = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  An = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+var Gl = new Set(["ProcessContent", "PreserveElements", "PreserveAttributes"]),
+  We = class extends Error {
+    constructor(t) {
+      super(t);
+      this.reason = t;
+    }
+    reason;
+  };
+function Xi(e) {
+  let n = e.indexOf(":");
+  if (n < 0) {
+    if (!he(e)) throw new We("invalid-name");
+    return { localName: e };
+  }
+  if (e.indexOf(":", n + 1) >= 0) throw new We("invalid-name");
+  let t = e.slice(0, n),
+    r = e.slice(n + 1);
+  if (!he(t) || !he(r)) throw new We("invalid-name");
+  return { prefix: t, localName: r };
+}
+function Tt(e, n) {
+  return `${e}\0${n}`;
+}
+function So(e, n) {
+  let t = Xi(e),
+    r = t.prefix === void 0 ? (n.get("") ?? "") : n.get(t.prefix);
+  if (r === void 0) throw new We("undeclared-prefix");
+  return [r, t.localName];
+}
+function Yi(e, n) {
+  let t = e
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((r) => {
+      if (!he(r)) throw new We("invalid-name");
+      let o = n.get(r);
+      if (o === void 0) throw new We("undeclared-prefix");
+      return o;
+    });
+  return [...new Set(t)].sort();
+}
+function zl(e, n, t, r) {
+  return (e.namespaceUri === Ie &&
+    (e.localName === "Ignorable" || e.localName === "MustUnderstand")) ||
+    (t === Ie &&
+      r === "Choice" &&
+      e.namespaceUri === "" &&
+      e.localName === "Requires")
+    ? Yi(e.value, n).join(" ")
+    : e.namespaceUri === Ie && Gl.has(e.localName)
+      ? e.value
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((o) => JSON.stringify(So(o, n)))
+          .sort()
+          .join(" ")
+      : e.namespaceUri === Ao && e.localName === "type"
+        ? JSON.stringify(So(e.value.trim(), n))
+        : e.value;
+}
+function Ir(e, n, t, r) {
+  for (let o of e) zl(o, n, t, r);
+}
+var yb = new Set(["sectPr", "pPrChange"]);
+function Ne(e) {
+  return (
+    e === "revisionInsert" ||
+    e === "revisionDelete" ||
+    e === "revisionMoveFrom" ||
+    e === "revisionMoveTo"
+  );
+}
+function Ob(e) {
+  return (
+    e === "moveFromRangeStart" ||
+    e === "moveFromRangeEnd" ||
+    e === "moveToRangeStart" ||
+    e === "moveToRangeEnd" ||
+    e === "commentRangeStart" ||
+    e === "commentRangeEnd"
+  );
+}
+function Sn(e) {
+  return (
+    e.kind === "generic" ||
+    e.kind === "bookmarkStart" ||
+    e.kind === "bookmarkEnd" ||
+    e.kind === "hyperlink" ||
+    Ob(e.kind) ||
+    e.kind === "contentControl"
+  );
+}
+function qi(e, n) {
+  if (Nn(e)) return df(e, n);
+  switch (e) {
+    case "document":
+      return (
+        n.every((t) => t.kind === "body" || Sn(t)) &&
+        n.filter((t) => t.kind === "body").length === 1
+      );
+    case "body":
+      return n.every(
+        (t) => t.kind === "paragraph" || t.kind === "table" || Sn(t),
+      );
+    case "paragraph": {
+      let t = n.findIndex((r) => r.kind === "paragraphProperties");
+      return (
+        n.every(
+          (r) =>
+            r.kind === "paragraphProperties" ||
+            r.kind === "run" ||
+            Ne(r.kind) ||
+            r.kind === "fldSimple" ||
+            Sn(r),
+        ) &&
+        (t < 0 || t === 0) &&
+        n.filter((r) => r.kind === "paragraphProperties").length <= 1
+      );
+    }
+    case "hyperlink":
+      return n.every(
+        (t) =>
+          t.kind === "run" ||
+          t.kind === "drawing" ||
+          t.kind === "fldSimple" ||
+          Ne(t.kind) ||
+          Sn(t),
+      );
+    case "bookmarkStart":
+    case "bookmarkEnd":
+      return n.length === 0;
+    case "run": {
+      let t = n.findIndex((r) => r.kind === "runProperties");
+      return (
+        n.every(
+          (r) =>
+            r.kind === "runProperties" ||
+            r.kind === "text" ||
+            r.kind === "deletedText" ||
+            r.kind === "tab" ||
+            r.kind === "hardBreak" ||
+            r.kind === "bookmarkStart" ||
+            r.kind === "bookmarkEnd" ||
+            r.kind === "commentReference" ||
+            r.kind === "fldChar" ||
+            r.kind === "instrText" ||
+            r.kind === "noteReference" ||
+            r.kind === "noteRef" ||
+            r.kind === "separator" ||
+            r.kind === "continuationSeparator" ||
+            r.kind === "drawing" ||
+            r.kind === "generic",
+        ) &&
+        (t < 0 || t === 0) &&
+        n.filter((r) => r.kind === "runProperties").length <= 1
+      );
+    }
+    case "revisionInsert":
+    case "revisionDelete":
+    case "revisionMoveFrom":
+    case "revisionMoveTo":
+      return n.every(
+        (t) =>
+          t.kind === "run" ||
+          t.kind === "drawing" ||
+          t.kind === "fldSimple" ||
+          Ne(t.kind) ||
+          Sn(t),
+      );
+    case "moveFromRangeStart":
+    case "moveFromRangeEnd":
+    case "moveToRangeStart":
+    case "moveToRangeEnd":
+    case "commentRangeStart":
+    case "commentRangeEnd":
+    case "commentReference":
+      return n.length === 0;
+    case "comments":
+      return n.every((t) => t.kind === "comment" || Sn(t));
+    case "comment":
+      return n.every(
+        (t) => t.kind === "paragraph" || t.kind === "table" || Sn(t),
+      );
+    case "runProperties":
+      return n.every((t) => t.kind === "generic");
+    case "paragraphProperties": {
+      let t = n.findIndex((r) => r.kind === "runProperties");
+      return (
+        n.every((r) => r.kind === "runProperties" || r.kind === "generic") &&
+        n.filter((r) => r.kind === "runProperties").length <= 1 &&
+        (t < 0 ||
+          n
+            .slice(t + 1)
+            .every(
+              (r) =>
+                r.kind === "generic" &&
+                r.namespaceUri === y &&
+                yb.has(r.localName),
+            ))
+      );
+    }
+    case "text":
+    case "deletedText":
+      return n.every((t) => t.kind === "textValue");
+    case "tab":
+    case "hardBreak":
+      return n.length === 0;
+    case "fldChar":
+      return n.every((t) => t.kind === "generic");
+    case "instrText":
+      return n.every((t) => t.kind === "textValue");
+    case "fldSimple":
+      return n.every((t) => t.kind === "run" || Ne(t.kind) || Sn(t));
+    case "footnotes":
+    case "endnotes":
+      return n.every((t) => t.kind === "note" || t.kind === "generic");
+    case "note":
+      return n.every(
+        (t) =>
+          t.kind === "paragraph" || t.kind === "table" || t.kind === "generic",
+      );
+    case "noteReference":
+    case "noteRef":
+    case "separator":
+    case "continuationSeparator":
+      return n.length === 0;
+    case "table":
+      return (
+        n.every(
+          (t) =>
+            t.kind === "tableRow" ||
+            t.kind === "tableProperties" ||
+            t.kind === "tableGrid" ||
+            Sn(t),
+        ) &&
+        n.filter((t) => t.kind === "tableProperties").length <= 1 &&
+        n.filter((t) => t.kind === "tableGrid").length <= 1
+      );
+    case "tableRow":
+      return n.every((t) => t.kind === "tableCell" || Sn(t));
+    case "tableCell":
+      return n.every(
+        (t) => t.kind === "paragraph" || t.kind === "table" || Sn(t),
+      );
+    case "tableGrid":
+    case "tableProperties":
+      return n.every((t) => t.kind === "generic");
+    case "contentControl":
+      return Vu(n);
+    case "contentControlProperties":
+      return Wu(n);
+    case "contentControlEndProperties":
+      return Hu(n);
+    case "contentControlContent":
+      return ju(n);
+    case "contentControlDropDownList":
+    case "contentControlComboBox":
+      return Ku(n);
+    case "contentControlDate":
+      return $u(n);
+    case "contentControlCheckbox":
+      return Gu(n);
+    case "contentControlListItem":
+    case "contentControlDateFormat":
+    case "contentControlLid":
+    case "contentControlStoreMappedDataAs":
+    case "contentControlCalendar":
+    case "contentControlText":
+    case "contentControlDataBinding":
+    case "contentControlChecked":
+    case "contentControlCheckedState":
+    case "contentControlUncheckedState":
+      return zu(n);
+    default:
+      return false;
+  }
+}
+function uf(e) {
+  return (
+    e === " " ||
+    e === "	" ||
+    e === "\r" ||
+    e ===
+      `
+`
+  );
+}
+function Nb(e) {
+  return e.length > 0 && (uf(e[0]) || uf(e[e.length - 1]));
+}
+function Xl(e) {
+  let n = e.children.find((t) => t.kind === "textValue");
+  return n?.kind === "textValue" ? n.value : "";
+}
+function Yl(e, n) {
+  let t = e.filter((r) => !(r.namespaceUri === J && r.localName === "space"));
+  return Nb(n)
+    ? [
+        ...t,
+        {
+          kind: "xmlSpace",
+          namespaceUri: J,
+          localName: "space",
+          prefix: "xml",
+          value: "preserve",
+        },
+      ]
+    : t;
+}
+function kb(e, n, t = y) {
+  if (e.kind !== "textValue") {
+    for (let r of e.children)
+      if (r.kind !== "textValue" && r.localName === n && r.namespaceUri === t)
+        return r;
+  }
+}
+function bb(e, n, t = y) {
+  return e.attributes.find((r) => r.localName === n && r.namespaceUri === t)
+    ?.value;
+}
+function Mo(e, n, t = y) {
+  let r = kb(e, n, t);
+  if (!r) return false;
+  let o = bb(r, "val", t);
+  return o === void 0 || !(o === "0" || o === "false" || o === "off");
+}
+function Ql(e) {
+  if (!he(e))
+    throw new Error(
+      `invalid local name for OOXML serialization: ${JSON.stringify(e)}`,
+    );
+}
+function Zi(e) {
+  if (e === Se)
+    throw new Error(
+      "the XMLNS namespace cannot name an OOXML element or authored attribute",
+    );
+  Je(e, "namespace URI");
+}
+function pf(e, n, t) {
+  if (e.kind !== "textValue") {
+    e.namespaceUri !== "" && n.add(e.namespaceUri);
+    for (let r of e.attributes) r.namespaceUri !== "" && n.add(r.namespaceUri);
+    for (let r of e.namespaceBindings) {
+      r.namespaceUri !== "" && n.add(r.namespaceUri);
+      let o = t.get(r.prefix) ?? new Set();
+      (o.add(r.namespaceUri), t.set(r.prefix, o));
+    }
+    for (let r of e.children) pf(r, n, t);
+  }
+}
+function gf(e, n) {
+  return (
+    (e.namespaceUri === Ie &&
+      (e.localName === "Ignorable" || e.localName === "MustUnderstand")) ||
+    (n.namespaceUri === Ie &&
+      n.localName === "Choice" &&
+      e.namespaceUri === "" &&
+      e.localName === "Requires")
+  );
+}
+function xf(e) {
+  return (
+    (e.namespaceUri === Ie && Gl.has(e.localName)) ||
+    (e.namespaceUri === Ao && e.localName === "type")
+  );
+}
+function hf(e, n, t) {
+  if (e.kind === "textValue") return;
+  let r = n;
+  if (e.namespaceBindings.length > 0) {
+    let o = new Map(n);
+    for (let i of e.namespaceBindings) o.set(i.prefix, i.namespaceUri);
+    r = o;
+  }
+  for (let o of e.attributes)
+    if (
+      (o.namespaceUri !== "" && t.add(o.namespaceUri),
+      typeof o.value == "string")
+    )
+      try {
+        if (gf(o, e)) for (let i of Yi(o.value, r)) t.add(i);
+        else if (xf(o))
+          for (let i of o.value.trim().split(/\s+/).filter(Boolean)) {
+            let [a] = So(i, r);
+            a !== "" && t.add(a);
+          }
+      } catch {}
+  for (let o of e.children) hf(o, r, t);
+}
+function ff(e, n, t) {
+  let r = [];
+  for (let [o, i] of n)
+    o !== "" && he(o) && !t.has(o) && i.size === 1 && i.has(e) && r.push(o);
+  return (r.sort(), r[0]);
+}
+function Pb(e) {
+  let n = new Set(),
+    t = new Map();
+  (pf(e, n, t), n.delete(""), n.delete(J), n.delete(Se));
+  let r = new Map([[J, "xml"]]),
+    o = new Set(["xml", "xmlns"]),
+    i = (c, u) => {
+      let f = u,
+        m = 0;
+      for (; o.has(f) || [...(t.get(f) ?? [])].some((g) => g !== c);)
+        ((m += 1), (f = u === "" ? `ns${m}` : `${u}${m}`));
+      (r.set(c, f), o.add(f), n.delete(c));
+    };
+  (e.namespaceUri !== "" &&
+    e.namespaceBindings.some(
+      (c) => c.prefix === "" && c.namespaceUri === e.namespaceUri,
+    ) &&
+    (r.set(e.namespaceUri, ""), o.add(""), n.delete(e.namespaceUri)),
+    n.has(y) && i(y, "w"),
+    n.has(Ie) && i(Ie, "mc"),
+    n.has(Ao) && i(Ao, "xsi"));
+  let l = 0;
+  for (let c of [...n].sort()) {
+    let f = ff(c, t, o);
+    if (f === void 0)
+      do ((l += 1), (f = `ns${l}`));
+      while (o.has(f));
+    i(c, f);
+  }
+  let s = new Set();
+  hf(
+    e,
+    new Map([
+      ["xml", J],
+      ["xmlns", Se],
+    ]),
+    s,
+  );
+  let d = new Map();
+  for (let c of [...s].sort()) {
+    if (r.get(c) !== "") continue;
+    let u = ff(c, t, o);
+    if (u === void 0)
+      do ((l += 1), (u = `ns${l}`));
+      while (o.has(u));
+    (d.set(c, u), o.add(u));
+  }
+  return { byUri: r, attributeAliases: d };
+}
+function ql(e, n) {
+  let t = n.attributeAliases.get(e);
+  if (t !== void 0) return t;
+  let r = n.byUri.get(e);
+  if (r === void 0)
+    throw new Error(`no controlled prefix for namespace ${JSON.stringify(e)}`);
+  if (r === "")
+    throw new Error(
+      `namespace ${JSON.stringify(e)} requires a non-empty controlled prefix`,
+    );
+  return r;
+}
+function mf(e, n, t, r) {
+  if ((Ql(n), Zi(e), e === "")) return n;
+  if (r) return `${ql(e, t)}:${n}`;
+  let o = t.byUri.get(e);
+  if (o === void 0)
+    throw new Error(`no controlled prefix for namespace ${JSON.stringify(e)}`);
+  return o === "" ? n : `${o}:${n}`;
+}
+function yf(e) {
+  if (e.length === 0) return e;
+  let n = e.length > 1 ? new Set() : null;
+  for (let t of e) {
+    if ((Ql(t.localName), Zi(t.namespaceUri), !n)) continue;
+    let r = Tt(t.namespaceUri, t.localName);
+    if (n.has(r))
+      throw new Error(
+        `duplicate expanded attribute {${t.namespaceUri}}${t.localName}`,
+      );
+    n.add(r);
+  }
+  return e.length === 1
+    ? e
+    : [...e].sort((t, r) => {
+        let o = Tt(t.namespaceUri, t.localName),
+          i = Tt(r.namespaceUri, r.localName);
+        return o < i ? -1 : o > i ? 1 : 0;
+      });
+}
+function wb(e, n, t, r) {
+  let o = e.value;
+  if (typeof o != "string")
+    throw new Error(
+      `attribute {${e.namespaceUri}}${e.localName} value must be a string scalar`,
+    );
+  return gf(e, n)
+    ? Yi(o, t)
+        .map((i) => ql(i, r))
+        .sort()
+        .join(" ")
+    : xf(e)
+      ? o
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((i) => {
+            let [a, l] = So(i, t);
+            return (Ql(l), Zi(a), a === "" ? l : `${ql(a, r)}:${l}`);
+          })
+          .sort()
+          .join(" ")
+      : o;
+}
+function Rb(e, n, t) {
+  return !!(
+    n.get(e.prefix) === e.namespaceUri ||
+    t.byUri.has(e.namespaceUri) ||
+    t.attributeAliases.has(e.namespaceUri)
+  );
+}
+function Of(e, n, t, r, o, i) {
+  if (e.kind === "textValue") {
+    i.push(Je(e.value, "OOXML text"));
+    return;
+  }
+  let a = t,
+    l = "";
+  if (e.namespaceBindings.length > 0) {
+    let m = new Map(t),
+      g = new Set();
+    ((l = [...e.namespaceBindings]
+      .sort((p, x) => {
+        let h = p.prefix.localeCompare(x.prefix);
+        return h !== 0 ? h : p.namespaceUri.localeCompare(x.namespaceUri);
+      })
+      .map((p) => {
+        if (
+          (p.prefix !== "" && !he(p.prefix)) ||
+          p.prefix === "xmlns" ||
+          g.has(p.prefix)
+        )
+          throw new Error(
+            `invalid or duplicate namespace prefix ${JSON.stringify(p.prefix)}`,
+          );
+        (Zi(p.namespaceUri), g.add(p.prefix));
+        let x = o !== "" && Rb(p, m, n);
+        if ((m.set(p.prefix, p.namespaceUri), x)) return "";
+        let h = p.prefix === "" ? "xmlns" : `xmlns:${p.prefix}`;
+        return ` ${h}="${Je(p.namespaceUri, h)}"`;
+      })
+      .join("")),
+      (a = m));
+  }
+  let s =
+    e.kind === "text" || e.kind === "deletedText" || e.kind === "instrText"
+      ? Yl(e.attributes, Xl(e))
+      : e.attributes;
+  Ir(s, a, e.namespaceUri, e.localName);
+  let d = Nf(s),
+    c = d === "preserve" ? true : d === "default" ? false : r,
+    u = mf(e.namespaceUri, e.localName, n, false);
+  i.push(`<${u}${o}${l}`);
+  for (let m of yf(s)) {
+    let g = mf(m.namespaceUri, m.localName, n, true),
+      p = wb(m, e, a, n);
+    i.push(` ${g}="${Cu(p, `attribute ${g}`)}"`);
+  }
+  let f = kf(e, c);
+  if (f.length === 0) {
+    i.push("/>");
+    return;
+  }
+  i.push(">");
+  for (let m of f) Of(m, n, a, c, "", i);
+  i.push(`</${u}>`);
+}
+function Eb(e, n) {
+  return n === ""
+    ? ` xmlns="${Je(e, "xmlns")}"`
+    : ` xmlns:${n}="${Je(e, `namespace ${n}`)}"`;
+}
+function Cr(e) {
+  let n = Pb(e.root),
+    t = new Map([
+      ["xml", J],
+      ["xmlns", Se],
+    ]),
+    r = [];
+  for (let [a, l] of n.byUri) a !== J && r.push({ namespaceUri: a, prefix: l });
+  for (let [a, l] of n.attributeAliases) r.push({ namespaceUri: a, prefix: l });
+  let o = r
+      .sort((a, l) => a.prefix.localeCompare(l.prefix))
+      .map(({ namespaceUri: a, prefix: l }) => (t.set(l, a), Eb(a, l)))
+      .join(""),
+    i = [];
+  return (Of(e.root, n, t, false, o, i), i.join(""));
+}
+function Nf(e) {
+  return e.find((n) => n.namespaceUri === J && n.localName === "space")?.value;
+}
+function kf(e, n) {
+  if (!e.children.some((o) => o.kind === "textValue")) return e.children;
+  let t = e.children.some((o) => o.kind !== "textValue"),
+    r = e.children.some(
+      (o) => o.kind === "textValue" && !/^\s*$/.test(o.value),
+    );
+  return e.children.filter(
+    (o) =>
+      o.kind !== "textValue" ||
+      n ||
+      e.kind === "text" ||
+      e.kind === "instrText" ||
+      !t ||
+      r ||
+      !/^\s*$/.test(o.value),
+  );
+}
+function bf(e, n, t) {
+  if (e.kind === "textValue") return ["text", e.value];
+  let r = new Map(t);
+  for (let d of e.namespaceBindings) r.set(d.prefix, d.namespaceUri);
+  let o =
+      e.kind === "text" || e.kind === "deletedText" || e.kind === "instrText"
+        ? Yl(e.attributes, Xl(e))
+        : e.attributes,
+    i = Nf(o),
+    a = i === "preserve" ? true : i === "default" ? false : n,
+    l = yf(o).map((d) => [
+      d.namespaceUri,
+      d.localName,
+      zl(d, r, e.namespaceUri, e.localName),
+    ]),
+    s = kf(e, a).map((d) => bf(d, a, r));
+  return ["element", e.namespaceUri, e.localName, l, s];
+}
+var Pf = new Map([
+  ["xml", J],
+  ["xmlns", Se],
+]);
+function wf(e, n = Pf) {
+  return JSON.stringify(bf("root" in e ? e.root : e, false, n));
+}
+function Zl(e) {
+  return wf(e);
+}
+function Ib(e, n) {
+  return Zl(e) === Zl(n);
+}
+var Cb = {
+  document: [y, "document"],
+  body: [y, "body"],
+  paragraph: [y, "p"],
+  run: [y, "r"],
+  runProperties: [y, "rPr"],
+  text: [y, "t"],
+  paragraphProperties: [y, "pPr"],
+  tab: [y, "tab"],
+  hardBreak: [y, "br"],
+  fldChar: [y, "fldChar"],
+  instrText: [y, "instrText"],
+  fldSimple: [y, "fldSimple"],
+  footnotes: [y, "footnotes"],
+  endnotes: [y, "endnotes"],
+  note: [y, "footnote"],
+  noteReference: [y, "footnoteReference"],
+  noteRef: [y, "footnoteRef"],
+  separator: [y, "separator"],
+  continuationSeparator: [y, "continuationSeparator"],
+  table: [y, "tbl"],
+  tableRow: [y, "tr"],
+  tableCell: [y, "tc"],
+  tableGrid: [y, "tblGrid"],
+  tableProperties: [y, "tblPr"],
+  hyperlink: [y, "hyperlink"],
+  bookmarkStart: [y, "bookmarkStart"],
+  bookmarkEnd: [y, "bookmarkEnd"],
+  deletedText: [y, "delText"],
+  revisionInsert: [y, "ins"],
+  revisionDelete: [y, "del"],
+  revisionMoveFrom: [y, "moveFrom"],
+  revisionMoveTo: [y, "moveTo"],
+  moveFromRangeStart: [y, "moveFromRangeStart"],
+  moveFromRangeEnd: [y, "moveFromRangeEnd"],
+  moveToRangeStart: [y, "moveToRangeStart"],
+  moveToRangeEnd: [y, "moveToRangeEnd"],
+  commentRangeStart: [y, "commentRangeStart"],
+  commentRangeEnd: [y, "commentRangeEnd"],
+  commentReference: [y, "commentReference"],
+  comments: [y, "comments"],
+  comment: [y, "comment"],
+  contentControl: [y, "sdt"],
+  contentControlProperties: [y, "sdtPr"],
+  contentControlEndProperties: [y, "sdtEndPr"],
+  contentControlContent: [y, "sdtContent"],
+  contentControlDropDownList: [y, "dropDownList"],
+  contentControlComboBox: [y, "comboBox"],
+  contentControlListItem: [y, "listItem"],
+  contentControlDate: [y, "date"],
+  contentControlDateFormat: [y, "dateFormat"],
+  contentControlLid: [y, "lid"],
+  contentControlStoreMappedDataAs: [y, "storeMappedDataAs"],
+  contentControlCalendar: [y, "calendar"],
+  contentControlText: [y, "text"],
+  contentControlDataBinding: [y, "dataBinding"],
+  contentControlCheckbox: [W, "checkbox"],
+  contentControlChecked: [W, "checked"],
+  contentControlCheckedState: [W, "checkedState"],
+  contentControlUncheckedState: [W, "uncheckedState"],
+  drawing: [y, "drawing"],
+  inlineDrawing: [M, "inline"],
+  anchoredDrawing: [M, "anchor"],
+  drawingExtent: [M, "extent"],
+  drawingEffectExtent: [M, "effectExtent"],
+  drawingDocPr: [M, "docPr"],
+  drawingGraphicFramePr: [M, "cNvGraphicFramePr"],
+  drawingGraphic: [B, "graphic"],
+  drawingGraphicData: [B, "graphicData"],
+  drawingSimplePos: [M, "simplePos"],
+  drawingPositionH: [M, "positionH"],
+  drawingPositionV: [M, "positionV"],
+  drawingPositionAlign: [M, "align"],
+  drawingPositionOffset: [M, "posOffset"],
+  drawingWrapNone: [M, "wrapNone"],
+  drawingWrapSquare: [M, "wrapSquare"],
+  drawingWrapTight: [M, "wrapTight"],
+  drawingWrapThrough: [M, "wrapThrough"],
+  drawingWrapTopBottom: [M, "wrapTopAndBottom"],
+  drawingWrapPolygon: [M, "wrapPolygon"],
+  drawingWrapPolygonStart: [M, "start"],
+  drawingWrapPolygonLineTo: [M, "lineTo"],
+  picture: [He, "pic"],
+  pictureNvPicPr: [He, "nvPicPr"],
+  pictureBlipFill: [He, "blipFill"],
+  pictureBlip: [B, "blip"],
+  pictureSrcRect: [B, "srcRect"],
+  pictureStretch: [B, "stretch"],
+  pictureTile: [B, "tile"],
+  pictureShapeProperties: [He, "spPr"],
+  pictureTransform: [B, "xfrm"],
+  pictureTransformOffset: [B, "off"],
+  pictureTransformExtent: [B, "ext"],
+  picturePresetGeometry: [B, "prstGeom"],
+};
+function Tb(e, n) {
+  return n.every((t) =>
+    t.kind === "wmlVal"
+      ? Ro(e)
+      : t.kind === "xmlSpace"
+        ? t.namespaceUri === J &&
+          t.localName === "space" &&
+          t.prefix === "xml" &&
+          (t.value === "default" || t.value === "preserve")
+        : !(
+            (t.namespaceUri === J && t.localName === "space") ||
+            (t.namespaceUri === y && t.localName === "val")
+          ),
+  );
+}
+function _o(e) {
+  return Rf(e, null);
+}
+function Qi(e, n) {
+  return Rf(n, e);
+}
+function Rf(e, n) {
+  let t = [],
+    r = new Set(),
+    o = [],
+    i = () => {
+      let s = "root";
+      for (let d of o) s += `.children[${d}]`;
+      return s;
+    },
+    a = (s, d) => {
+      t.push({ code: s, path: i(), ...(d === void 0 ? {} : { nodeId: d }) });
+    },
+    l = (s, d, c, u, f) => {
+      if (u && c === s) return;
+      if (
+        (typeof s.id != "string" || s.id.length === 0
+          ? a("invalid-id", s.id)
+          : r.has(s.id)
+            ? a("duplicate-id", s.id)
+            : r.add(s.id),
+        s.kind === "textValue")
+      ) {
+        Z(s.value) || a("invalid-xml-value", s.id);
+        return;
+      }
+      let m = d;
+      if (s.namespaceBindings.length > 0) {
+        let O = new Map(d),
+          b = new Set();
+        for (let P of s.namespaceBindings)
+          ((!b.has(P.prefix) &&
+            (P.prefix === "" || he(P.prefix)) &&
+            P.prefix !== "xmlns" &&
+            Z(P.namespaceUri) &&
+            P.namespaceUri !== Se &&
+            !(P.prefix === "xml" && P.namespaceUri !== J) &&
+            !(P.prefix !== "xml" && P.namespaceUri === J) &&
+            !(P.prefix !== "" && P.namespaceUri === "")) ||
+            a("invalid-namespace", s.id),
+            b.add(P.prefix),
+            O.set(P.prefix, P.namespaceUri));
+        m = O;
+      }
+      (he(s.localName) || a("invalid-name", s.id),
+        (!Z(s.namespaceUri) || s.namespaceUri === Se) &&
+          a("invalid-namespace", s.id),
+        (s.prefix === void 0
+          ? (m.get("") ?? "") === s.namespaceUri
+          : he(s.prefix) && m.get(s.prefix) === s.namespaceUri) ||
+          a("invalid-qname", s.id));
+      let p = s.attributes.length > 1 ? new Set() : null;
+      for (let O of s.attributes)
+        if (
+          (he(O.localName) || a("invalid-name", s.id),
+          (!Z(O.namespaceUri) || O.namespaceUri === Se) &&
+            a("invalid-namespace", s.id),
+          Z(O.value) || a("invalid-xml-value", s.id),
+          (O.prefix === void 0
+            ? O.namespaceUri === ""
+            : he(O.prefix) && m.get(O.prefix) === O.namespaceUri) ||
+            a("invalid-qname", s.id),
+          p)
+        ) {
+          let P = Tt(O.namespaceUri, O.localName);
+          (p.has(P) && a("duplicate-expanded-attribute", s.id), p.add(P));
+        }
+      try {
+        Ir(s.attributes, m, s.namespaceUri, s.localName);
+      } catch {
+        a("invalid-qname", s.id);
+      }
+      if (s.kind !== "generic") {
+        let [O, b] = Cb[s.kind],
+          P =
+            s.kind === "note"
+              ? s.localName === "footnote" || s.localName === "endnote"
+              : s.kind === "noteReference"
+                ? s.localName === "footnoteReference" ||
+                  s.localName === "endnoteReference"
+                : s.kind === "noteRef"
+                  ? s.localName === "footnoteRef" ||
+                    s.localName === "endnoteRef"
+                  : s.localName === b;
+        (s.namespaceUri !== O ||
+          !P ||
+          (Nn(s.kind)
+            ? !zi(s.kind, s.localName, s.attributes, s.children, f)
+            : !Tb(s.kind, s.attributes) || !qi(s.kind, s.children))) &&
+          a("known-node-invariant", s.id);
+      }
+      let x =
+          u &&
+          c !== void 0 &&
+          c.kind !== "textValue" &&
+          c.namespaceBindings === s.namespaceBindings,
+        h = null;
+      if (x) {
+        let O = new Map();
+        for (let b of c.children) O.has(b.id) || O.set(b.id, b);
+        h = O;
+      }
+      let k = {
+        wmlLocalName: s.namespaceUri === y ? s.localName : void 0,
+        kind: s.kind,
+        namespaceUri: s.namespaceUri,
+        localName: s.localName,
+        attributes: s.attributes,
+      };
+      for (let O = 0; O < s.children.length; O += 1) {
+        let b = s.children[O];
+        (o.push(O), l(b, m, h?.get(b.id), x, k), o.pop());
+      }
+    };
+  return (
+    l(
+      e.root,
+      new Map([
+        ["xml", J],
+        ["xmlns", Se],
+      ]),
+      n?.root,
+      n !== null,
+      void 0,
+    ),
+    t.length === 0 ? { ok: true } : { ok: false, issues: Object.freeze(t) }
+  );
+}
+var b_ = Object.freeze({
+    initial: "deterministic-structural-path-after-normalized-parse",
+    unchanged: "retain-id-through-structural-sharing",
+    replacement: "explicitly-retain-or-allocate",
+    uniqueness: "unique-within-part",
+  }),
+  vb = {
+    document: "document",
+    body: "body",
+    p: "paragraph",
+    r: "run",
+    rPr: "runProperties",
+    t: "text",
+    delText: "deletedText",
+    pPr: "paragraphProperties",
+    tab: "tab",
+    br: "hardBreak",
+    fldChar: "fldChar",
+    instrText: "instrText",
+    fldSimple: "fldSimple",
+    footnotes: "footnotes",
+    endnotes: "endnotes",
+    footnote: "note",
+    endnote: "note",
+    footnoteReference: "noteReference",
+    endnoteReference: "noteReference",
+    footnoteRef: "noteRef",
+    endnoteRef: "noteRef",
+    separator: "separator",
+    continuationSeparator: "continuationSeparator",
+    tbl: "table",
+    tr: "tableRow",
+    tc: "tableCell",
+    tblGrid: "tableGrid",
+    tblPr: "tableProperties",
+    hyperlink: "hyperlink",
+    bookmarkStart: "bookmarkStart",
+    bookmarkEnd: "bookmarkEnd",
+    moveFromRangeStart: "moveFromRangeStart",
+    moveFromRangeEnd: "moveFromRangeEnd",
+    moveToRangeStart: "moveToRangeStart",
+    moveToRangeEnd: "moveToRangeEnd",
+    commentRangeStart: "commentRangeStart",
+    commentRangeEnd: "commentRangeEnd",
+    commentReference: "commentReference",
+    comments: "comments",
+    comment: "comment",
+    sdt: "contentControl",
+  },
+  Sb = new Set([
+    "r",
+    "rPr",
+    "pPr",
+    "trPr",
+    "tcPr",
+    "tblPr",
+    "tblPrEx",
+    "numPr",
+    "sectPr",
+    "sdtPr",
+    "sdtEndPr",
+  ]),
+  Ab = {
+    sdtPr: "contentControlProperties",
+    sdtEndPr: "contentControlEndProperties",
+    sdtContent: "contentControlContent",
+  };
+function Mb(e, n, t) {
+  let r = cf(e, n, t);
+  return r !== null ? r : e === y ? Ef(n, t?.wmlLocalName) : "generic";
+}
+var _b = {
+    ins: "revisionInsert",
+    del: "revisionDelete",
+    moveFrom: "revisionMoveFrom",
+    moveTo: "revisionMoveTo",
+  },
+  Db = new Set([
+    "rPr",
+    "pPr",
+    "trPr",
+    "tcPr",
+    "tblPr",
+    "tblPrEx",
+    "numPr",
+    "sectPr",
+    "rPrChange",
+    "pPrChange",
+    "trPrChange",
+    "tcPrChange",
+    "tblPrChange",
+    "tblPrExChange",
+    "sectPrChange",
+  ]);
+function Ef(e, n) {
+  let t = _b[e];
+  if (t !== void 0) return n !== void 0 && Db.has(n) ? "generic" : t;
+  let r = Ab[e];
+  return r !== void 0
+    ? n === "sdt"
+      ? r
+      : "generic"
+    : e === "sdt"
+      ? n !== void 0 && Sb.has(n)
+        ? "generic"
+        : "contentControl"
+      : (vb[e] ?? "generic");
+}
+function If(e) {
+  if (e.kind === "textValue") return Object.freeze(e);
+  for (let n of e.attributes) Object.freeze(n);
+  for (let n of e.namespaceBindings) Object.freeze(n);
+  for (let n of e.children) If(n);
+  return (
+    Object.freeze(e.attributes),
+    Object.freeze(e.namespaceBindings),
+    Object.freeze(e.children),
+    Object.freeze(e)
+  );
+}
+function Ub(e, n) {
+  let t = null,
+    r = [];
+  for (let [o, i] of Object.entries(e.attributes)) {
+    if (o !== "xmlns" && !o.startsWith("xmlns:")) continue;
+    t ??= new Map(n);
+    let a = o === "xmlns" ? "" : o.slice(6);
+    if (
+      (a !== "" && !he(a)) ||
+      a === "xmlns" ||
+      (a === "xml" && i !== J) ||
+      (a !== "xml" && i === J) ||
+      i === Se ||
+      (a !== "" && i === "")
+    )
+      throw new We("invalid-namespace");
+    (t.set(a, i), r.push({ prefix: a, namespaceUri: i }));
+  }
+  return { bindings: t ?? n, authored: r };
+}
+function Lb(e, n) {
+  let t = Xi(e);
+  if (t.prefix === "xmlns") throw new We("invalid-namespace");
+  if (t.prefix !== void 0) {
+    let r = n.get(t.prefix);
+    if (r === void 0) throw new We("undeclared-prefix");
+    return { ...t, namespaceUri: r };
+  }
+  return { ...t, namespaceUri: n.get("") ?? "" };
+}
+function Bb(e, n) {
+  let t = [],
+    r = new Set(),
+    o = true,
+    i = false;
+  for (let [a, l] of Object.entries(e.attributes)) {
+    if (a === "xmlns" || a.startsWith("xmlns:")) continue;
+    let s = Xi(a),
+      d = "";
+    if (s.prefix !== void 0) {
+      if (((d = n.get(s.prefix) ?? ""), !n.has(s.prefix)))
+        throw new We("undeclared-prefix");
+      if (s.prefix === "xmlns") throw new We("invalid-namespace");
+    }
+    let c = Tt(d, s.localName);
+    if (r.has(c)) throw new We("duplicate-expanded-attribute");
+    (r.add(c),
+      d === J && s.localName === "space"
+        ? s.prefix === "xml" && (l === "default" || l === "preserve")
+          ? t.push({
+              kind: "xmlSpace",
+              namespaceUri: J,
+              localName: "space",
+              prefix: "xml",
+              value: l,
+            })
+          : ((o = false),
+            t.push({
+              kind: "genericExtension",
+              namespaceUri: d,
+              localName: s.localName,
+              ...(s.prefix === void 0 ? {} : { prefix: s.prefix }),
+              value: l,
+            }))
+        : d === y && s.localName === "val"
+          ? ((i = true),
+            t.push({
+              kind: "wmlVal",
+              namespaceUri: y,
+              localName: "val",
+              ...(s.prefix === void 0 ? {} : { prefix: s.prefix }),
+              value: l,
+            }))
+          : t.push({
+              kind: "genericExtension",
+              namespaceUri: d,
+              localName: s.localName,
+              ...(s.prefix === void 0 ? {} : { prefix: s.prefix }),
+              value: l,
+            }));
+  }
+  return { attributes: t, compatibleWithKnownNode: o, hasWmlVal: i };
+}
+function Fb(e, n) {
+  let t = e.find((r) => r.namespaceUri === J && r.localName === "space")?.value;
+  return t === "preserve" ? true : t === "default" ? false : n;
+}
+function Vb(e, n, t) {
+  if (!e.some((l) => l.type === "text")) return e;
+  let r = e.some((l) => l.type === "element"),
+    o = e.some((l) => l.type === "text" && !/^\s*$/.test(l.value)),
+    i = e.filter(
+      (l) =>
+        l.type === "element" || n || t || !r || o || !/^\s*$/.test(l.value),
+    ),
+    a = [];
+  for (let l of i) {
+    let s = a[a.length - 1];
+    l.type === "text" && s?.type === "text"
+      ? (a[a.length - 1] = { type: "text", value: s.value + l.value })
+      : a.push(l);
+  }
+  return a;
+}
+function Cf(e, n, t, r, o, i, a = void 0, l) {
+  let s = Ub(e, n),
+    d = Lb(e.name, s.bindings),
+    c = Bb(e, s.bindings),
+    u = c.attributes;
+  Ir(u, s.bindings, d.namespaceUri, d.localName);
+  let f = Fb(u, o),
+    m = d.namespaceUri === y,
+    p =
+      d.namespaceUri === y &&
+      (d.localName === "sdtPr" ||
+        d.localName === "sdtEndPr" ||
+        d.localName === "sdtContent") &&
+      a !== "contentControl"
+        ? void 0
+        : Fu(d.namespaceUri, d.localName, a),
+    x = p !== void 0 ? p : m ? Ef(d.localName, i) : "generic",
+    h = Mb(d.namespaceUri, d.localName, l),
+    N = h !== "generic" && Nn(h) ? h : x,
+    k = Vb(
+      e.children,
+      f,
+      N === "text" || N === "deletedText" || N === "instrText",
+    ),
+    O = {
+      wmlLocalName: m ? d.localName : void 0,
+      kind: N,
+      namespaceUri: d.namespaceUri,
+      localName: d.localName,
+      attributes: u,
+    },
+    b = k.map((S, U) => {
+      let L = `${r}.${U}`;
+      return S.type === "text"
+        ? { id: `${t}#${L}`, kind: "textValue", value: S.value }
+        : Cf(
+            S,
+            s.bindings,
+            t,
+            L,
+            f,
+            O.wmlLocalName,
+            O.kind === "generic" ? void 0 : O.kind,
+            O,
+          );
+    }),
+    P =
+      c.compatibleWithKnownNode && (!c.hasWmlVal || (N !== "generic" && Ro(N))),
+    R =
+      N !== "generic" && Nn(N)
+        ? zi(N, d.localName, u, b, l)
+        : N !== "generic" &&
+          qi(N, b) &&
+          Wb(N, d.localName, u) &&
+          (N !== "fldChar" ||
+            u.some((S) =>
+              S.localName !== "fldCharType" ||
+              (S.namespaceUri !== y && S.namespaceUri !== "")
+                ? false
+                : S.value === "begin" ||
+                  S.value === "separate" ||
+                  S.value === "end",
+            )),
+    w = N !== "generic" && P && R ? N : "generic",
+    I = w === "generic" && Nn(N) ? $l(b, d) : b;
+  return {
+    id: `${t}#${r}`,
+    kind: w,
+    namespaceUri: d.namespaceUri,
+    localName: d.localName,
+    ...(d.prefix === void 0 ? {} : { prefix: d.prefix }),
+    namespaceBindings: s.authored,
+    attributes: u,
+    children: I,
+  };
+}
+function Wb(e, n, t) {
+  if (
+    e !== "note" &&
+    e !== "noteReference" &&
+    e !== "noteRef" &&
+    e !== "separator" &&
+    e !== "continuationSeparator" &&
+    e !== "footnotes" &&
+    e !== "endnotes"
+  )
+    return true;
+  let r = (o) => {
+    for (let i of t)
+      if (i.localName === o && (i.namespaceUri === y || i.namespaceUri === ""))
+        return i.value;
+  };
+  if (e === "note") {
+    if (n !== "footnote" && n !== "endnote") return false;
+    let o = r("id");
+    if (o === void 0 || !/^-?\d{1,10}$/.test(o)) return false;
+    let i = Number(o);
+    if (!Number.isInteger(i) || i < -2147483648 || i > 2147483647) return false;
+    let a = r("type");
+    return !(
+      a !== void 0 &&
+      a !== "normal" &&
+      a !== "separator" &&
+      a !== "continuationSeparator" &&
+      a !== "continuationNotice"
+    );
+  }
+  if (e === "noteReference") {
+    if (n !== "footnoteReference" && n !== "endnoteReference") return false;
+    let o = r("id");
+    if (o === void 0 || !/^-?\d{1,10}$/.test(o)) return false;
+    let i = Number(o);
+    return Number.isInteger(i) && i >= -2147483648 && i <= 2147483647;
+  }
+  return e === "noteRef"
+    ? n === "footnoteRef" || n === "endnoteRef"
+    : e === "separator"
+      ? n === "separator"
+      : e === "continuationSeparator"
+        ? n === "continuationSeparator"
+        : e === "footnotes"
+          ? n === "footnotes"
+          : e === "endnotes"
+            ? n === "endnotes"
+            : true;
+}
+function re(e, n, t) {
+  let r = $n(e, t);
+  if (!r.ok) return r;
+  let o = r.nodes.filter((i) => i.type === "element");
+  if (o.length === 0) return { ok: false, reason: "missing-root" };
+  if (o.length !== 1) return { ok: false, reason: "multiple-roots" };
+  try {
+    let i = If(
+      Cf(
+        o[0],
+        new Map([
+          ["xml", J],
+          ["xmlns", Se],
+        ]),
+        n.name,
+        "0",
+        !1,
+      ),
+    );
+    return {
+      ok: !0,
+      part: Object.freeze({
+        id: `part:${n.name}`,
+        name: n.name,
+        contentType: n.contentType,
+        root: i,
+      }),
+    };
+  } catch (i) {
+    return { ok: false, reason: i instanceof We ? i.reason : "parse-error" };
+  }
+}
+var Do = new WeakMap();
+function Tr(e) {
+  let n = Do.get(e);
+  if (n) return n;
+  let t = new Map(),
+    r = new Map(),
+    o = (a, l) => {
+      if (
+        (t.has(a.id) || (t.set(a.id, a), l !== null && r.set(a.id, l)),
+        a.kind !== "textValue")
+      )
+        for (let s of a.children) o(s, a.id);
+    };
+  o(e, null);
+  let i = { nodes: t, parents: r, mintFrontier: 0 };
+  return (Do.set(e, i), i);
+}
+function C_(e) {
+  return new Set(Tr(e.root).nodes.keys());
+}
+function A(e) {
+  let n = Tr(e.root),
+    t = new Set(),
+    r = n.mintFrontier;
+  return () => {
+    let o = `${e.name}#new:${r}`;
+    for (; n.nodes.has(o) || t.has(o);) ((r += 1), (o = `${e.name}#new:${r}`));
+    return (t.add(o), (r += 1), (n.mintFrontier = r), o);
+  };
+}
+function Hb(e, n) {
+  let t = Tr(e),
+    r = t.nodes.get(n);
+  if (!r) return null;
+  let o = [r],
+    i = r;
+  for (; i && i !== e;) {
+    let a = t.parents.get(i.id);
+    ((i = a === void 0 ? void 0 : t.nodes.get(a)), i && o.push(i));
+  }
+  return i !== e ? null : (o.reverse(), o);
+}
+function vf(e, n) {
+  return Tr(e.root).nodes.has(n);
+}
+function E(e, n) {
+  return Tr(e.root).nodes.get(n) ?? null;
+}
+function je(e, n) {
+  let t = Tr(e.root);
+  if (!t.nodes.has(n)) return null;
+  let r = t.parents.get(n),
+    o = r === void 0 ? void 0 : t.nodes.get(r);
+  return o && o.kind !== "textValue" ? o : null;
+}
+function ns(e, n) {
+  return Object.freeze({ ...e, children: n });
+}
+function Tf(e, n) {
+  let t = Do.get(e);
+  t && (Do.delete(e), Sf(t, e, n, null), Do.set(n, t));
+}
+function Jl(e, n) {
+  if (
+    (e.nodes.get(n.id) === n && (e.nodes.delete(n.id), e.parents.delete(n.id)),
+    n.kind !== "textValue")
+  )
+    for (let t of n.children) Jl(e, t);
+}
+function es(e, n, t) {
+  if ((e.nodes.set(n.id, n), e.parents.set(n.id, t), n.kind !== "textValue"))
+    for (let r of n.children) es(e, r, n.id);
+}
+function Sf(e, n, t, r) {
+  if (n === t) {
+    r !== null && e.parents.get(t.id) !== r && e.parents.set(t.id, r);
+    return;
+  }
+  if (n.id !== t.id) {
+    (Jl(e, n), r !== null && es(e, t, r));
+    return;
+  }
+  (e.nodes.set(t.id, t),
+    r !== null && e.parents.get(t.id) !== r && e.parents.set(t.id, r));
+  let o = n.kind === "textValue" ? [] : n.children,
+    i = t.kind === "textValue" ? [] : t.children,
+    a = Math.min(o.length, i.length),
+    l = 0;
+  for (; l < a && o[l] === i[l];) l += 1;
+  let s = o.length,
+    d = i.length;
+  for (; s > l && d > l && o[s - 1] === i[d - 1];) ((s -= 1), (d -= 1));
+  let c = new Map();
+  for (let f = l; f < s; f += 1) {
+    let m = o[f];
+    c.has(m.id) || c.set(m.id, m);
+  }
+  let u = new Set();
+  for (let f = l; f < d; f += 1) u.add(i[f].id);
+  for (let [f, m] of c) u.has(f) || Jl(e, m);
+  for (let f = l; f < d; f += 1) {
+    let m = i[f],
+      g = c.get(m.id);
+    g ? Sf(e, g, m, t.id) : es(e, m, t.id);
+  }
+}
+function Ji(e, n, t) {
+  let r = Hb(e.root, n);
+  if (!r) return null;
+  if (r.length === 1)
+    return !t || t.kind === "textValue"
+      ? null
+      : (Tf(e.root, t), Object.freeze({ ...e, root: t }));
+  let o = t;
+  for (let i = r.length - 2; i >= 0; i -= 1) {
+    let a = r[i],
+      l = r[i + 1].id,
+      s = [];
+    for (let d of a.children) {
+      if (d.id !== l) {
+        s.push(d);
+        continue;
+      }
+      o && s.push(o);
+    }
+    o = ns(a, s);
+  }
+  return (Tf(e.root, o), Object.freeze({ ...e, root: o }));
+}
+function Uo(e, n) {
+  if (!e)
+    return {
+      ok: false,
+      issues: [{ code: "known-node-invariant", path: "(edit target)" }],
+    };
+  if (n?.deferValidation) return { ok: true, part: e };
+  let t = _o(e);
+  return t.ok ? { ok: true, part: e } : { ok: false, issues: t.issues };
+}
+function F(e, n, t, r) {
+  let o = E(e, n);
+  return !o || o.kind === "textValue"
+    ? {
+        ok: false,
+        issues: [{ code: "known-node-invariant", path: n, nodeId: n }],
+      }
+    : Uo(Ji(e, n, ns(o, t)), r);
+}
+function _(e, n, t, r, o) {
+  let i = E(e, n);
+  if (!i || i.kind === "textValue")
+    return {
+      ok: false,
+      issues: [{ code: "known-node-invariant", path: n, nodeId: n }],
+    };
+  let a = Math.max(0, Math.min(t, i.children.length)),
+    l = [...i.children.slice(0, a), ...r, ...i.children.slice(a)];
+  return Uo(Ji(e, n, ns(i, l)), o);
+}
+function j(e, n, t, r) {
+  return vf(e, n)
+    ? Uo(Ji(e, n, t), r)
+    : {
+        ok: false,
+        issues: [{ code: "known-node-invariant", path: n, nodeId: n }],
+      };
+}
+function ie(e, n, t) {
+  return vf(e, n)
+    ? Uo(Ji(e, n, null), t)
+    : {
+        ok: false,
+        issues: [{ code: "known-node-invariant", path: n, nodeId: n }],
+      };
+}
+function st(e, n, t) {
+  let r = e;
+  for (let o of n) {
+    let i = o(r);
+    if (!i.ok) return i;
+    r = i.part;
+  }
+  return Uo(r, t);
+}
+var ts = { maxEntries: 1e4, maxTotalBytes: 512 * 1024 * 1024, maxRatio: 200 },
+  vt = class extends Error {
+    constructor(t) {
+      super(t);
+      this.reason = t;
+    }
+    reason;
+  };
+function _f(e, n = ts) {
+  let t = n.maxRatio ?? 200,
+    r = 0,
+    o = 0,
+    i,
+    a = new Set(),
+    l;
+  try {
+    l = unzipSync(e, {
+      filter: (d) => {
+        if (d.name.endsWith("/")) return !1;
+        if (((r += 1), r > n.maxEntries)) throw new vt("too-many-entries");
+        let c = fe(d.name);
+        if (!c.ok) throw ((i = `${d.name}: ${c.reason}`), new vt("bad-name"));
+        let u = $(c.partName);
+        if (a.has(u))
+          throw (
+            (i = `${d.name}: OPC-equivalent duplicate of ${c.partName}`),
+            new vt("bad-name")
+          );
+        if ((a.add(u), d.originalSize / Math.max(1, d.size) > t))
+          throw new vt("too-large");
+        if (((o += d.originalSize), o > n.maxTotalBytes))
+          throw new vt("too-large");
+        return !0;
+      },
+    });
+  } catch (d) {
+    return d instanceof vt
+      ? { ok: false, reason: d.reason, detail: i }
+      : { ok: false, reason: "inflate-error" };
+  }
+  let s = new Map();
+  for (let [d, c] of Object.entries(l)) {
+    let u = fe(d);
+    u.ok && s.set(u.partName, c);
+  }
+  return { ok: true, entries: s };
+}
+var $b = new Date(Date.UTC(1980, 0, 2, 12));
+function Df(e) {
+  let n = Object.create(null),
+    t = new Set();
+  for (let [r, o] of e) {
+    let i = fe(r);
+    if (!i.ok) throw new Error(`unsafe part name on write: ${r} (${i.reason})`);
+    let a = $(i.partName);
+    if (t.has(a))
+      throw new Error(
+        `OPC-equivalent duplicate part name on write: ${i.partName}`,
+      );
+    (t.add(a), (n[i.partName.replace(/^\//, "")] = o));
+  }
+  return zipSync(n, { mtime: $b });
+}
+var Gb = "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+  en =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+function rs(e, n, t) {
+  if (e.kind !== "textValue") {
+    for (let r of e.attributes)
+      if (r.namespaceUri === n && r.localName === t) return r.value;
+  }
+}
+function Uf(e) {
+  return e.kind === "hyperlink";
+}
+function zb(e) {
+  return rs(e, y, "anchor");
+}
+function os(e) {
+  return rs(e, Gb, "id");
+}
+function D_(e, n) {
+  let t = rs(e, y, "tooltip"),
+    r = os(e),
+    o = zb(e);
+  if (r !== void 0 && r !== "") {
+    let i = n(r);
+    if (i && i.external) {
+      let a = lt(i.target),
+        l = a.ok && i.sinkSafe === true;
+      return {
+        kind: "external",
+        authored: i.target,
+        href: l ? a.href : null,
+        ...(o !== void 0 ? { anchor: o } : {}),
+        ...(t !== void 0 ? { tooltip: t } : {}),
+        relationshipId: r,
+      };
+    }
+    return {
+      kind: "unresolved",
+      authored: i?.target ?? "",
+      href: null,
+      ...(o !== void 0 ? { anchor: o } : {}),
+      ...(t !== void 0 ? { tooltip: t } : {}),
+      relationshipId: r,
+    };
+  }
+  return o !== void 0 && o !== ""
+    ? {
+        kind: "internal",
+        authored: o,
+        href: Xb(o),
+        anchor: o,
+        ...(t !== void 0 ? { tooltip: t } : {}),
+      }
+    : {
+        kind: "unresolved",
+        authored: "",
+        href: null,
+        ...(t !== void 0 ? { tooltip: t } : {}),
+      };
+}
+function Xb(e) {
+  let n = lt(e);
+  return !n.ok || n.href.length === 0 ? null : `#${n.href}`;
+}
+function is() {
+  return {
+    compatibilityBranches: 0,
+    visited: 0,
+    depth: 0,
+    refused: false,
+    compatibilityBranchNodeId: null,
+    diagnostics: [],
+  };
+}
+function oe(e) {
+  return e.kind !== "textValue";
+}
+function Lo(e) {
+  return (
+    e.kind === "generic" &&
+    e.namespaceUri === Ie &&
+    e.localName === "AlternateContent"
+  );
+}
+function Lf(e) {
+  return (
+    e.kind === "generic" && e.namespaceUri === Ie && e.localName === "Choice"
+  );
+}
+function Bf(e) {
+  return (
+    e.kind === "generic" && e.namespaceUri === Ie && e.localName === "Fallback"
+  );
+}
+function kn(e, n) {
+  if (n.namespaceBindings.length === 0) return e;
+  let t = new Map(e);
+  for (let r of n.namespaceBindings) t.set(r.prefix, r.namespaceUri);
+  return t;
+}
+var Yb = new Map();
+function vr() {
+  return Yb;
+}
+function ae(e, n) {
+  for (let t of e) if (oe(t) && t.kind === n) return t;
+  return null;
+}
+var Sr = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+  qb = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+  Zb = /^[0-9A-Fa-f]{6}$/,
+  Qb = 64,
+  Jb = 1024,
+  Ff = 2 ** 31 - 1;
+function de(e, n = true) {
+  if (e === void 0 || !/^-?\d{1,15}$/.test(e)) return null;
+  let t = Number(e);
+  return Number.isFinite(t) ? (n ? (t < 0 ? 0 : t > Ff ? Ff : t) : t) : null;
+}
+function te(e, n) {
+  for (let t of e)
+    if (
+      oe(t) &&
+      ((n.typedKind !== void 0 && t.kind === n.typedKind) ||
+        (n.namespaceUri !== void 0 &&
+          n.localName !== void 0 &&
+          t.kind === "generic" &&
+          t.namespaceUri === n.namespaceUri &&
+          t.localName === n.localName))
+    )
+      return t;
+  return null;
+}
+function ea(e) {
+  let n = te(e.children, { namespaceUri: B, localName: "solidFill" });
+  if (!n) return null;
+  let t = te(n.children, { namespaceUri: B, localName: "srgbClr" });
+  if (!t) return null;
+  let r = v(t.attributes, "val");
+  return r !== void 0 && Zb.test(r) ? r : null;
+}
+function eP(e, n, t, r, o) {
+  let i = null;
+  for (let a of e.children) {
+    if (!oe(a)) continue;
+    if (a.namespaceUri !== B) return false;
+    if (a.localName === "close") {
+      i = null;
+      continue;
+    }
+    if (a.localName !== "moveTo" && a.localName !== "lnTo") return false;
+    let l = te(a.children, { namespaceUri: B, localName: "pt" });
+    if (!l) return false;
+    let s = de(v(l.attributes, "x"), false),
+      d = de(v(l.attributes, "y"), false);
+    if (s === null || d === null) return false;
+    let c = { x: s * n, y: d * t };
+    if (!Number.isFinite(c.x) || !Number.isFinite(c.y) || o.remaining <= 0)
+      return false;
+    if (((o.remaining -= 1), a.localName === "moveTo" || i === null)) {
+      if (r.length >= Qb) return false;
+      ((i = [c]), r.push(i));
+    } else i.push(c);
+  }
+  return true;
+}
+function Hf(e) {
+  let n =
+    ae(e.children, "drawingGraphic") ??
+    te(e.children, { namespaceUri: B, localName: "graphic" });
+  if (!n) return null;
+  let t =
+    ae(n.children, "drawingGraphicData") ??
+    te(n.children, { namespaceUri: B, localName: "graphicData" });
+  return !t || v(t.attributes, "uri") !== qb
+    ? null
+    : (te(t.children, { namespaceUri: Sr, localName: "wsp" }) ?? null);
+}
+function jf(e, n, t) {
+  if (n.cx <= 0 || n.cy <= 0) return null;
+  let r = Hf(e);
+  if (!r || te(r.children, { namespaceUri: Sr, localName: "txbx" }))
+    return null;
+  let o = te(r.children, { namespaceUri: Sr, localName: "spPr" });
+  if (!o) return null;
+  let i = te(o.children, { namespaceUri: B, localName: "xfrm" });
+  if (i) {
+    let m = v(i.attributes, "rot");
+    if (
+      (m !== void 0 && m !== "0") ||
+      v(i.attributes, "flipH") === "1" ||
+      v(i.attributes, "flipV") === "1"
+    )
+      return null;
+  }
+  let a = ea(o),
+    l = te(o.children, { namespaceUri: B, localName: "ln" }),
+    s = l ? ea(l) : null,
+    d = s !== null ? (de(v(l.attributes, "w")) ?? 12700) : 0;
+  if (a === null && s === null) return null;
+  let c = [],
+    u = te(o.children, { namespaceUri: B, localName: "custGeom" });
+  if (u) {
+    let m = te(u.children, { namespaceUri: B, localName: "pathLst" });
+    if (!m) return null;
+    let g = { remaining: Jb };
+    for (let p of m.children) {
+      if (!oe(p)) continue;
+      if (p.namespaceUri !== B || p.localName !== "path") return null;
+      let x = de(v(p.attributes, "w")) ?? n.cx,
+        h = de(v(p.attributes, "h")) ?? n.cy;
+      if (x <= 0 || h <= 0 || !eP(p, n.cx / x, n.cy / h, c, g)) return null;
+    }
+  } else {
+    let m = te(o.children, { namespaceUri: B, localName: "prstGeom" });
+    if (!m || v(m.attributes, "prst") !== "rect") return null;
+    c.push([
+      { x: 0, y: 0 },
+      { x: n.cx, y: 0 },
+      { x: n.cx, y: n.cy },
+      { x: 0, y: n.cy },
+    ]);
+  }
+  let f = c.filter((m) => m.length >= 3);
+  return f.length === 0
+    ? null
+    : {
+        extentEmu: { cx: n.cx, cy: n.cy },
+        subpathsEmu: f,
+        fillHex: a,
+        strokeHex: s,
+        strokeWidthEmu: d,
+      };
+}
+var Vf = 91440,
+  Wf = 45720;
+function Kf(e, n) {
+  if (n.cx <= 0 || n.cy <= 0) return null;
+  let t = Hf(e);
+  if (!t) return null;
+  let r = te(t.children, { namespaceUri: Sr, localName: "txbx" });
+  if (!r) return null;
+  let o = te(r.children, { namespaceUri: y, localName: "txbxContent" });
+  if (!o) return null;
+  let i = te(t.children, { namespaceUri: Sr, localName: "bodyPr" }),
+    a = (p, x) => {
+      let h = i ? v(i.attributes, p) : void 0;
+      if (h === void 0) return x;
+      let N = de(h, false);
+      return N === null || N < 0 ? x : N;
+    },
+    l = i ? v(i.attributes, "anchor") : void 0,
+    s = l === "ctr" ? "center" : l === "b" ? "bottom" : "top",
+    d = "none";
+  i &&
+    (te(i.children, { namespaceUri: B, localName: "spAutoFit" })
+      ? (d = "shape")
+      : te(i.children, { namespaceUri: B, localName: "normAutofit" }) &&
+        (d = "normal"));
+  let c = te(t.children, { namespaceUri: Sr, localName: "spPr" }),
+    u = c ? ea(c) : null,
+    f = c ? te(c.children, { namespaceUri: B, localName: "ln" }) : null,
+    m = f ? ea(f) : null,
+    g = m !== null ? (de(v(f.attributes, "w")) ?? 12700) : 0;
+  return {
+    contentNodeId: o.id,
+    content: o,
+    insetsEmu: {
+      top: a("tIns", Wf),
+      right: a("rIns", Vf),
+      bottom: a("bIns", Wf),
+      left: a("lIns", Vf),
+    },
+    verticalAnchor: s,
+    autofit: d,
+    fillHex: u,
+    strokeHex: m,
+    strokeWidthEmu: g,
+  };
+}
+var nm = [
+    "inline",
+    "square",
+    "squareLeft",
+    "squareRight",
+    "tight",
+    "through",
+    "topAndBottom",
+    "behind",
+    "inFront",
+  ],
+  St = Object.freeze({
+    maxCompatibilityBranches: 64,
+    maxVisitedElements: 4096,
+    maxDrawingDepth: 64,
+  }),
+  Gn = new Set([
+    W,
+    "http://schemas.microsoft.com/office/word/2012/wordml",
+    "http://schemas.microsoft.com/office/word/2015/wordml",
+    "http://schemas.microsoft.com/office/word/2016/wordml",
+    M,
+    B,
+    He,
+    An,
+    y,
+    Ie,
+    "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+  ]),
+  nP = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  tP = 1e6,
+  ta = Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 }),
+  rP = Object.freeze({ left: 0, top: 0, right: 0, bottom: 0 }),
+  oP = Object.freeze({
+    select: false,
+    move: false,
+    resize: false,
+    changeAspect: false,
+  }),
+  Ar = Object.freeze({ grayscale: false, brightness: 0, contrast: 0 });
+function ss(e, n) {
+  return (t) => {
+    for (let r of e.externalTargets)
+      if (!(r.ownerPart !== n || r.id !== t))
+        return r.type !== en
+          ? null
+          : { target: r.rawTarget, external: true, sinkSafe: r.sinkSafe };
+    for (let r of e.relationships.get(n) ?? []) {
+      if (r.id !== t) continue;
+      let o = Ee(r);
+      return o.mode === "External"
+        ? r.type !== en
+          ? null
+          : { target: r.rawTarget, external: true, sinkSafe: o.sinkSafe.ok }
+        : { target: r.rawTarget, external: false };
+    }
+    return null;
+  };
+}
+function iP(e, n) {
+  if (n === void 0) return null;
+  let t = n(e);
+  if (t === null || !t.external) return null;
+  let r = lt(t.target);
+  return !r.ok || t.sinkSafe !== true ? null : r.href;
+}
+function aP(e) {
+  for (let n of e.children)
+    if (
+      oe(n) &&
+      n.kind === "generic" &&
+      n.namespaceUri === B &&
+      n.localName === "hlinkClick"
+    )
+      return n;
+  return null;
+}
+function ls(e, n) {
+  for (let t of e)
+    if (t.localName === n && t.namespaceUri === An) return t.value;
+}
+function lP(e, n) {
+  for (let t of e)
+    if (t.localName === n && t.namespaceUri === Ie) return t.value;
+}
+function sP(e) {
+  if (e === void 0 || !/^-?\d+$/.test(e)) return null;
+  let n = Number(e);
+  return !Number.isInteger(n) || n < Eo || n > Io ? null : n;
+}
+function $f(e) {
+  if (e === void 0 || !/^-?\d+$/.test(e)) return null;
+  let n = Number(e);
+  return !Number.isInteger(n) || n < Rr || n > Er ? null : n;
+}
+function na(e) {
+  let n = de(e, false);
+  return n === null || n <= 0 ? 0 : Math.min(n / 1e5, 1);
+}
+function dP(e) {
+  if (e === void 0 || !/^\d{1,10}$/.test(e)) return null;
+  let n = Number(e);
+  return Number.isFinite(n) ? n : null;
+}
+function Gf(e) {
+  for (let n of e.children) if (n.kind === "textValue") return n.value;
+  return null;
+}
+function cP(e, n, t) {
+  let r = lP(e.attributes, "Requires") ?? v(e.attributes, "Requires");
+  if (r === void 0 || r.trim().length === 0) return false;
+  let o = r
+    .trim()
+    .split(/\s+/)
+    .filter((i) => i.length > 0);
+  return o.length === 0
+    ? false
+    : o.every((i) => {
+        let a = n.get(i);
+        return a === void 0 || a.length === 0 ? false : t.has(a);
+      });
+}
+function zf(e) {
+  for (let n of e.children) if (oe(n)) return n;
+  return null;
+}
+function uP(e) {
+  return e === null || !oe(e)
+    ? null
+    : e.kind === "drawing" ||
+        (e.kind === "generic" &&
+          e.namespaceUri === y &&
+          e.localName === "drawing")
+      ? e
+      : "non-picture";
+}
+function fP(e) {
+  return (
+    e.kind === "generic" && e.namespaceUri === y && e.localName === "drawing"
+  );
+}
+function Xf(e) {
+  return (
+    e.kind === "inlineDrawing" ||
+    e.kind === "anchoredDrawing" ||
+    (e.kind === "generic" &&
+      e.namespaceUri === M &&
+      (e.localName === "inline" || e.localName === "anchor"))
+  );
+}
+function ds(e, n, t, r, o) {
+  let i = kn(r, e);
+  if (
+    ((n.compatibilityBranches += 1),
+    n.compatibilityBranches > t.maxCompatibilityBranches)
+  )
+    return ((n.refused = true), { branch: null, branchNodeId: null });
+  let a = null,
+    l = null;
+  for (let s of e.children)
+    if (oe(s)) {
+      if (Lf(s)) {
+        if (
+          ((n.compatibilityBranches += 1),
+          n.compatibilityBranches > t.maxCompatibilityBranches)
+        )
+          return ((n.refused = true), { branch: null, branchNodeId: null });
+        let d = s,
+          c = kn(i, d);
+        if (cP(d, c, o)) {
+          let u = zf(d);
+          return (
+            (n.compatibilityBranchNodeId = d.id),
+            { branch: u, branchNodeId: d.id }
+          );
+        }
+        continue;
+      }
+      if (Bf(s)) {
+        let d = s;
+        ((a = zf(d)), (l = d.id));
+      }
+    }
+  return (
+    a !== null && (n.compatibilityBranchNodeId = l),
+    { branch: a, branchNodeId: l }
+  );
+}
+function mP(e, n, t, r, o) {
+  for (let i of e.children) {
+    if (!cs(n, t)) return { anchor: null };
+    if (Xf(i)) return { anchor: i };
+    if (Lo(i)) {
+      let a = kn(r, i),
+        l = ds(i, n, t, a, o);
+      if (l.branch === null || !oe(l.branch)) continue;
+      if (Xf(l.branch)) return { anchor: l.branch };
+    }
+  }
+  return { anchor: null };
+}
+function cs(e, n) {
+  return (
+    (e.visited += 1),
+    e.visited > n.maxVisitedElements ? ((e.refused = true), false) : true
+  );
+}
+function Yf(e) {
+  return (
+    e.kind === "picture" ||
+    (e.kind === "generic" && e.namespaceUri === He && e.localName === "pic")
+  );
+}
+function pP(e, n, t, r, o, i) {
+  for (let a of e.children) {
+    if (!cs(n, t)) return null;
+    if (Lo(a)) {
+      let l = kn(r, a),
+        s = ds(a, n, t, l, o);
+      if (s.branch && oe(s.branch) && Yf(s.branch)) return s.branch;
+      continue;
+    }
+    if (oe(a) && (a.kind === "picture" || (i && Yf(a)))) return a;
+  }
+  return null;
+}
+function gP(e) {
+  let n = ae(e.children, "pictureBlipFill");
+  if (n) {
+    let t = ae(n.children, "pictureBlip");
+    if (t) return t;
+  }
+  for (let t of e.children)
+    if (
+      oe(t) &&
+      t.kind === "generic" &&
+      t.namespaceUri === He &&
+      t.localName === "blipFill"
+    ) {
+      for (let r of t.children)
+        if (
+          oe(r) &&
+          (r.kind === "pictureBlip" ||
+            (r.kind === "generic" &&
+              r.namespaceUri === B &&
+              r.localName === "blip"))
+        )
+          return r;
+    }
+  return null;
+}
+function xP(e) {
+  let n = ae(e.children, "pictureBlipFill");
+  if (n) {
+    let t = ae(n.children, "pictureSrcRect");
+    if (t) return t;
+    for (let r of n.children)
+      if (
+        oe(r) &&
+        r.kind === "generic" &&
+        r.namespaceUri === B &&
+        r.localName === "srcRect"
+      )
+        return r;
+  }
+  for (let t of e.children)
+    if (
+      oe(t) &&
+      t.kind === "generic" &&
+      t.namespaceUri === He &&
+      t.localName === "blipFill"
+    ) {
+      for (let r of t.children)
+        if (
+          oe(r) &&
+          r.kind === "generic" &&
+          r.namespaceUri === B &&
+          r.localName === "srcRect"
+        )
+          return r;
+    }
+  return null;
+}
+function hP(e) {
+  let n = ae(e.children, "pictureBlipFill");
+  if (n && ae(n.children, "pictureTile") !== null) return true;
+  for (let t of e.children)
+    if (
+      oe(t) &&
+      t.kind === "generic" &&
+      t.namespaceUri === He &&
+      t.localName === "blipFill"
+    ) {
+      for (let r of t.children)
+        if (
+          oe(r) &&
+          (r.kind === "pictureTile" ||
+            (r.kind === "generic" &&
+              r.namespaceUri === B &&
+              r.localName === "tile"))
+        )
+          return true;
+    }
+  return false;
+}
+function yP(e, n) {
+  for (let t of e.children)
+    if (oe(t)) {
+      if (
+        t.kind === "drawingWrapNone" ||
+        t.kind === "drawingWrapSquare" ||
+        t.kind === "drawingWrapTight" ||
+        t.kind === "drawingWrapThrough" ||
+        t.kind === "drawingWrapTopBottom"
+      )
+        return t;
+      if (
+        n &&
+        t.kind === "generic" &&
+        t.namespaceUri === M &&
+        (t.localName === "wrapNone" ||
+          t.localName === "wrapSquare" ||
+          t.localName === "wrapTight" ||
+          t.localName === "wrapThrough" ||
+          t.localName === "wrapTopAndBottom")
+      )
+        return t;
+    }
+  return null;
+}
+function tm(e) {
+  return Object.freeze({
+    top: de(v(e.attributes, "distT")) ?? 0,
+    right: de(v(e.attributes, "distR")) ?? 0,
+    bottom: de(v(e.attributes, "distB")) ?? 0,
+    left: de(v(e.attributes, "distL")) ?? 0,
+  });
+}
+function qf(e, n) {
+  if (!e) return null;
+  let t =
+    ae(e.children, "drawingEffectExtent") ??
+    (n ? te(e.children, { namespaceUri: M, localName: "effectExtent" }) : null);
+  return t
+    ? Object.freeze({
+        left: de(v(t.attributes, "l"), false) ?? 0,
+        top: de(v(t.attributes, "t"), false) ?? 0,
+        right: de(v(t.attributes, "r"), false) ?? 0,
+        bottom: de(v(t.attributes, "b"), false) ?? 0,
+      })
+    : null;
+}
+function OP(e, n, t) {
+  let r = us(n);
+  if (r === "square" || r === "topAndBottom") {
+    let i = qf(n, t);
+    if (i) return i;
+  }
+  let o = qf(e, t);
+  return o || ta;
+}
+function Zf(e, n) {
+  let t =
+    ae(e.children, "drawingExtent") ??
+    (n ? te(e.children, { namespaceUri: M, localName: "extent" }) : null);
+  if (!t) return null;
+  let r = de(v(t.attributes, "cx")),
+    o = de(v(t.attributes, "cy"));
+  return r === null || o === null ? null : Object.freeze({ cx: r, cy: o });
+}
+function Qf(e, n) {
+  if (!e)
+    return Object.freeze({ relativeFrom: n, align: null, offsetEmu: null });
+  let r = v(e.attributes, "relativeFrom") ?? n,
+    o =
+      ae(e.children, "drawingPositionAlign") ??
+      te(e.children, { namespaceUri: M, localName: "align" });
+  if (o) {
+    let a = Gf(o)?.trim() ?? null;
+    return Object.freeze({ relativeFrom: r, align: a, offsetEmu: null });
+  }
+  let i =
+    ae(e.children, "drawingPositionOffset") ??
+    te(e.children, { namespaceUri: M, localName: "posOffset" });
+  if (i) {
+    let a = Gf(i),
+      l = a !== null ? sP(a) : null;
+    return Object.freeze({ relativeFrom: r, align: null, offsetEmu: l });
+  }
+  return Object.freeze({ relativeFrom: r, align: null, offsetEmu: null });
+}
+function NP(e, n) {
+  let t =
+      ae(e.children, "drawingSimplePos") ??
+      te(e.children, { namespaceUri: M, localName: "simplePos" }),
+    r = Object.freeze({
+      xEmu: t ? ($f(v(t.attributes, "x")) ?? 0) : 0,
+      yEmu: t ? ($f(v(t.attributes, "y")) ?? 0) : 0,
+    }),
+    o =
+      ae(e.children, "drawingPositionH") ??
+      te(e.children, { namespaceUri: M, localName: "positionH" }),
+    i =
+      ae(e.children, "drawingPositionV") ??
+      te(e.children, { namespaceUri: M, localName: "positionV" }),
+    a = Qf(o, "column"),
+    l = Qf(i, "paragraph");
+  return !n && !o && !i && !t
+    ? null
+    : Object.freeze({ simplePosition: r, horizontal: a, vertical: l });
+}
+function Jf(e) {
+  if (e === void 0 || !/^-?\d+$/.test(e)) return null;
+  let n = Number(e);
+  return !Number.isInteger(n) || n < Rr || n > Er ? null : n;
+}
+function kP(e, n, t) {
+  let r = ae(e.children, "drawingWrapPolygon");
+  if (!r) return Object.freeze([]);
+  let o = 0;
+  for (let l of r.children)
+    oe(l) &&
+      ((l.kind !== "drawingWrapPolygonStart" &&
+        l.kind !== "drawingWrapPolygonLineTo") ||
+        (o += 1));
+  if (o > Hl)
+    return (
+      n.diagnostics.push({
+        code: "wrap-polygon-over-limit",
+        nodeId: t,
+        detail: String(o),
+      }),
+      Object.freeze([])
+    );
+  let i = [],
+    a = false;
+  for (let l of r.children) {
+    if (
+      !oe(l) ||
+      (l.kind !== "drawingWrapPolygonStart" &&
+        l.kind !== "drawingWrapPolygonLineTo")
+    )
+      continue;
+    let s = Jf(v(l.attributes, "x")),
+      d = Jf(v(l.attributes, "y"));
+    if (s === null || d === null) {
+      a = true;
+      continue;
+    }
+    i.push(Object.freeze({ x: s, y: d }));
+  }
+  return a || i.length < 3
+    ? (n.diagnostics.push({
+        code: "wrap-polygon-malformed",
+        nodeId: t,
+        detail: a ? "invalid-coordinate" : "insufficient-points",
+      }),
+      Object.freeze([]))
+    : Object.freeze(i);
+}
+function us(e) {
+  switch (e?.kind) {
+    case "drawingWrapSquare":
+      return "square";
+    case "drawingWrapTight":
+      return "tight";
+    case "drawingWrapThrough":
+      return "through";
+    case "drawingWrapTopBottom":
+      return "topAndBottom";
+  }
+  if (e && e.kind === "generic" && e.namespaceUri === M)
+    switch (e.localName) {
+      case "wrapSquare":
+        return "square";
+      case "wrapTight":
+        return "tight";
+      case "wrapThrough":
+        return "through";
+      case "wrapTopAndBottom":
+        return "topAndBottom";
+    }
+  return "none";
+}
+function bP(e, n, t) {
+  if (e === "inline") return "inline";
+  let r = us(n);
+  if (r === "none") return t ? "behind" : "inFront";
+  if (r === "square") {
+    let o = v(n.attributes, "wrapText") ?? "bothSides";
+    return o === "left"
+      ? "squareLeft"
+      : o === "right"
+        ? "squareRight"
+        : "square";
+  }
+  return r === "tight" ? "tight" : r === "through" ? "through" : "topAndBottom";
+}
+function PP(e, n, t) {
+  if (!e) return null;
+  let r = us(e),
+    o = v(e.attributes, "wrapText") ?? "bothSides";
+  return Object.freeze({
+    element: r,
+    textSide:
+      o === "left" || o === "right" || o === "largest" ? o : "bothSides",
+    distancesEmu: tm(e),
+    polygon: r === "tight" || r === "through" ? kP(e, n, t) : Object.freeze([]),
+  });
+}
+function wP(e) {
+  if (!e) return {};
+  let n = e.children.find(
+    (o) =>
+      oe(o) &&
+      o.kind === "generic" &&
+      o.namespaceUri === B &&
+      o.localName === "graphicFrameLocks",
+  );
+  if (!n || !oe(n)) return {};
+  let t = n.attributes,
+    r = (o) => {
+      let i = v(t, o);
+      if (i !== void 0) return i === "1" || i === "true";
+    };
+  return {
+    select: r("noSelect"),
+    move: r("noMove"),
+    resize: r("noResize"),
+    changeAspect: r("noChangeAspect"),
+  };
+}
+function RP(e, n) {
+  return Object.freeze(
+    e
+      ? { select: true, move: true, resize: true, changeAspect: true }
+      : {
+          select: n.select ?? false,
+          move: n.move ?? false,
+          resize: n.resize ?? false,
+          changeAspect: n.changeAspect ?? false,
+        },
+  );
+}
+function EP(e, n, t) {
+  let r =
+    ae(e.children, "drawingDocPr") ??
+    (n ? te(e.children, { namespaceUri: M, localName: "docPr" }) : null);
+  if (!r)
+    return Object.freeze({
+      docPrId: null,
+      name: "",
+      title: "",
+      description: "",
+      hidden: v(e.attributes, "hidden") === "1",
+      hyperlinkHref: null,
+    });
+  let o = null,
+    i = aP(r);
+  if (i !== null) {
+    let a = ls(i.attributes, "id");
+    a && (o = iP(a, t));
+  }
+  return Object.freeze({
+    docPrId: dP(v(r.attributes, "id")),
+    name: v(r.attributes, "name") ?? "",
+    title: v(r.attributes, "title") ?? "",
+    description: v(r.attributes, "descr") ?? "",
+    hidden:
+      v(r.attributes, "hidden") === "1" || v(e.attributes, "hidden") === "1",
+    hyperlinkHref: o,
+  });
+}
+function em(e) {
+  if (e === void 0 || !/^-?\d+$/.test(e)) return null;
+  let n = Number(e);
+  return Number.isInteger(n) ? n / 1e3 : null;
+}
+function IP(e) {
+  let n = false,
+    t = 0,
+    r = 0;
+  for (let o of e.children)
+    if (!(!oe(o) || o.kind !== "generic") && o.namespaceUri === B) {
+      if (o.localName === "grayscl") {
+        n = true;
+        continue;
+      }
+      if (o.localName === "lum") {
+        let i = em(v(o.attributes, "bright")),
+          a = em(v(o.attributes, "contrast"));
+        (i !== null && (t = i), a !== null && (r = a));
+      }
+    }
+  return Object.freeze({ grayscale: n, brightness: t, contrast: r });
+}
+function CP(e, n, t, r, o) {
+  if (!cs(n, t.limits))
+    return {
+      picture: null,
+      relationshipId: null,
+      effects: Ar,
+      diagnostic: null,
+    };
+  let i =
+    ae(e.children, "drawingGraphic") ??
+    (o ? te(e.children, { namespaceUri: B, localName: "graphic" }) : null);
+  if (!i)
+    return {
+      picture: null,
+      relationshipId: null,
+      effects: Ar,
+      diagnostic: {
+        code: "unsupported-graphic",
+        nodeId: e.id,
+        detail: "missing-graphic",
+      },
+    };
+  let a =
+    ae(i.children, "drawingGraphicData") ??
+    (o ? te(i.children, { namespaceUri: B, localName: "graphicData" }) : null);
+  if (!a)
+    return {
+      picture: null,
+      relationshipId: null,
+      effects: Ar,
+      diagnostic: {
+        code: "unsupported-graphic",
+        nodeId: i.id,
+        detail: "missing-graphic-data",
+      },
+    };
+  let l = v(a.attributes, "uri"),
+    s = kn(r, e),
+    d = kn(s, i),
+    c = kn(d, a),
+    u = pP(a, n, t.limits, c, t.supportedMcRequires, o);
+  if (l !== nP || !u)
+    return {
+      picture: null,
+      relationshipId: null,
+      effects: Ar,
+      diagnostic: {
+        code: "unsupported-graphic",
+        nodeId: a.id,
+        detail: l ?? "non-picture",
+      },
+    };
+  let f = gP(u),
+    m = f ? (ls(f.attributes, "embed") ?? null) : null,
+    g = f ? (ls(f.attributes, "link") ?? null) : null,
+    p = m ?? g,
+    x = xP(u),
+    h = x
+      ? Object.freeze({
+          left: na(v(x.attributes, "l")),
+          top: na(v(x.attributes, "t")),
+          right: na(v(x.attributes, "r")),
+          bottom: na(v(x.attributes, "b")),
+        })
+      : rP,
+    N = hP(u) ? "tile" : "stretch",
+    k = ae(u.children, "pictureShapeProperties"),
+    O = k ? ae(k.children, "pictureTransform") : null,
+    b = O ? ae(O.children, "pictureTransformOffset") : null,
+    P = O ? ae(O.children, "pictureTransformExtent") : null,
+    R = O ? v(O.attributes, "rot") : void 0,
+    w = R !== void 0 ? de(R, false) : null,
+    I = Object.freeze({
+      rotationDegrees: w === null ? 0 : w / 6e4,
+      flipHorizontal: O ? v(O.attributes, "flipH") === "1" : false,
+      flipVertical: O ? v(O.attributes, "flipV") === "1" : false,
+      offsetEmu: Object.freeze({
+        x: b ? (de(v(b.attributes, "x"), false) ?? 0) : 0,
+        y: b ? (de(v(b.attributes, "y"), false) ?? 0) : 0,
+      }),
+      extentEmu: Object.freeze({
+        cx: P ? (de(v(P.attributes, "cx")) ?? 0) : 0,
+        cy: P ? (de(v(P.attributes, "cy")) ?? 0) : 0,
+      }),
+    }),
+    S = k ? ae(k.children, "picturePresetGeometry") : null,
+    U = S ? (v(S.attributes, "prst") ?? null) : null,
+    L = f ? IP(f) : Ar;
+  return {
+    picture: Object.freeze({
+      embeddedRelationshipId: m,
+      linkedRelationshipId: g,
+      crop: h,
+      fillMode: N,
+      transform: I,
+      presetGeometry: U,
+    }),
+    relationshipId: p,
+    effects: L,
+    diagnostic: null,
+  };
+}
+function ra(e) {
+  return Object.freeze({
+    ...e,
+    extentEmu: Object.freeze({ ...e.extentEmu }),
+    effectExtentEmu: Object.freeze({ ...e.effectExtentEmu }),
+    inlineDistancesEmu: Object.freeze({ ...e.inlineDistancesEmu }),
+    wrapGeometry: e.wrapGeometry
+      ? Object.freeze({
+          ...e.wrapGeometry,
+          distancesEmu: Object.freeze({ ...e.wrapGeometry.distancesEmu }),
+          polygon: Object.freeze(
+            e.wrapGeometry.polygon.map((n) => Object.freeze({ ...n })),
+          ),
+        })
+      : null,
+    position: e.position
+      ? Object.freeze({
+          ...e.position,
+          simplePosition: Object.freeze({ ...e.position.simplePosition }),
+          horizontal: Object.freeze({ ...e.position.horizontal }),
+          vertical: Object.freeze({ ...e.position.vertical }),
+        })
+      : null,
+    anchor: e.anchor ? Object.freeze({ ...e.anchor }) : null,
+    picture: e.picture
+      ? Object.freeze({
+          ...e.picture,
+          crop: Object.freeze({ ...e.picture.crop }),
+          transform: Object.freeze({ ...e.picture.transform }),
+        })
+      : null,
+    vectorShape: e.vectorShape
+      ? Object.freeze({
+          ...e.vectorShape,
+          extentEmu: Object.freeze({ ...e.vectorShape.extentEmu }),
+          subpathsEmu: Object.freeze(
+            e.vectorShape.subpathsEmu.map((n) =>
+              Object.freeze(n.map((t) => Object.freeze({ ...t }))),
+            ),
+          ),
+        })
+      : null,
+    textboxStory: e.textboxStory
+      ? Object.freeze({
+          ...e.textboxStory,
+          insetsEmu: Object.freeze({ ...e.textboxStory.insetsEmu }),
+        })
+      : null,
+    locks: Object.freeze({ ...e.locks }),
+    effects: Object.freeze({ ...e.effects }),
+    diagnostics: Object.freeze(
+      e.diagnostics.map((n) => Object.freeze({ ...n })),
+    ),
+  });
+}
+function as(e, n, t, r, o) {
+  return (
+    t.diagnostics.some((i) => i.code === "resource-refused") ||
+      t.diagnostics.push({
+        code: "resource-refused",
+        nodeId: e.id,
+        detail: "projection-limit",
+      }),
+    ra(
+      Object.freeze({
+        drawingNodeId: e.id,
+        ownerPartName: n.ownerPartName,
+        kind: r,
+        relationshipId: null,
+        docPrId: null,
+        name: "",
+        title: "",
+        description: "",
+        hyperlinkHref: null,
+        hidden: false,
+        extentEmu: o,
+        effectExtentEmu: ta,
+        inlineDistancesEmu: ta,
+        wrap: r === "inline" ? "inline" : "inFront",
+        wrapGeometry: null,
+        position: null,
+        anchor: null,
+        picture: null,
+        vectorShape: null,
+        textboxStory: null,
+        locks: oP,
+        effects: Ar,
+        compatibilityBranchNodeId: t.compatibilityBranchNodeId,
+        diagnostics: t.diagnostics,
+      }),
+    )
+  );
+}
+function rm(e) {
+  return Lo(e);
+}
+function oa(e, n, t = Gn, r = St) {
+  let o = is(),
+    i = ds(e, o, r, n, t),
+    a = uP(i.branch);
+  return Object.freeze(
+    a === null || a === "non-picture"
+      ? { segmentNode: e, drawing: null, removeNodeIds: Object.freeze([e.id]) }
+      : { segmentNode: e, drawing: a, removeNodeIds: Object.freeze([e.id]) },
+  );
+}
+function TP(e) {
+  let n =
+    e.description.length > 0
+      ? e.description
+      : e.title.length > 0
+        ? e.title
+        : null;
+  return Object.freeze({ hidden: e.hidden, decorative: n === null, label: n });
+}
+function Zt(e, n) {
+  let t = {
+      ownerPartName: n.ownerPartName,
+      supportedMcRequires: n.supportedMcRequires,
+      limits: n.limits,
+      resolveRelationship: n.resolveRelationship,
+    },
+    r = n.namespaceScope ?? vr(),
+    o = fP(e),
+    i = is();
+  (i.depth >= t.limits.maxDrawingDepth && (i.refused = true), (i.depth += 1));
+  let { anchor: a } = mP(e, i, t.limits, r, t.supportedMcRequires);
+  i.depth -= 1;
+  let l = a ? Zf(a, o) : null;
+  if (i.refused && l) {
+    let O =
+      a.kind === "anchoredDrawing" ||
+      (a.kind === "generic" && a.localName === "anchor")
+        ? "anchored"
+        : "inline";
+    return as(e, t, i, O, l);
+  }
+  if (!a)
+    return (
+      i.diagnostics.push({
+        code: "malformed-drawing",
+        nodeId: e.id,
+        detail: "missing-anchor",
+      }),
+      null
+    );
+  let s =
+      a.kind === "anchoredDrawing" ||
+      (a.kind === "generic" && a.localName === "anchor")
+        ? "anchored"
+        : "inline",
+    d = Zf(a, o);
+  if (!d)
+    return (
+      i.refused ||
+        i.diagnostics.push({
+          code: "invalid-geometry",
+          nodeId: a.id,
+          detail: "extent",
+        }),
+      null
+    );
+  if (i.refused) return as(e, t, i, s, d);
+  let c = EP(a, o, t.resolveRelationship),
+    u = s === "anchored" ? yP(a, o) : null,
+    f = v(a.attributes, "behindDoc") === "1",
+    m = v(a.attributes, "simplePos") === "1",
+    g =
+      ae(a.children, "drawingGraphicFramePr") ??
+      (o
+        ? te(a.children, { namespaceUri: M, localName: "cNvGraphicFramePr" })
+        : null),
+    p = RP(v(a.attributes, "locked") === "1", wP(g)),
+    x = CP(a, i, t, r, o);
+  if ((x.diagnostic && i.diagnostics.push(x.diagnostic), i.refused))
+    return as(e, t, i, s, d);
+  let h = s === "anchored" ? PP(u, i, e.id) : null,
+    N = s === "anchored" ? NP(a, m) : null,
+    k =
+      s === "anchored"
+        ? Object.freeze({
+            simplePos: m,
+            relativeHeight: de(v(a.attributes, "relativeHeight")) ?? 0,
+            behindDocument: f,
+            layoutInCell: v(a.attributes, "layoutInCell") !== "0",
+            allowOverlap: v(a.attributes, "allowOverlap") !== "0",
+          })
+        : null;
+  return ra(
+    Object.freeze({
+      drawingNodeId: e.id,
+      ownerPartName: t.ownerPartName,
+      kind: s,
+      relationshipId: x.relationshipId,
+      docPrId: c.docPrId,
+      name: c.name,
+      title: c.title,
+      description: c.description,
+      hyperlinkHref: c.hyperlinkHref,
+      hidden: c.hidden,
+      extentEmu: d,
+      effectExtentEmu: OP(a, u, o),
+      inlineDistancesEmu: s === "inline" ? tm(a) : ta,
+      wrap: bP(s, u, f),
+      wrapGeometry: h,
+      position: N,
+      anchor: k,
+      picture: x.picture,
+      vectorShape: x.picture ? null : jf(a, d),
+      textboxStory: x.picture ? null : Kf(a, d),
+      locks: p,
+      effects: x.effects,
+      compatibilityBranchNodeId: i.compatibilityBranchNodeId,
+      diagnostics: i.diagnostics,
+    }),
+  );
+}
+function vP(e, n) {
+  let t = oa(e, n.namespaceScope, n.supportedMcRequires, n.limits);
+  if (t.drawing === null) return null;
+  let r = Zt(t.drawing, { ...n, namespaceScope: n.namespaceScope });
+  return !r ||
+    (r.picture === null && r.vectorShape === null && r.textboxStory === null)
+    ? null
+    : r;
+}
+var SP = 4;
+function om(e, n, t, r, o) {
+  let i = [{ node: e, namespaceScope: vr(), depth: 0, storyDepth: 0 }],
+    a = 0,
+    l = (s, d, c) => {
+      if (!(d.storyDepth >= SP) && !(d.depth >= wr) && oe(s))
+        for (let u = s.children.length - 1; u >= 0; u -= 1) {
+          let f = s.children[u];
+          oe(f) &&
+            i.push({
+              node: f,
+              namespaceScope: c,
+              depth: d.depth + 1,
+              storyDepth: d.storyDepth + 1,
+            });
+        }
+    };
+  for (; i.length > 0;) {
+    let s = i.pop();
+    if (!oe(s.node)) continue;
+    if (((a += 1), a > tP)) break;
+    if (s.depth > wr) continue;
+    let d = kn(s.namespaceScope, s.node);
+    if (s.node.kind === "drawing") {
+      let c = Zt(s.node, { ...t, namespaceScope: d });
+      (c && (r.push(c), o?.set(s.node.id, c)),
+        c?.textboxStory && l(s.node, s, d));
+      continue;
+    }
+    if (Lo(s.node)) {
+      let c = vP(s.node, {
+        ownerPartName: n,
+        supportedMcRequires: t.supportedMcRequires,
+        limits: t.limits,
+        namespaceScope: d,
+        resolveRelationship: t.resolveRelationship,
+      });
+      if ((c && (r.push(c), o?.set(s.node.id, c)), c?.textboxStory)) {
+        let u = oa(s.node, d, t.supportedMcRequires, t.limits).drawing;
+        u && l(u, s, d);
+      }
+      continue;
+    }
+    if (!(s.depth >= wr))
+      for (let c = s.node.children.length - 1; c >= 0; c -= 1) {
+        let u = s.node.children[c];
+        oe(u) &&
+          i.push({
+            node: u,
+            namespaceScope: d,
+            depth: s.depth + 1,
+            storyDepth: s.storyDepth,
+          });
+      }
+  }
+}
+function im(e, n) {
+  let t = {
+      ownerPartName: e.name,
+      supportedMcRequires: n?.supportedMcRequires ?? Gn,
+      limits: n?.limits ?? St,
+      resolveRelationship: n?.resolveRelationship,
+    },
+    r = [];
+  return (om(e.root, e.name, t, r), Object.freeze(r.map(ra)));
+}
+function Q_(e, n) {
+  let t = {
+      ownerPartName: e.name,
+      supportedMcRequires: n?.supportedMcRequires ?? Gn,
+      limits: n?.limits ?? St,
+      resolveRelationship: n?.resolveRelationship,
+    },
+    r = [],
+    o = new Map();
+  return (om(e.root, e.name, t, r, o), Object.freeze(o));
+}
+var AP =
+  /^\/word\/(document|footnotes|endnotes)\.xml$|^\/word\/(header|footer)[^/]+\.xml$/;
+function Mr(e, n) {
+  let t = [];
+  for (let [r, o] of e.parts) {
+    if (!AP.test(r)) continue;
+    let i = im(o, { ...n, resolveRelationship: ss(e, r) });
+    for (let a of i) t.push(a);
+  }
+  return Object.freeze(t.map(ra));
+}
+function am(e, n, t) {
+  for (let r of e) {
+    if (
+      !r.removeNodeIds ||
+      r.removeNodeIds.length === 0 ||
+      !(n < r.end && t > r.start)
+    )
+      continue;
+    if (!(n <= r.start && t >= r.end)) return true;
+  }
+  return false;
+}
+var lm = 1,
+  Bo = new Map();
+function ia(e, n) {
+  return `${e}\0${n}`;
+}
+function MP(e) {
+  let n = e.split("\0");
+  return n.length >= 2 ? `${n[0]}\0${n[1]}` : e;
+}
+function sm(e, n, t) {
+  if (e.disposed || n.contentId !== t || n.generation !== e.generation)
+    return null;
+  let r = e.slots.get(ia(n.resourceKey, t));
+  return !r ||
+    r.contentId !== t ||
+    r.generation !== n.generation ||
+    r.refCount <= 0
+    ? null
+    : r.bytes;
+}
+function fs(e, n) {
+  return Object.freeze({
+    acquire: (i, a, l) => {
+      if (n.disposed) throw new Error("ValidatedImageBytesRegistry disposed");
+      let s = MP(i);
+      for (let [f, m] of [...n.slots.entries()])
+        f.startsWith(`${s}\0`) &&
+          m.contentId !== a &&
+          (n.slots.delete(f), (n.generation += 1));
+      let d = ia(i, a),
+        c = n.slots.get(d);
+      c
+        ? (c.bytes = new Uint8Array(l))
+        : n.slots.set(d, {
+            contentId: a,
+            bytes: new Uint8Array(l),
+            generation: n.generation,
+            refCount: 0,
+          });
+      let u = n.slots.get(d);
+      return Object.freeze({
+        registryId: e,
+        resourceKey: i,
+        contentId: a,
+        generation: u.generation,
+      });
+    },
+    retain: (i) => {
+      if (i.registryId !== e || n.disposed)
+        throw new Error("ValidatedImageBytesRegistry stale handle");
+      let a = ia(i.resourceKey, i.contentId),
+        l = n.slots.get(a);
+      if (!l || l.generation !== i.generation)
+        throw new Error("ValidatedImageBytesRegistry stale handle");
+      l.refCount += 1;
+      let s = n.nextRetainId;
+      return (
+        (n.nextRetainId += 1),
+        n.retainIds.add(s),
+        Object.freeze({
+          registryId: e,
+          resourceKey: i.resourceKey,
+          contentId: i.contentId,
+          generation: i.generation,
+          retainId: s,
+        })
+      );
+    },
+    release: (i) => {
+      if (i.registryId !== e || !n.retainIds.has(i.retainId)) return;
+      n.retainIds.delete(i.retainId);
+      let a = ia(i.resourceKey, i.contentId),
+        l = n.slots.get(a);
+      !l ||
+        l.generation !== i.generation ||
+        ((l.refCount -= 1), l.refCount <= 0 && n.slots.delete(a));
+    },
+    mint: (i, a) => sm(n, i, a),
+    dispose: () => {
+      n.disposed ||
+        ((n.disposed = true),
+        (n.generation += 1),
+        n.slots.clear(),
+        n.retainIds.clear(),
+        Bo.delete(e));
+    },
+  });
+}
+function ms() {
+  let e = lm;
+  lm += 1;
+  let n = {
+    generation: 0,
+    slots: new Map(),
+    retainIds: new Set(),
+    nextRetainId: 1,
+    disposed: false,
+  };
+  return (Bo.set(e, n), fs(e, n));
+}
+function eD(e, n) {
+  let t = Bo.get(e.registryId);
+  return t ? sm(t, e, n) : null;
+}
+function nD(e) {
+  let n = Bo.get(e.registryId);
+  if (!n) return null;
+  try {
+    return fs(e.registryId, n).retain(e);
+  } catch {
+    return null;
+  }
+}
+function tD(e) {
+  let n = Bo.get(e.registryId);
+  n && fs(e.registryId, n).release(e);
+}
+ms();
+var gm = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10]),
+  _r = 96,
+  _P = 65536,
+  DP = 512,
+  UP = 8192,
+  LP = 300,
+  BP = 150,
+  FP = Object.freeze({
+    "image/png": "image/png",
+    "image/jpeg": "image/jpeg",
+    "image/jpg": "image/jpeg",
+    "image/gif": "image/gif",
+    "image/bmp": "image/bmp",
+    "image/x-ms-bmp": "image/bmp",
+    "image/x-bmp": "image/bmp",
+    "image/webp": "image/webp",
+    "image/svg+xml": "image/svg+xml",
+    "image/tiff": "image/tiff",
+    "image/x-emf": "image/x-emf",
+    "image/x-wmf": "image/x-wmf",
+  });
+function xm(e, n) {
+  if (e.length < n.length) return false;
+  for (let t = 0; t < n.length; t += 1) if (e[t] !== n[t]) return false;
+  return true;
+}
+function dm(e) {
+  return e === 32 || e === 9 || e === 10 || e === 13;
+}
+function VP(e) {
+  let n = e.subarray(0, Math.min(e.length, DP)),
+    t = 0;
+  for (; t < n.length && dm(n[t]);) t += 1;
+  if (t + 5 < n.length && n[t] === 60 && n[t + 1] === 63) {
+    let r = -1;
+    for (let o = t + 2; o + 1 < n.length; o += 1)
+      if (n[o] === 63 && n[o + 1] === 62) {
+        r = o;
+        break;
+      }
+    if (r === -1) return false;
+    for (t = r + 2; t < n.length && dm(n[t]);) t += 1;
+  }
+  return (
+    t + 4 <= n.length &&
+    n[t] === 60 &&
+    n[t + 1] === 115 &&
+    n[t + 2] === 118 &&
+    n[t + 3] === 103 &&
+    (t + 4 === n.length ||
+      n[t + 4] === 32 ||
+      n[t + 4] === 9 ||
+      n[t + 4] === 10 ||
+      n[t + 4] === 13 ||
+      n[t + 4] === 62)
+  );
+}
+function hm(e) {
+  return (
+    e === "image/png" ||
+    e === "image/jpeg" ||
+    e === "image/gif" ||
+    e === "image/bmp" ||
+    e === "image/webp"
+  );
+}
+function ym(e) {
+  return e === "image/tiff" || e === "image/x-emf" || e === "image/x-wmf";
+}
+function Ur(e) {
+  return xm(e, gm)
+    ? "image/png"
+    : e.length >= 3 && e[0] === 255 && e[1] === 216 && e[2] === 255
+      ? "image/jpeg"
+      : e.length >= 2 && e[0] === 66 && e[1] === 77
+        ? "image/bmp"
+        : e.length >= 12 &&
+            e[0] === 82 &&
+            e[1] === 73 &&
+            e[2] === 70 &&
+            e[3] === 70 &&
+            e[8] === 87 &&
+            e[9] === 69 &&
+            e[10] === 66 &&
+            e[11] === 80
+          ? "image/webp"
+          : e.length >= 6 &&
+              e[0] === 71 &&
+              e[1] === 73 &&
+              e[2] === 70 &&
+              e[3] === 56 &&
+              (e[4] === 55 || e[4] === 57) &&
+              e[5] === 97
+            ? "image/gif"
+            : VP(e)
+              ? "image/svg+xml"
+              : e.length >= 4 &&
+                  ((e[0] === 73 && e[1] === 73 && e[2] === 42 && e[3] === 0) ||
+                    (e[0] === 77 && e[1] === 77 && e[2] === 0 && e[3] === 42))
+                ? "image/tiff"
+                : e.length >= 44 &&
+                    e[0] === 1 &&
+                    e[1] === 0 &&
+                    e[2] === 0 &&
+                    e[3] === 0
+                  ? "image/x-emf"
+                  : (e.length >= 4 &&
+                        e[0] === 215 &&
+                        e[1] === 205 &&
+                        e[2] === 198 &&
+                        e[3] === 154) ||
+                      (e.length >= 4 &&
+                        e[0] === 1 &&
+                        e[1] === 0 &&
+                        e[2] === 9 &&
+                        e[3] === 0)
+                    ? "image/x-wmf"
+                    : "unknown";
+}
+function WP(e, n) {
+  switch (e) {
+    case 0:
+      return n === 1 || n === 2 || n === 4 || n === 8 || n === 16;
+    case 2:
+      return n === 8 || n === 16;
+    case 3:
+      return n === 1 || n === 2 || n === 4 || n === 8;
+    case 4:
+      return n === 8 || n === 16;
+    case 6:
+      return n === 8 || n === 16;
+    default:
+      return false;
+  }
+}
+function HP(e) {
+  if (
+    !xm(e, gm) ||
+    e.length < 33 ||
+    (((e[8] << 24) >>> 0) | (e[9] << 16) | (e[10] << 8) | e[11]) !== 13 ||
+    e[12] !== 73 ||
+    e[13] !== 72 ||
+    e[14] !== 68 ||
+    e[15] !== 82
+  )
+    return null;
+  let t = ((e[16] << 24) >>> 0) | (e[17] << 16) | (e[18] << 8) | e[19],
+    r = ((e[20] << 24) >>> 0) | (e[21] << 16) | (e[22] << 8) | e[23];
+  if (t === 0 || r === 0) return null;
+  let o = e[24],
+    i = e[25],
+    a = e[26],
+    l = e[27],
+    s = e[28];
+  return !WP(i, o) || a !== 0 || l !== 0 || (s !== 0 && s !== 1)
+    ? null
+    : { pixelWidth: t, pixelHeight: r };
+}
+function jP(e) {
+  if (
+    e.length < 10 ||
+    e[0] !== 71 ||
+    e[1] !== 73 ||
+    e[2] !== 70 ||
+    e[3] !== 56 ||
+    (e[4] !== 55 && e[4] !== 57) ||
+    e[5] !== 97
+  )
+    return null;
+  let n = e[6] | (e[7] << 8),
+    t = e[8] | (e[9] << 8);
+  return n === 0 || t === 0 ? null : { pixelWidth: n, pixelHeight: t };
+}
+function KP(e) {
+  return (
+    (e >= 192 && e <= 195) ||
+    (e >= 197 && e <= 199) ||
+    (e >= 201 && e <= 203) ||
+    (e >= 205 && e <= 207)
+  );
+}
+function $P(e) {
+  if (e.length < 4 || e[0] !== 255 || e[1] !== 216) return null;
+  let n = 2,
+    t = Math.min(e.length, _P);
+  for (; n + 1 < t;) {
+    if (e[n] !== 255) return null;
+    let r = e[n + 1];
+    for (n += 2; r === 255 && n < t;) ((r = e[n]), (n += 1));
+    if (r === 216) continue;
+    if (r === 217) return null;
+    if (r === 1 || (r >= 208 && r <= 215)) continue;
+    if (n + 1 >= t) return null;
+    let o = (e[n] << 8) | e[n + 1];
+    if (o < 2) return null;
+    let i = n + o;
+    if (i > t) return null;
+    if (KP(r)) {
+      if (o < 7 || n + 6 >= t) return null;
+      let a = (e[n + 3] << 8) | e[n + 4],
+        l = (e[n + 5] << 8) | e[n + 6];
+      return l === 0 || a === 0 ? null : { pixelWidth: l, pixelHeight: a };
+    }
+    n = i;
+  }
+  return null;
+}
+var GP = 12,
+  cm = 40,
+  zP = new Set([0, 1, 4, 8, 16, 24, 32]);
+function XP(e) {
+  if (e.length < 26 || e[0] !== 66 || e[1] !== 77) return null;
+  let n = new DataView(e.buffer, e.byteOffset, e.byteLength),
+    t = n.getUint32(14, true);
+  if (t === GP) {
+    let a = n.getUint16(18, true),
+      l = n.getUint16(20, true);
+    return a === 0 || l === 0 ? null : { pixelWidth: a, pixelHeight: l };
+  }
+  if (t < cm || t > 1024 || e.length < 14 + cm) return null;
+  let r = n.getInt32(18, true),
+    o = n.getInt32(22, true),
+    i = Math.abs(o);
+  return r <= 0 ||
+    i === 0 ||
+    n.getUint16(26, true) !== 1 ||
+    !zP.has(n.getUint16(28, true))
+    ? null
+    : { pixelWidth: r, pixelHeight: i };
+}
+function YP(e) {
+  if (e.length < 30) return null;
+  let n = new DataView(e.buffer, e.byteOffset, e.byteLength),
+    t = String.fromCharCode(e[12], e[13], e[14], e[15]);
+  if (t === "VP8 ") {
+    if (e[23] !== 157 || e[24] !== 1 || e[25] !== 42) return null;
+    let r = n.getUint16(26, true) & 16383,
+      o = n.getUint16(28, true) & 16383;
+    return r === 0 || o === 0 ? null : { pixelWidth: r, pixelHeight: o };
+  }
+  if (t === "VP8L") {
+    if (e[20] !== 47) return null;
+    let r = n.getUint32(21, true),
+      o = (r & 16383) + 1,
+      i = ((r >>> 14) & 16383) + 1;
+    return { pixelWidth: o, pixelHeight: i };
+  }
+  if (t === "VP8X") {
+    let r = (e[24] | (e[25] << 8) | (e[26] << 16)) + 1,
+      o = (e[27] | (e[28] << 8) | (e[29] << 16)) + 1;
+    return { pixelWidth: r, pixelHeight: o };
+  }
+  return null;
+}
+var qP = 4096,
+  um = 256,
+  ZP = 257,
+  QP = 3,
+  JP = 4;
+function ew(e) {
+  if (e.length < 8) return null;
+  let n;
+  if (e[0] === 73 && e[1] === 73) n = true;
+  else if (e[0] === 77 && e[1] === 77) n = false;
+  else return null;
+  let t = new DataView(e.buffer, e.byteOffset, e.byteLength);
+  if (t.getUint16(2, n) !== 42) return null;
+  let r = t.getUint32(4, n);
+  if (r < 8 || r + 2 > e.length) return null;
+  let o = t.getUint16(r, n);
+  if (o === 0 || o > qP || r + 2 + o * 12 > e.length) return null;
+  let i = 0,
+    a = 0;
+  for (let l = 0; l < o; l += 1) {
+    let s = r + 2 + l * 12,
+      d = t.getUint16(s, n);
+    if (d !== um && d !== ZP) continue;
+    if (t.getUint32(s + 4, n) !== 1) return null;
+    let c = t.getUint16(s + 2, n),
+      u;
+    if (c === QP) u = t.getUint16(s + 8, n);
+    else if (c === JP) u = t.getUint32(s + 8, n);
+    else return null;
+    d === um ? (i = u) : (a = u);
+  }
+  return i <= 0 || a <= 0 ? null : { pixelWidth: i, pixelHeight: a };
+}
+var nw = Object.freeze({
+  "": 1,
+  px: 1,
+  pt: 96 / 72,
+  pc: 16,
+  in: 96,
+  cm: 96 / 2.54,
+  mm: 96 / 25.4,
+  q: 96 / 101.6,
+});
+function fm(e) {
+  let n = e.trim();
+  if (n === "") return null;
+  let t = Number.parseFloat(n);
+  if (!Number.isFinite(t) || t <= 0) return null;
+  let r = 0;
+  for (
+    (n[r] === "+" || n[r] === "-") && (r += 1);
+    r < n.length && n[r] >= "0" && n[r] <= "9";
+  )
+    r += 1;
+  if (n[r] === ".")
+    for (r += 1; r < n.length && n[r] >= "0" && n[r] <= "9";) r += 1;
+  if (n[r] === "e" || n[r] === "E") {
+    let a = r + 1;
+    (n[a] === "+" || n[a] === "-") && (a += 1);
+    let l = 0;
+    for (; a < n.length && n[a] >= "0" && n[a] <= "9";) ((a += 1), (l += 1));
+    l > 0 && (r = a);
+  }
+  let o = nw[n.slice(r).trim().toLowerCase()];
+  if (o === void 0) return null;
+  let i = t * o;
+  return Number.isFinite(i) && i > 0 ? i : null;
+}
+function tw(e) {
+  let n = [],
+    t = "";
+  for (let i of `${e} `) {
+    if (
+      i === " " ||
+      i === "," ||
+      i === "	" ||
+      i ===
+        `
+` ||
+      i === "\r"
+    ) {
+      if (t !== "" && (n.push(Number.parseFloat(t)), (t = ""), n.length > 4))
+        return null;
+      continue;
+    }
+    if (((t += i), t.length > 64)) return null;
+  }
+  if (n.length !== 4 || !n.every((i) => Number.isFinite(i))) return null;
+  let [, , r, o] = n;
+  return r > 0 && o > 0 ? Object.freeze({ width: r, height: o }) : null;
+}
+function rw(e) {
+  let n = e.subarray(0, Math.min(e.length, UP)),
+    t = new TextDecoder("utf-8", { fatal: false }).decode(n),
+    r = t.indexOf("<svg");
+  if (r === -1) return null;
+  let o = r + 4,
+    i = { width: "", height: "", viewBox: "" };
+  for (; o < t.length;) {
+    let a = t[o];
+    if (a === ">" || a === "/") break;
+    if (
+      a === " " ||
+      a === "	" ||
+      a ===
+        `
+` ||
+      a === "\r"
+    ) {
+      o += 1;
+      continue;
+    }
+    let l = "";
+    for (
+      ;
+      o < t.length &&
+      !` 	
+\r=>/`.includes(t[o]);
+    )
+      ((l += t[o]), (o += 1));
+    for (
+      ;
+      o < t.length &&
+      ` 	
+\r`.includes(t[o]);
+    )
+      o += 1;
+    if (t[o] !== "=") continue;
+    for (
+      o += 1;
+      o < t.length &&
+      ` 	
+\r`.includes(t[o]);
+    )
+      o += 1;
+    let s = t[o],
+      d = "";
+    if (s === '"' || s === "'") {
+      for (o += 1; o < t.length && t[o] !== s;) ((d += t[o]), (o += 1));
+      if (o >= t.length) return null;
+      o += 1;
+    } else
+      for (
+        ;
+        o < t.length &&
+        !` 	
+\r>/`.includes(t[o]);
+      )
+        ((d += t[o]), (o += 1));
+    l in i && (i[l] = d);
+  }
+  return o >= t.length ? null : Object.freeze(i);
+}
+function ow(e, n) {
+  let t = rw(e);
+  if (t === null) return null;
+  let r = fm(t.width),
+    o = fm(t.height),
+    i = tw(t.viewBox),
+    a,
+    l;
+  if (r !== null && o !== null) ((a = r), (l = o));
+  else if (i !== null) {
+    let d = i.width / i.height;
+    r !== null
+      ? ((a = r), (l = r / d))
+      : o !== null
+        ? ((a = o * d), (l = o))
+        : ((a = i.width), (l = i.height));
+  } else ((a = r ?? LP), (l = o ?? BP));
+  let s = (d) => Math.min(Math.max(Math.round(d), 1), n.maxDimension);
+  return { pixelWidth: s(a), pixelHeight: s(l) };
+}
+function Vo(e, n) {
+  switch (n) {
+    case "image/png":
+      return HP(e);
+    case "image/gif":
+      return jP(e);
+    case "image/jpeg":
+      return $P(e);
+    case "image/bmp":
+      return XP(e);
+    case "image/webp":
+      return YP(e);
+    default:
+      return null;
+  }
+}
+function ps(e, n) {
+  let t = Rt(e.contentTypes, n);
+  return t.ok ? (FP[t.contentType.toLowerCase()] ?? "unknown") : "unknown";
+}
+function Dr(e) {
+  return new Uint8Array(e);
+}
+function Fo(e) {
+  return Sl(e);
+}
+function gs(e, n, t) {
+  return `${e}\0${n}\0${t}`;
+}
+function dt(e) {
+  return Object.freeze(e);
+}
+function ce(e, n, t) {
+  return dt({ kind: "unrenderable", partName: e, mime: n, reason: t });
+}
+function aa(e, n, t) {
+  if (
+    !Number.isFinite(e) ||
+    !Number.isFinite(n) ||
+    e <= 0 ||
+    n <= 0 ||
+    e > t.maxDimension ||
+    n > t.maxDimension ||
+    e > Number.MAX_SAFE_INTEGER / n
+  )
+    return null;
+  let r = e * n;
+  return r > t.maxPixels ? null : r;
+}
+function la(e, n) {
+  return e > Number.MAX_SAFE_INTEGER / 4 ? false : e * 4 <= n.maxDecodedBytes;
+}
+function mm(e) {
+  return hm(e) ? "raster" : ym(e) ? "preserved" : "vector";
+}
+function iw(e, n) {
+  return e === "unknown" || n === "unknown"
+    ? false
+    : mm(e) !== mm(n)
+      ? true
+      : e !== n;
+}
+function pm(e, n, t) {
+  return t.mode === "internal"
+    ? `${e}\0${n}\0internal\0${t.partName}\0${t.raw}`
+    : t.mode === "external"
+      ? `${e}\0${n}\0external\0${t.raw}\0${t.sinkSafe ? "1" : "0"}`
+      : `${e}\0${n}\0missing`;
+}
+function aw(e, n) {
+  return e.relationships.get(n) ?? [];
+}
+function sa(e, n, t) {
+  return Pr(aw(e, n), n, t);
+}
+function Om(e, n) {
+  let t = 0;
+  for (let r of Mr(e)) {
+    let o = r.picture?.embeddedRelationshipId;
+    if (!o) continue;
+    let i = sa(e, r.ownerPartName, o);
+    i.mode === "internal" && i.partName === n && (t += 1);
+  }
+  return t;
+}
+var lw = Object.keys(Bi);
+function Nm(e) {
+  return lw.map((n) => `${n}=${e[n]}`).join("\0");
+}
+var xs = new WeakMap();
+function sw(e, n, t) {
+  let r = xs.get(e);
+  r || ((r = new WeakMap()), xs.set(e, r));
+  let o = r.get(n);
+  o || ((o = new Map()), r.set(n, o));
+  let i = Nm(t),
+    a = o.get(i);
+  if (a) return a;
+  let s = { lookup: uw(e, n, t) };
+  return (o.set(i, s), s);
+}
+function dw(e, n, t, r) {
+  let o = xs.get(e);
+  if (!o) return;
+  let i = o.get(n);
+  if (!i) return;
+  let a = Nm(t),
+    l = i.get(a);
+  !l || l.lookup !== r || (i.delete(a), i.size === 0 && o.delete(n));
+}
+function km(e, n) {
+  let t = br(n.limits);
+  return sw(e, n.decodePort, t).lookup;
+}
+function cw(e, n) {
+  return km(e, n);
+}
+function uw(e, n, t) {
+  let r = e,
+    o = 0,
+    i = false,
+    a = ms(),
+    l = new Map(),
+    s = new Map(),
+    d = () => {
+      if (i) throw new Error("ImageResourceLookup disposed");
+    },
+    c = (O, b) => `${O}\0${b}`,
+    u = (O, b, P) => `${O}\0${b}\0${P}`,
+    f = () => {
+      ((o += 1), l.clear(), s.clear());
+    },
+    m = (O, b) => {
+      let P = sa(r, O, b),
+        R = pm(O, b, P),
+        w = l.get(c(O, b));
+      if (!w || w.relationshipFingerprint !== R) return null;
+      if (P.mode === "internal") {
+        let I = r.partBytes.get(P.partName);
+        if (!I || Fo(I) !== w.contentId) return null;
+      }
+      return w;
+    },
+    g = async (O, b, P, R) => {
+      if (R !== o || i) throw new Error("ImageResourceLookup stale");
+      if (P.length > t.maxEncodedBytes)
+        return ce(b, ps(r, b), "resource-limit");
+      let w = Ur(P),
+        I = ps(r, b);
+      if (I !== "unknown" && w !== "unknown" && iw(I, w))
+        return ce(b, w, "signature-mismatch");
+      if (I !== "unknown" && w === "unknown")
+        return ce(b, I, "signature-mismatch");
+      if (w === "unknown") return ce(b, "unknown", "unsupported-format");
+      if (ym(w)) {
+        let xe = w,
+          it = n.convertPreserved?.bind(n);
+        if (!it) return ce(b, xe, "unsupported-format");
+        if (xe === "image/tiff") {
+          let Fe = ew(P);
+          if (Fe === null) return ce(b, xe, "unsupported-format");
+          let yr = aa(Fe.pixelWidth, Fe.pixelHeight, t);
+          if (yr === null || !la(yr, t)) return ce(b, xe, "resource-limit");
+        }
+        let ue = Fo(P),
+          at = u(O, b, ue),
+          Ui = s.get(at);
+        if (Ui) return Ui;
+        let Cl = Dr(P),
+          ko = new Promise((Fe, yr) => {
+            (async () => {
+              try {
+                let jn;
+                try {
+                  jn = await it(Cl, xe, t);
+                } catch {
+                  Fe(ce(b, xe, "decode-failed"));
+                  return;
+                }
+                if (R !== o || i) {
+                  yr(new Error("ImageResourceLookup stale"));
+                  return;
+                }
+                if (jn === null) {
+                  Fe(ce(b, xe, "unsupported-format"));
+                  return;
+                }
+                if (jn.bytes.length > t.maxEncodedBytes) {
+                  Fe(ce(b, xe, "resource-limit"));
+                  return;
+                }
+                let bo = Ur(jn.bytes);
+                if (bo !== jn.mime || !hm(bo)) {
+                  Fe(ce(b, xe, "decode-failed"));
+                  return;
+                }
+                let Xt = Vo(jn.bytes, bo);
+                if (Xt === null) {
+                  Fe(ce(b, xe, "decode-failed"));
+                  return;
+                }
+                let iu = aa(Xt.pixelWidth, Xt.pixelHeight, t);
+                if (iu === null || !la(iu, t)) {
+                  Fe(ce(b, xe, "resource-limit"));
+                  return;
+                }
+                let Tl;
+                try {
+                  Tl = await n.decode(Dr(jn.bytes), bo, t);
+                } catch {
+                  Fe(ce(b, xe, "decode-failed"));
+                  return;
+                }
+                if (R !== o || i) {
+                  yr(new Error("ImageResourceLookup stale"));
+                  return;
+                }
+                if (
+                  Tl.pixelWidth !== Xt.pixelWidth ||
+                  Tl.pixelHeight !== Xt.pixelHeight
+                ) {
+                  Fe(ce(b, xe, "decode-failed"));
+                  return;
+                }
+                let au = gs(O, b, ue),
+                  lu = a.acquire(au, ue, Dr(jn.bytes));
+                (a.retain(lu),
+                  Fe(
+                    dt({
+                      kind: "ready",
+                      partName: b,
+                      contentId: ue,
+                      resourceKey: au,
+                      validatedHandle: lu,
+                      mime: bo,
+                      pixelWidth: Xt.pixelWidth,
+                      pixelHeight: Xt.pixelHeight,
+                      dpiX: _r,
+                      dpiY: _r,
+                    }),
+                  ));
+              } catch (jn) {
+                yr(jn);
+              } finally {
+                R === o && s.delete(at);
+              }
+            })();
+          });
+        return (s.set(at, ko), ko);
+      }
+      if (w === "image/svg+xml") {
+        let xe = ow(P, t);
+        if (xe === null) return ce(b, w, "decode-failed");
+        let it = Fo(P),
+          ue = gs(O, b, it),
+          at = a.acquire(ue, it, Dr(P));
+        return (
+          a.retain(at),
+          dt({
+            kind: "ready",
+            partName: b,
+            contentId: it,
+            resourceKey: ue,
+            validatedHandle: at,
+            mime: w,
+            pixelWidth: xe.pixelWidth,
+            pixelHeight: xe.pixelHeight,
+            dpiX: _r,
+            dpiY: _r,
+          })
+        );
+      }
+      let S = Vo(P, w);
+      if (S === null) return ce(b, w, "unsupported-format");
+      let U = aa(S.pixelWidth, S.pixelHeight, t);
+      if (U === null || !la(U, t)) return ce(b, w, "resource-limit");
+      let L = Fo(P),
+        T = u(O, b, L),
+        Qe = s.get(T);
+      if (Qe) return Qe;
+      let an = Dr(P),
+        ou = new Promise((xe, it) => {
+          (async () => {
+            try {
+              let ue;
+              try {
+                ue = await n.decode(an, w, t);
+              } catch {
+                xe(ce(b, w, "decode-failed"));
+                return;
+              }
+              if (R !== o || i) {
+                it(new Error("ImageResourceLookup stale"));
+                return;
+              }
+              if (
+                ue.pixelWidth !== S.pixelWidth ||
+                ue.pixelHeight !== S.pixelHeight
+              ) {
+                xe(ce(b, w, "decode-failed"));
+                return;
+              }
+              let at = aa(ue.pixelWidth, ue.pixelHeight, t);
+              if (at === null || !la(at, t)) {
+                xe(ce(b, w, "resource-limit"));
+                return;
+              }
+              let Ui = Number.isFinite(ue.dpiX) && ue.dpiX > 0 ? ue.dpiX : _r,
+                Cl = Number.isFinite(ue.dpiY) && ue.dpiY > 0 ? ue.dpiY : _r,
+                ko = gs(O, b, L),
+                Fe = a.acquire(ko, L, an);
+              (a.retain(Fe),
+                xe(
+                  dt({
+                    kind: "ready",
+                    partName: b,
+                    contentId: L,
+                    resourceKey: ko,
+                    validatedHandle: Fe,
+                    mime: w,
+                    pixelWidth: ue.pixelWidth,
+                    pixelHeight: ue.pixelHeight,
+                    dpiX: Ui,
+                    dpiY: Cl,
+                  }),
+                ));
+            } catch (ue) {
+              it(ue);
+            } finally {
+              R === o && s.delete(T);
+            }
+          })();
+        });
+      return (s.set(T, ou), ou);
+    },
+    p = (O, b, P, R, w = "") => (
+      l.set(c(O, b), {
+        relationshipFingerprint: pm(O, b, P),
+        contentId: w,
+        state: R,
+      }),
+      R
+    ),
+    x = async (O, b) => {
+      d();
+      let P = sa(r, O, b),
+        R = m(O, b);
+      if (R) return R.state;
+      if (P.mode === "external")
+        return p(
+          O,
+          b,
+          P,
+          dt({ kind: "external", relationshipId: b, sinkSafe: P.sinkSafe }),
+        );
+      if (P.mode === "missing")
+        return p(O, b, P, dt({ kind: "missing", relationshipId: b }));
+      let w = r.partBytes.get(P.partName);
+      if (!w) return p(O, b, P, dt({ kind: "missing", relationshipId: b }));
+      let I = Dr(w),
+        S = o,
+        U = await g(O, P.partName, I, S);
+      if (S !== o || i) throw new Error("ImageResourceLookup stale");
+      let L =
+        U.kind === "ready" || (U.kind === "unrenderable" && U.partName)
+          ? Fo(I)
+          : "";
+      return p(O, b, P, U, L);
+    },
+    h = (O, b) => {
+      d();
+      let P = sa(r, O, b),
+        R = m(O, b);
+      return R
+        ? R.state
+        : P.mode === "external"
+          ? p(
+              O,
+              b,
+              P,
+              dt({ kind: "external", relationshipId: b, sinkSafe: P.sinkSafe }),
+            )
+          : P.mode === "internal"
+            ? p(
+                O,
+                b,
+                P,
+                ce(P.partName, ps(r, P.partName), "unsupported-format"),
+              )
+            : p(O, b, P, dt({ kind: "missing", relationshipId: b }));
+    },
+    k = Object.freeze({
+      resolveEmbedded: x,
+      resolveLinked: h,
+      resolveForProjection: async (O) => {
+        if ((d(), !O.picture))
+          return ce(null, "unknown", "non-picture-graphic");
+        let b = O.picture.linkedRelationshipId;
+        if (b) return h(O.ownerPartName, b);
+        let P = O.picture.embeddedRelationshipId;
+        return P
+          ? x(O.ownerPartName, P)
+          : ce(null, "unknown", "unsupported-format");
+      },
+      liveReferenceCount: (O) => Om(r, O),
+      dispose: () => {
+        ((i = true), f(), a.dispose(), dw(r, n, t, k));
+      },
+    });
+  return k;
+}
+var bm = "/[Content_Types].xml",
+  fw = "http://schemas.openxmlformats.org/package/2006/content-types",
+  mw =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+  pw = /(?:\/xml|\+xml)$/i;
+function da(e) {
+  return new TextDecoder(e, { fatal: true });
+}
+function hs(e, n) {
+  let t = n?.maxBytes ?? wo;
+  if (!Number.isFinite(t) || !Number.isInteger(t) || t < 0)
+    return { ok: false, reason: "invalid-limits" };
+  if (e.byteLength > Math.min(t, wo)) return { ok: false, reason: "too-large" };
+  try {
+    if (e[0] === 255 && e[1] === 254)
+      return { ok: !0, xml: da("utf-16le").decode(e.subarray(2)) };
+    if (e[0] === 254 && e[1] === 255)
+      return { ok: !0, xml: da("utf-16be").decode(e.subarray(2)) };
+    if (e[0] === 60 && e[1] === 0 && e[2] === 63 && e[3] === 0)
+      return { ok: !0, xml: da("utf-16le").decode(e) };
+    if (e[0] === 0 && e[1] === 60 && e[2] === 0 && e[3] === 63)
+      return { ok: !0, xml: da("utf-16be").decode(e) };
+    let r = e[0] === 239 && e[1] === 187 && e[2] === 191 ? 3 : 0;
+    return { ok: !0, xml: strFromU8(e.subarray(r)) };
+  } catch {
+    return { ok: false, reason: "parse-error" };
+  }
+}
+var Pm = Object.freeze({ maxXmlParts: 512, maxRelationships: 1e4 });
+function Im(e) {
+  return e.type === "element";
+}
+function Cm(e, n, t = []) {
+  for (let r of e) {
+    if (!Im(r)) continue;
+    let o = r.name.indexOf(":");
+    ((o === -1 ? r.name : r.name.slice(o + 1)) === n && t.push(r),
+      Cm(r.children, n, t));
+  }
+  return t;
+}
+function ca(e, n) {
+  for (let [t, r] of Object.entries(e.attributes)) {
+    let o = t.indexOf(":");
+    if ((o === -1 ? t : t.slice(o + 1)) === n) return r;
+  }
+}
+function Tm(e) {
+  let n = e.indexOf(":");
+  return n === -1
+    ? { prefix: "", localName: e }
+    : { prefix: e.slice(0, n), localName: e.slice(n + 1) };
+}
+function gw(e) {
+  let n = new Map();
+  for (let [t, r] of Object.entries(e))
+    t === "xmlns"
+      ? n.set("", r)
+      : t.startsWith("xmlns:") && n.set(t.slice(6), r);
+  return n;
+}
+function xw(e, n) {
+  let t = gw(n.attributes);
+  return t.size === 0 ? e : new Map([...e, ...t]);
+}
+function hw(e, n) {
+  return n.get(Tm(e.name).prefix);
+}
+function ua(e, n) {
+  for (let [t, r] of Object.entries(e.attributes))
+    if (t.indexOf(":") === -1 && t === n) return r;
+}
+function ys(e, n, t, r = []) {
+  for (let o of e) {
+    if (!Im(o)) continue;
+    let i = xw(t, o);
+    (Tm(o.name).localName === n && hw(o, i) === fw && r.push(o),
+      ys(o.children, n, i, r));
+  }
+  return r;
+}
+function yw(e) {
+  let n = /^(.*)\/_rels\/([^/]*)\.rels$/.exec(e);
+  if (!n) return null;
+  let [, t, r] = n;
+  return r === "" ? "/" : `${t}/${r}`;
+}
+function Ow(e, n) {
+  let t = $n(e, n);
+  if (!t.ok) return null;
+  let r = [],
+    o = [],
+    i = 0,
+    a = new Map();
+  for (let s of ys(t.nodes, "Default", a)) {
+    let d = ua(s, "Extension"),
+      c = ua(s, "ContentType");
+    d === void 0 ||
+      c === void 0 ||
+      r.push({ extension: d, contentType: c, order: i++ });
+  }
+  for (let s of ys(t.nodes, "Override", a)) {
+    let d = ua(s, "PartName"),
+      c = ua(s, "ContentType");
+    d === void 0 ||
+      c === void 0 ||
+      o.push({ partName: d, contentType: c, order: i++ });
+  }
+  let l = _l({ defaults: r, overrides: o });
+  return l.ok ? l.index : null;
+}
+function Nw(e, n) {
+  let t = Rt(n, e);
+  return t.ok ? t.contentType : "";
+}
+function yD(e, n = {}) {
+  let t = _f(e, n.zip ?? ts);
+  if (!t.ok) return { ok: false, reason: t.reason, detail: t.detail };
+  let r = t.entries.get(bm);
+  if (!r) return { ok: false, reason: "no-content-types" };
+  let o = hs(r, n.xml);
+  if (!o.ok) return { ok: false, reason: o.reason };
+  let i = Ow(o.xml, n.xml);
+  if (!i) return { ok: false, reason: "bad-content-types" };
+  let a = n.maxRelationships ?? Pm.maxRelationships,
+    l = [],
+    s = [],
+    d = 0;
+  for (let [h, N] of t.entries) {
+    let k = yw(h);
+    if (k === null) continue;
+    let O = hs(N, n.xml);
+    if (!O.ok) return { ok: false, reason: O.reason, detail: h };
+    let b = $n(O.xml, n.xml);
+    if (!b.ok) return { ok: false, reason: b.reason, detail: h };
+    for (let P of Cm(b.nodes, "Relationship")) {
+      if (l.length >= a) return { ok: false, reason: "too-many-relationships" };
+      let R = ca(P, "Id"),
+        w = ca(P, "Type"),
+        I = ca(P, "Target");
+      if (R === void 0 || w === void 0 || I === void 0)
+        return {
+          ok: false,
+          reason: "bad-relationship-target",
+          detail: `${h}: missing attribute`,
+        };
+      l.push({
+        ownerPart: k,
+        id: R,
+        type: w,
+        rawTarget: I,
+        targetMode:
+          ca(P, "TargetMode") === "External" ? "External" : "Internal",
+        order: d++,
+      });
+    }
+  }
+  let c = Eu(l);
+  if (!c.ok)
+    return {
+      ok: false,
+      reason: "duplicate-relationship-id",
+      detail: `${c.error.ownerPart}: ${c.error.id}`,
+    };
+  for (let h of l) {
+    let N = Ee(h);
+    if (N.mode === "External") {
+      s.push({
+        ownerPart: h.ownerPart,
+        id: h.id,
+        type: h.type,
+        rawTarget: h.rawTarget,
+        sinkSafe: N.sinkSafe.ok,
+      });
+      continue;
+    }
+    if (!N.target.ok)
+      return {
+        ok: false,
+        reason: "bad-relationship-target",
+        detail: `${h.ownerPart}/${h.id} -> ${h.rawTarget}: ${N.target.reason}`,
+      };
+  }
+  let f = (c.byOwner.get("/") ?? []).find((h) => h.type === mw);
+  if (!f) return { ok: false, reason: "no-main-document" };
+  let m = Ee(f);
+  if (m.mode !== "Internal" || !m.target.ok)
+    return { ok: false, reason: "no-main-document", detail: f.rawTarget };
+  let g = m.target.partName;
+  if (!t.entries.has(g))
+    return { ok: false, reason: "no-main-document", detail: g };
+  let p = n.maxXmlParts ?? Pm.maxXmlParts,
+    x = new Map();
+  for (let [h, N] of t.entries) {
+    if (h === bm) continue;
+    let k = Nw(h, i);
+    if (k.toLowerCase() === "image/svg+xml" || !pw.test(k)) continue;
+    if (x.size >= p) return { ok: false, reason: "too-many-xml-parts" };
+    let O = fe(h);
+    if (!O.ok)
+      return {
+        ok: false,
+        reason: "bad-relationship-target",
+        detail: `${h}: ${O.reason}`,
+      };
+    let b = hs(N, n.xml);
+    if (!b.ok) return { ok: false, reason: b.reason, detail: h };
+    let P = re(b.xml, { name: O.partName, contentType: k }, n.xml);
+    if (!P.ok) return { ok: false, reason: P.reason, detail: h };
+    x.set(O.partName, P.part);
+  }
+  return {
+    ok: true,
+    package: Object.freeze({
+      parts: x,
+      partBytes: t.entries,
+      relationships: c.byOwner,
+      externalTargets: Object.freeze(s),
+      contentTypes: i,
+      mainDocumentPart: g,
+    }),
+  };
+}
+function OD(e) {
+  let n = new Map(e.partBytes);
+  for (let [t, r] of e.parts) n.set(t, strToU8(Cr(r)));
+  return Df(n);
+}
+function D(e, n) {
+  let t = new Map(e.parts);
+  return (t.set(n.name, n), Object.freeze({ ...e, parts: t }));
+}
+var Br = "/[Content_Types].xml",
+  Sm = "http://schemas.openxmlformats.org/package/2006/content-types",
+  Os = "http://schemas.openxmlformats.org/package/2006/relationships",
+  kw = "application/vnd.openxmlformats-package.relationships+xml";
+function fa(e) {
+  for (let [n, t] of e) {
+    let r = fe(n);
+    if (r.ok && $(r.partName) === $(Br)) return { storageKey: n, bytes: t };
+  }
+  return null;
+}
+function ks(e) {
+  return fa(e.partBytes);
+}
+function ct(e, n) {
+  return e.relationships.get(n) ?? [];
+}
+function Xn(e, n) {
+  let t = Rt(e.contentTypes, n);
+  return t.ok ? t.contentType : null;
+}
+function zn(e) {
+  let n = e.lastIndexOf("/"),
+    t = e.slice(0, n),
+    r = e.slice(n + 1);
+  return `${t}/_rels/${r}.rels`;
+}
+function bs(e, n, t, r, o = []) {
+  return {
+    id: e,
+    kind: "generic",
+    namespaceUri: n,
+    localName: t,
+    namespaceBindings: o,
+    attributes: Object.entries(r).map(([i, a]) => ({
+      kind: "genericExtension",
+      namespaceUri: "",
+      localName: i,
+      value: a,
+    })),
+    children: [],
+  };
+}
+function bw(e) {
+  let n = $(e);
+  return n === $(Br) || /\/_rels\/[^/]*\.rels$/.test(n);
+}
+function Pw(e) {
+  return $(e) === $(Br);
+}
+function ww(e, n) {
+  let t = $(n);
+  for (let r of e.parts.keys()) if ($(r) === t) return true;
+  for (let r of e.partBytes.keys()) if ($(r) === t) return true;
+  return false;
+}
+function Am(e) {
+  let n = fe(e);
+  return !n.ok || bw(n.partName) ? null : n.partName;
+}
+function Mm(e, n) {
+  return `${e.name}#minted-${n}`;
+}
+function Ns(e, n) {
+  if (e.kind !== "textValue")
+    return e.attributes.find((t) => t.localName === n && t.namespaceUri === "")
+      ?.value;
+}
+function Rw(e, n) {
+  if (
+    e.kind !== "generic" ||
+    e.namespaceUri !== Sm ||
+    e.localName !== "Override"
+  )
+    return false;
+  let t = Ns(e, "PartName"),
+    r = Ns(e, "ContentType");
+  return t !== void 0 && r !== void 0 && $(t) === $(n);
+}
+function Ew(e, n, t) {
+  return {
+    ...e,
+    attributes: e.attributes.map((r) =>
+      r.localName === n && r.namespaceUri === "" ? { ...r, value: t } : r,
+    ),
+  };
+}
+function vm(e, n, t) {
+  let r = e.root;
+  if (r.kind !== "generic") return { part: e, changed: false };
+  let o = false,
+    i = false,
+    a = [];
+  for (let s of r.children) {
+    if (!Rw(s, n)) {
+      a.push(s);
+      continue;
+    }
+    if (o) {
+      i = true;
+      continue;
+    }
+    if (((o = true), s.kind !== "generic")) continue;
+    if (Ns(s, "ContentType") === t) {
+      a.push(s);
+      continue;
+    }
+    ((i = true), a.push(Ew(s, "ContentType", t)));
+  }
+  if (
+    (o ||
+      ((i = true),
+      a.push(
+        bs(Mm(e, `override-${n}`), Sm, "Override", {
+          PartName: n,
+          ContentType: t,
+        }),
+      )),
+    !i)
+  )
+    return { part: e, changed: false };
+  let l = F(e, r.id, a, { deferValidation: true });
+  return l.ok ? { part: l.part, changed: true } : { part: e, changed: false };
+}
+function Fr(e, n, t, r) {
+  let o = Am(n);
+  if (o === null) return e;
+  let i = $(o);
+  if (r?.forceOverride) {
+    if (e.contentTypes.overrides.get(i) === t) {
+      let u = fa(e.partBytes);
+      if (u !== null) {
+        let f = re(new TextDecoder().decode(u.bytes), {
+          name: Br,
+          contentType: "application/xml",
+        });
+        if (f.ok && !vm(f.part, o, t).changed) return e;
+      }
+    }
+  } else if (Xn(e, o) === t) return e;
+  let a = fa(e.partBytes);
+  if (a === null) return e;
+  let l = re(new TextDecoder().decode(a.bytes), {
+    name: Br,
+    contentType: "application/xml",
+  });
+  if (!l.ok) return e;
+  let s = vm(l.part, o, t);
+  if (!s.changed) return e;
+  let d = new Map(e.contentTypes.overrides);
+  d.set(i, t);
+  let c = new Map(e.partBytes);
+  return (
+    c.set(a.storageKey, new TextEncoder().encode(Cr(s.part))),
+    Object.freeze({
+      ...e,
+      partBytes: c,
+      contentTypes: { defaults: e.contentTypes.defaults, overrides: d },
+    })
+  );
+}
+function Ps(e, n) {
+  let t = fe(n);
+  if (!t.ok) return { pkg: e, ok: false };
+  let r = $(t.partName),
+    o = $(zn(t.partName)),
+    i = new Map();
+  for (let [u, f] of e.relationships) {
+    let m = f.filter((g) => {
+      if (g.targetMode === "External") return false;
+      let p = Ve(u, g.rawTarget);
+      return p.ok && $(p.partName) === r;
+    });
+    m.length > 0 && i.set(u, new Set(m.map((g) => g.id)));
+  }
+  for (let u of i.keys()) if (!e.parts.has(zn(u))) return { pkg: e, ok: false };
+  let a = new Map(e.parts),
+    l = new Map(e.partBytes);
+  for (let u of [a, l])
+    for (let f of [...u.keys()]) {
+      let m = $(f);
+      (m === r || m === o) && u.delete(f);
+    }
+  let s = new Map(e.relationships);
+  s.delete(t.partName);
+  for (let [u, f] of i) {
+    let m = s.get(u) ?? [];
+    s.set(
+      u,
+      m.filter((h) => !f.has(h.id)),
+    );
+    let g = a.get(zn(u));
+    if (!g) continue;
+    let p = g.root.children.filter((h) => {
+        let N = _m(h);
+        return N === void 0 || !f.has(N);
+      }),
+      x = F(g, g.root.id, p);
+    if (!x.ok) return { pkg: e, ok: false };
+    a.set(x.part.name, x.part);
+  }
+  let d = e.externalTargets.filter((u) => $(u.ownerPart) !== r),
+    c = Object.freeze({
+      ...e,
+      parts: a,
+      partBytes: l,
+      relationships: s,
+      externalTargets: d,
+    });
+  return { pkg: Iw(c, t.partName), ok: true };
+}
+function Iw(e, n) {
+  let t = $(n);
+  if (!e.contentTypes.overrides.has(t)) return e;
+  let r = fa(e.partBytes);
+  if (r === null) return e;
+  let o = re(new TextDecoder().decode(r.bytes), {
+    name: Br,
+    contentType: "application/xml",
+  });
+  if (!o.ok) return e;
+  let i = o.part.root.children.filter((d) => {
+    if (d.kind === "textValue" || d.localName !== "Override") return true;
+    let c = d.attributes.find((u) => u.localName === "PartName");
+    return c === void 0 || $(c.value) !== t;
+  });
+  if (i.length === o.part.root.children.length) return e;
+  let a = F(o.part, o.part.root.id, i);
+  if (!a.ok) return e;
+  let l = new Map(e.contentTypes.overrides);
+  l.delete(t);
+  let s = new Map(e.partBytes);
+  return (
+    s.set(r.storageKey, new TextEncoder().encode(Cr(a.part))),
+    Object.freeze({
+      ...e,
+      partBytes: s,
+      contentTypes: { defaults: e.contentTypes.defaults, overrides: l },
+    })
+  );
+}
+function _m(e) {
+  if (!(e.kind === "textValue" || !("attributes" in e)))
+    return e.attributes.find(
+      (n) => n.localName === "Id" && n.namespaceUri === "",
+    )?.value;
+}
+function Cw(e, n) {
+  let t = new Set(ct(e, n).map((o) => o.id)),
+    r = e.parts.get(zn(n));
+  if (r) {
+    let o = (i) => {
+      if (i.kind !== "textValue" && i.localName === "Relationship") {
+        let a = _m(i);
+        a !== void 0 && a.length > 0 && t.add(a);
+      }
+      if (i.kind !== "textValue") for (let a of i.children) o(a);
+    };
+    o(r.root);
+  }
+  return t;
+}
+function Tw(e, n) {
+  let t = Cw(e, n),
+    r = 0;
+  for (let i of t) {
+    let a = /^rId(\d+)$/.exec(i);
+    a && (r = Math.max(r, Number(a[1])));
+  }
+  let o = r + 1;
+  for (; t.has(`rId${o}`);) o += 1;
+  return `rId${o}`;
+}
+function ws(e, n) {
+  let t = fe(n);
+  if (!t.ok) return e;
+  let r = zn(t.partName);
+  if (e.parts.has(r)) return e;
+  for (let a of e.partBytes.keys()) if ($(a) === $(r)) return e;
+  let o = bs(`${r}#root`, Os, "Relationships", {}, [
+    { prefix: "", namespaceUri: Os },
+  ]);
+  return D(e, { id: r, name: r, contentType: kw, root: o });
+}
+function ut(e, n, t, r) {
+  let o = ct(e, n),
+    i = Tw(e, n),
+    a = zn(n),
+    l = e.parts.get(a);
+  if (!l) return { pkg: e, relationshipId: i, ok: false };
+  let s = bs(Mm(l, i), Os, "Relationship", { Id: i, Type: t, Target: r }),
+    d = _(l, l.root.id, l.root.children.length, [s], { deferValidation: true });
+  if (!d.ok) return { pkg: e, relationshipId: i, ok: false };
+  let c = new Map(e.relationships);
+  return (
+    c.set(n, [
+      ...o,
+      {
+        ownerPart: n,
+        id: i,
+        type: t,
+        rawTarget: r,
+        targetMode: "Internal",
+        order: o.length,
+      },
+    ]),
+    {
+      pkg: Object.freeze({ ...D(e, d.part), relationships: c }),
+      relationshipId: i,
+      ok: true,
+    }
+  );
+}
+function Qt(e, n, t, r) {
+  let o = Am(n);
+  return o === null || ww(e, o)
+    ? e
+    : Fr(D(e, { id: o, name: o, contentType: r, root: t }), o, r);
+}
+function vw(e) {
+  if (e.targetMode === "External") return null;
+  let n = Ve(e.ownerPart, e.rawTarget);
+  return n.ok ? n.partName : null;
+}
+function Dm(e) {
+  let n = [];
+  for (let [r, o] of e.relationships)
+    for (let i of o) {
+      let a = vw(i);
+      a !== null &&
+        (e.parts.has(a) ||
+          e.partBytes.has(a) ||
+          n.push({ code: "dangling-relationship", partName: a, ownerPart: r }));
+    }
+  let t = new Map();
+  for (let r of e.parts.keys()) {
+    (Xn(e, r) === null && n.push({ code: "missing-content-type", partName: r }),
+      Pw(r) && n.push({ code: "reserved-part-name", partName: r }),
+      fe(r).ok || n.push({ code: "unsafe-part-name", partName: r }));
+    let o = $(r),
+      i = t.get(o);
+    i !== void 0
+      ? n.push({ code: "duplicate-part-name", partName: r, ownerPart: i })
+      : t.set(o, r);
+  }
+  return n.length === 0 ? { ok: true } : { ok: false, issues: n };
+}
+var Fm = "http://schemas.openxmlformats.org/package/2006/relationships",
+  Rs = "application/vnd.openxmlformats-package.relationships+xml",
+  Sw = "http://schemas.openxmlformats.org/package/2006/content-types",
+  Um = 4096;
+function ft(e) {
+  let n = 0;
+  for (let t of e.relationships.values())
+    for (let r of t) {
+      let o = /^rId(\d{1,9})$/.exec(r.id);
+      o && (n = Math.max(n, Number(o[1])));
+    }
+  for (let t of e.externalTargets) {
+    let r = /^rId(\d{1,9})$/.exec(t.id);
+    r && (n = Math.max(n, Number(r[1])));
+  }
+  return `rId${n + 1}`;
+}
+function Ho(e) {
+  let n = e.lastIndexOf("/");
+  return `${e.slice(0, n)}/_rels/${e.slice(n + 1)}.rels`;
+}
+function Jt(e, n, t, r) {
+  if (!/^(header|footer|settings)\d*\.xml$/.test(r) && r !== "settings.xml")
+    return null;
+  let o = e.mainDocumentPart,
+    i = Ho(o),
+    a = e.parts.get(i),
+    l = re(
+      `<Relationships xmlns="${Fm}"><Relationship Id="${n}" Type="${t}" Target="${r}"/></Relationships>`,
+      { name: i, contentType: Rs },
+    );
+  if (!l.ok) return null;
+  let s = e.relationships.get(o) ?? [];
+  if (s.some((g) => g.id === n)) return null;
+  let d = {
+      ownerPart: o,
+      id: n,
+      type: t,
+      rawTarget: r,
+      targetMode: "Internal",
+      order: s.reduce((g, p) => Math.max(g, p.order), -1) + 1,
+    },
+    c = new Map([...e.relationships, [o, [...s, d]]]);
+  if (!a)
+    return Object.freeze({
+      ...e,
+      parts: new Map([...e.parts, [i, l.part]]),
+      relationships: c,
+    });
+  let u = A(a),
+    f = l.part.root.children[0];
+  if (!f) return null;
+  let m = _(a, a.root.id, a.root.children.length, [bn(f, u)]);
+  return m.ok
+    ? Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [i, m.part]]),
+        relationships: c,
+      })
+    : null;
+}
+function bn(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => bn(t, n)) };
+}
+function Aw(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e)))
+    return e.attributes.find((t) => t.localName === n)?.value;
+}
+function Es(e, n) {
+  let t = e.mainDocumentPart,
+    r = e.relationships.get(t) ?? [];
+  if (!r.find((u) => u.id === n)) return e;
+  let i = r.filter((u) => u.id !== n),
+    a = new Map([...e.relationships, [t, i]]),
+    l = Ho(t),
+    s = e.parts.get(l);
+  if (!s) return Object.freeze({ ...e, relationships: a });
+  let d = s.root.children.find(
+    (u) =>
+      u.kind !== "textValue" &&
+      u.localName === "Relationship" &&
+      Aw(u, "Id") === n,
+  );
+  if (!d) return Object.freeze({ ...e, relationships: a });
+  let c = ie(s, d.id);
+  return c.ok
+    ? Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [l, c.part]]),
+        relationships: a,
+      })
+    : null;
+}
+function Vm(e, n, t) {
+  if (n === t) return e;
+  let r = e.relationships.get(n) ?? [],
+    o = e.externalTargets.filter((p) => p.ownerPart === n),
+    i = Ho(n),
+    a = Ho(t),
+    l = e.parts.get(i),
+    s = e.partBytes.get(i);
+  if (r.length === 0 && o.length === 0 && !l && !s) return e;
+  if (r.length > Um) return null;
+  let d = [];
+  for (let p of r) {
+    if (p.targetMode === "Internal" && !Ve(t, p.rawTarget).ok) return null;
+    d.push(
+      Object.freeze({
+        ownerPart: t,
+        id: p.id,
+        type: p.type,
+        rawTarget: p.rawTarget,
+        targetMode: p.targetMode,
+        order: p.order,
+      }),
+    );
+  }
+  let c = new Set(d.map((p) => p.id)),
+    u = [];
+  for (let p of o) {
+    let x = kr(p.rawTarget).ok;
+    if (
+      (u.push(
+        Object.freeze({
+          ownerPart: t,
+          id: p.id,
+          type: p.type,
+          rawTarget: p.rawTarget,
+          sinkSafe: x,
+        }),
+      ),
+      !c.has(p.id))
+    ) {
+      if (d.length >= Um) return null;
+      d.push(
+        Object.freeze({
+          ownerPart: t,
+          id: p.id,
+          type: p.type,
+          rawTarget: p.rawTarget,
+          targetMode: "External",
+          order: d.length === 0 ? 0 : d[d.length - 1].order + 1,
+        }),
+      );
+    }
+  }
+  let f = e;
+  if (l) {
+    let p = Mw(l, a);
+    if (!p) return null;
+    f = Object.freeze({ ...f, parts: new Map([...f.parts, [a, p]]) });
+  } else if (d.length > 0) {
+    let p = _w(a, d);
+    if (!p) return null;
+    f = Object.freeze({ ...f, parts: new Map([...f.parts, [a, p]]) });
+  } else
+    s &&
+      (f = Object.freeze({
+        ...f,
+        partBytes: new Map([...f.partBytes, [a, s]]),
+      }));
+  let m = new Map(f.relationships);
+  d.length > 0 ? m.set(t, Object.freeze(d)) : m.delete(t);
+  let g =
+    u.length > 0
+      ? Object.freeze([...f.externalTargets, ...u])
+      : f.externalTargets;
+  return Object.freeze({ ...f, relationships: m, externalTargets: g });
+}
+function Wm(e, n) {
+  let t = Ho(n),
+    r = new Map(e.parts);
+  r.delete(t);
+  let o = new Map(e.partBytes);
+  o.delete(t);
+  let i = new Map(e.relationships);
+  i.delete(n);
+  let a = Object.freeze(e.externalTargets.filter((l) => l.ownerPart !== n));
+  return Object.freeze({
+    ...e,
+    parts: r,
+    partBytes: o,
+    relationships: i,
+    externalTargets: a,
+  });
+}
+function Mw(e, n) {
+  let t = 0,
+    r = () => ((t += 1), `${n}#clone:${t}`),
+    o = bn(e.root, r);
+  return o.kind === "textValue"
+    ? null
+    : Object.freeze({ id: `part:${n}`, name: n, contentType: Rs, root: o });
+}
+function _w(e, n) {
+  let t = n
+      .map((o) => {
+        let i = o.targetMode === "External" ? ' TargetMode="External"' : "";
+        return `<Relationship Id="${Wo(o.id)}" Type="${Wo(o.type)}" Target="${Wo(o.rawTarget)}"${i}/>`;
+      })
+      .join(""),
+    r = re(`<Relationships xmlns="${Fm}">${t}</Relationships>`, {
+      name: e,
+      contentType: Rs,
+    });
+  return r.ok ? r.part : null;
+}
+function mt(e, n, t) {
+  let r = $(n),
+    o = e.contentTypes.overrides.get(r);
+  if (o === t) return e;
+  if (o !== void 0) return null;
+  let i = ks(e);
+  if (i === null) return null;
+  let a = strFromU8(i.bytes),
+    l = ma(a);
+  if (!l) return null;
+  let s = `<Override PartName="${n}" ContentType="${t}"/>`,
+    d = a.lastIndexOf(`</${l.rootName}>`);
+  if (d === -1) return null;
+  let c = a.slice(0, d) + s + a.slice(d),
+    u = ma(c);
+  if (!u || u.rootName !== l.rootName) return null;
+  let f = [...l.children, jm("Override", { PartName: n, ContentType: t })];
+  return u.children.length !== f.length || u.children.some((m, g) => m !== f[g])
+    ? null
+    : Object.freeze({
+        ...e,
+        partBytes: new Map([...e.partBytes, [i.storageKey, strToU8(c)]]),
+        contentTypes: Object.freeze({
+          defaults: e.contentTypes.defaults,
+          overrides: new Map([...e.contentTypes.overrides, [r, t]]),
+        }),
+      });
+}
+function jo(e, n) {
+  let t = $(n);
+  if (!e.contentTypes.overrides.has(t)) return e;
+  let r = ks(e);
+  if (r === null) return null;
+  let o = strFromU8(r.bytes),
+    i = ma(o);
+  if (!i) return null;
+  let a = $n(o);
+  if (!a.ok) return null;
+  let l = a.nodes.filter((p) => p.type === "element");
+  if (l.length !== 1) return null;
+  let s = l[0],
+    d = [],
+    c = false;
+  for (let p of s.children) {
+    if (p.type !== "element") {
+      d.push(p);
+      continue;
+    }
+    if (
+      (p.name.includes(":")
+        ? p.name.slice(p.name.indexOf(":") + 1)
+        : p.name) === "Override" &&
+      (p.attributes.PartName === n ||
+        p.attributes.PartName?.toLowerCase() === t)
+    ) {
+      c = true;
+      continue;
+    }
+    d.push(p);
+  }
+  if (!c) return e;
+  let u = { ...s, children: d },
+    f = Dw({ ...a, nodes: [u] }, i.rootName);
+  if (!f) return null;
+  let m = ma(f);
+  if (
+    !m ||
+    m.rootName !== i.rootName ||
+    m.children.length !== i.children.length - 1
+  )
+    return null;
+  let g = new Map(e.contentTypes.overrides);
+  return (
+    g.delete(t),
+    Object.freeze({
+      ...e,
+      partBytes: new Map([...e.partBytes, [r.storageKey, strToU8(f)]]),
+      contentTypes: Object.freeze({
+        defaults: e.contentTypes.defaults,
+        overrides: g,
+      }),
+    })
+  );
+}
+function Dw(e, n) {
+  let t = e.nodes.find((r) => r.type === "element" && r.name === n);
+  return t
+    ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' + Hm(t)
+    : null;
+}
+function Hm(e) {
+  let n = Object.entries(e.attributes)
+    .map(([r, o]) => ` ${r}="${Wo(o)}"`)
+    .join("");
+  if (e.children.length === 0) return `<${e.name}${n}/>`;
+  let t = e.children
+    .map((r) =>
+      r.type === "element" ? Hm(r) : r.type === "text" ? Wo(r.value) : "",
+    )
+    .join("");
+  return `<${e.name}${n}>${t}</${e.name}>`;
+}
+function Wo(e) {
+  return e
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+function ma(e) {
+  let n = $n(e);
+  if (!n.ok) return null;
+  let t = n.nodes.filter((l) => l.type === "element");
+  if (t.length !== 1) return null;
+  let r = t[0],
+    o = r.name.indexOf(":"),
+    i = o === -1 ? "" : r.name.slice(0, o);
+  if (
+    r.name.slice(o + 1) !== "Types" ||
+    r.attributes[i ? `xmlns:${i}` : "xmlns"] !== Sw
+  )
+    return null;
+  let a = [];
+  for (let l of r.children)
+    l.type === "element" && a.push(jm(l.name, l.attributes));
+  return { rootName: r.name, children: a };
+}
+function jm(e, n) {
+  let t = Object.entries(n)
+    .map(([r, o]) => `${r}=${o}`)
+    .sort();
+  return [e, ...t].join("");
+}
+var Km =
+    "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+  $m = 4294967295,
+  Uw = Object.freeze({
+    "image/png": "image/png",
+    "image/jpeg": "image/jpeg",
+    "image/gif": "image/gif",
+    "image/bmp": "image/bmp",
+    "image/webp": "image/webp",
+  }),
+  Lw = Object.freeze({
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/gif": "gif",
+    "image/bmp": "bmp",
+    "image/webp": "webp",
+  }),
+  Bw = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/bmp",
+    "image/x-ms-bmp",
+    "image/x-bmp",
+    "image/webp",
+    "image/svg+xml",
+    "image/tiff",
+    "image/x-emf",
+    "image/x-wmf",
+  ]);
+function Fw(e) {
+  return e.kind === "textValue"
+    ? false
+    : e.kind === "drawingDocPr"
+      ? true
+      : e.localName === "docPr" && e.namespaceUri === Km;
+}
+function Vw(e) {
+  return e.localName === "id" && e.namespaceUri === "";
+}
+function Ww(e) {
+  if (!(e.kind === "textValue" || !("attributes" in e))) {
+    for (let n of e.attributes) if (Vw(n)) return n.value;
+  }
+}
+function Hw(e) {
+  if (e === void 0) return null;
+  let n = e.trim();
+  if (n.length === 0 || (n.startsWith("+") && (n = n.slice(1)), n.length === 0))
+    return null;
+  for (let o = 0; o < n.length; o += 1) {
+    let i = n.charCodeAt(o);
+    if (i < 48 || i > 57) return null;
+  }
+  let t = n;
+  for (; t.length > 1 && t.startsWith("0");) t = t.slice(1);
+  if (t.length > 10) return null;
+  let r = Number(t);
+  return !Number.isInteger(r) || r <= 0 || r > $m ? null : r;
+}
+function Gm(e, n) {
+  if ((n(e), e.kind !== "textValue")) for (let t of e.children) Gm(t, n);
+}
+function jw(e) {
+  let n = 0;
+  for (let t of e.parts.values())
+    Gm(t.root, (r) => {
+      if (!Fw(r)) return;
+      let o = Hw(Ww(r));
+      o !== null && (n = Math.max(n, o));
+    });
+  return n;
+}
+function wm(e) {
+  let n = jw(e) + 1;
+  return n <= 0 || n > $m
+    ? { ok: false, reason: "invalidArgs" }
+    : { ok: true, id: n };
+}
+function ln(e) {
+  let n = fe(e);
+  return n.ok ? $(n.partName) : null;
+}
+function zm(e, n) {
+  let t = ln(n);
+  if (t === null) return false;
+  for (let r of e.parts.keys()) if (ln(r) === t) return true;
+  for (let r of e.partBytes.keys()) if (ln(r) === t) return true;
+  return false;
+}
+function Cs(e, n) {
+  for (let t of [...n.partBytes.keys(), ...n.parts.keys()])
+    if (t.startsWith("/")) return e;
+  return e.startsWith("/") ? e.slice(1) : e;
+}
+function ga(e) {
+  return new Uint8Array(e);
+}
+function Kw(e, n) {
+  if (e.length !== n.length) return false;
+  for (let t = 0; t < e.length; t += 1) if (e[t] !== n[t]) return false;
+  return true;
+}
+function $w(e, n) {
+  let t = ln(n);
+  if (t === null) return null;
+  for (let [r, o] of e.partBytes) if (ln(r) === t) return o;
+  return null;
+}
+function Ts(e, n) {
+  let t = br();
+  if (e.length === 0 || e.length > t.maxEncodedBytes || Ur(e) !== n)
+    return false;
+  let r = Vo(e, n);
+  return !(
+    !r ||
+    r.pixelWidth > t.maxDimension ||
+    r.pixelHeight > t.maxDimension ||
+    r.pixelWidth > Number.MAX_SAFE_INTEGER / r.pixelHeight ||
+    r.pixelWidth * r.pixelHeight > t.maxPixels
+  );
+}
+async function xa(e, n, t, r = br()) {
+  let o = ga(n);
+  if (!Ts(o, t)) return { ok: false, reason: "invalid-image" };
+  let i = Vo(o, t);
+  if (!i) return { ok: false, reason: "invalid-image" };
+  let a = ga(o);
+  try {
+    let l = await e.decode(a, t, r);
+    if (
+      l.pixelWidth !== i.pixelWidth ||
+      l.pixelHeight !== i.pixelHeight ||
+      l.pixelWidth <= 0 ||
+      l.pixelHeight <= 0 ||
+      l.pixelWidth > r.maxDimension ||
+      l.pixelHeight > r.maxDimension ||
+      l.pixelWidth * l.pixelHeight > r.maxPixels
+    )
+      return { ok: !1, reason: "invalid-image" };
+  } catch {
+    return { ok: false, reason: "invalid-image" };
+  }
+  return { ok: true, bytes: o };
+}
+function Gw(e, n) {
+  for (let t = 1; t <= Number.MAX_SAFE_INTEGER; t += 1) {
+    let r = `/word/media/image${t}.${n}`;
+    if (!zm(e, r)) return Cs(r, e);
+  }
+  return null;
+}
+function zw(e) {
+  let n = fe(e);
+  if (!n.ok) return null;
+  let t = n.partName;
+  return t.startsWith("/word/media/") ? t.slice(6) : null;
+}
+function Xm(e, n, t) {
+  return Mr(e).some((r) => {
+    if (r.ownerPartName !== n) return false;
+    let o = r.picture?.embeddedRelationshipId,
+      i = r.picture?.linkedRelationshipId;
+    return o === t || i === t;
+  });
+}
+function Xw(e, n, t) {
+  let r = e.relationships.get(n) ?? [],
+    o = Pr(r, n, t);
+  return o.mode === "internal" ? o.partName : null;
+}
+function Yw(e, n) {
+  let t = ln(n);
+  if (t === null) return false;
+  for (let r of e.relationships.values())
+    for (let o of r) {
+      if (o.targetMode === "External") continue;
+      let i = Ve(o.ownerPart, o.rawTarget);
+      if (i.ok && ln(i.partName) === t) return true;
+    }
+  return false;
+}
+function Ym(e, n) {
+  let t = ln(n);
+  if (t === null) return 0;
+  let r = 0;
+  for (let o of Mr(e)) {
+    let i = o.picture?.embeddedRelationshipId;
+    if (!i) continue;
+    let a = Xw(e, o.ownerPartName, i);
+    a !== null && ln(a) === t && (r += 1);
+  }
+  return r;
+}
+function qw(e, n) {
+  let t = fe(n);
+  if (!t.ok || !t.partName.startsWith("/word/media/")) return false;
+  let r = Rt(e.contentTypes, t.partName);
+  return r.ok ? Bw.has(r.contentType.toLowerCase()) : false;
+}
+function Rm(e, n, t, r) {
+  let o = fe(n);
+  if (!o.ok) return e;
+  let i = Cs(o.partName, e),
+    a = ga(t),
+    l = $w(e, o.partName);
+  if (l !== null && Kw(l, a))
+    return Fr(e, o.partName, r, { forceOverride: true });
+  let s = new Map(e.partBytes);
+  s.set(i, a);
+  let d = new Map(e.parts),
+    c = ln(i);
+  for (let u of [...d.keys()]) c !== null && ln(u) === c && d.delete(u);
+  return Fr(Object.freeze({ ...e, partBytes: s, parts: d }), o.partName, r, {
+    forceOverride: true,
+  });
+}
+function Lr(e, n, t) {
+  let r = fe(n);
+  if (!r.ok) return { ok: false, reason: "invalidArgs" };
+  let o = r.partName;
+  if (!e.parts.has(o)) return { ok: false, reason: "invalidArgs" };
+  if (!Ts(t.bytes, t.mime)) return { ok: false, reason: "invalid-image" };
+  let i = wm(e);
+  if (!i.ok) return { ok: false, reason: "invalidArgs" };
+  let a = Lw[t.mime],
+    l = Gw(e, a);
+  if (l === null) return { ok: false, reason: "invalidArgs" };
+  let s = Uw[t.mime],
+    d = Rm(e, l, t.bytes, s),
+    c = zw(l);
+  if (c === null) return { ok: false, reason: "invalidArgs" };
+  let u = ut(d, o, Vi, c);
+  return u.ok
+    ? ((d = u.pkg),
+      Object.freeze({
+        ok: true,
+        pkg: d,
+        partName: l,
+        relationshipId: u.relationshipId,
+        docPrId: i.id,
+      }))
+    : { ok: false, reason: "invalidArgs" };
+}
+var Zw = 12700;
+function vs(e) {
+  if (!Number.isFinite(e) || e <= 0) return null;
+  let n = Math.round(e * Zw);
+  return n <= 0 || n > Co ? null : n;
+}
+var Qw = "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+  Jw = "http://schemas.openxmlformats.org/drawingml/2006/main",
+  eR = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  nR = "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+  tR = "http://schemas.openxmlformats.org/drawingml/2006/picture";
+function qm(e, n) {
+  if ((n(e), e.kind !== "textValue")) for (let t of e.children) qm(t, n);
+}
+function rR(e) {
+  let n = null;
+  return (
+    qm(e.root, (t) => {
+      n === null && t.kind === "drawing" && (n = t);
+    }),
+    n
+  );
+}
+function Zm(e) {
+  let n = Math.round(e.extentEmu.cx),
+    t = Math.round(e.extentEmu.cy),
+    r = [`id="${e.docPrId}"`, 'name=""'];
+  (e.title && e.title.length > 0 && r.push(`title="${pa(e.title)}"`),
+    e.description &&
+      e.description.length > 0 &&
+      r.push(`descr="${pa(e.description)}"`));
+  let o = e.hyperlinkRelationshipId
+      ? `<a:hlinkClick r:id="${pa(e.hyperlinkRelationshipId)}"/>`
+      : "",
+    i = `<w:document xmlns:w="${Qw}" xmlns:wp="${Km}" xmlns:a="${Jw}" xmlns:pic="${eR}" xmlns:r="${nR}"><w:body><w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${n}" cy="${t}"/><wp:docPr ${r.join(" ")}>${o}</wp:docPr><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="${tR}"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="" descr=""/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${pa(e.relationshipId)}"/><a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${n}" cy="${t}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p></w:body></w:document>`,
+    a = re(i, {
+      name: "/word/document.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    });
+  if (!a.ok) throw new Error(`buildInlinePictureDrawing: ${a.reason}`);
+  let l = rR(a.part);
+  if (!l || l.kind !== "drawing")
+    throw new Error("buildInlinePictureDrawing: missing drawing");
+  return l;
+}
+function pa(e) {
+  return e.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+}
+function Em(e, n) {
+  let t = fe(n);
+  if (!t.ok || !qw(e, t.partName) || Ym(e, t.partName) > 0 || Yw(e, t.partName))
+    return e;
+  let r = Cs(t.partName, e),
+    o = new Map(e.partBytes),
+    i = ln(r),
+    a = false;
+  if (i !== null)
+    for (let d of [...o.keys()]) ln(d) === i && (o.delete(d), (a = true));
+  if (!a && !zm(e, t.partName)) return e;
+  let l = new Map(e.parts);
+  if (i !== null) for (let d of [...l.keys()]) ln(d) === i && l.delete(d);
+  let s = Object.freeze({ ...e, partBytes: o, parts: l });
+  return jo(s, t.partName) ?? s;
+}
+function oR(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e)))
+    return e.attributes.find((t) => t.localName === n && t.namespaceUri === "")
+      ?.value;
+}
+function iR(e, n, t) {
+  let r = e.relationships.get(n) ?? [];
+  if (!r.find((u) => u.id === t)) return e;
+  let i = r.filter((u) => u.id !== t),
+    a = new Map([...e.relationships, [n, i]]),
+    l = zn(n),
+    s = e.parts.get(l);
+  if (!s) return Object.freeze({ ...e, relationships: a });
+  let d = s.root.children.find(
+    (u) =>
+      u.kind !== "textValue" &&
+      u.localName === "Relationship" &&
+      oR(u, "Id") === t,
+  );
+  if (!d) return Object.freeze({ ...e, relationships: a });
+  let c = ie(s, d.id);
+  return c.ok
+    ? Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [l, c.part]]),
+        relationships: a,
+      })
+    : null;
+}
+function aR(e, n, t) {
+  if (Xm(e, n, t)) return e;
+  let r = e.externalTargets.filter((o) => !(o.ownerPart === n && o.id === t));
+  return r.length === e.externalTargets.length
+    ? e
+    : Object.freeze({ ...e, externalTargets: Object.freeze(r) });
+}
+function Ss(e, n, t, r) {
+  let o = e;
+  if (r !== null && !Xm(o, n, r)) {
+    let i = iR(o, n, r);
+    i !== null && (o = i);
+  }
+  return (
+    t !== null && Ym(o, t) === 0 && (o = Em(o, t)),
+    r !== null && (o = aR(o, n, r)),
+    o
+  );
+}
+function lR(e) {
+  let n = e.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+  if (
+    n === "localhost" ||
+    n.endsWith(".localhost") ||
+    n.endsWith(".local") ||
+    n === "::1" ||
+    n === "0:0:0:0:0:0:0:1" ||
+    n.startsWith("fe80:") ||
+    n.startsWith("fc") ||
+    n.startsWith("fd") ||
+    n.startsWith("ff")
+  )
+    return true;
+  let t = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(n);
+  if (t) {
+    let r = Number(t[1]),
+      o = Number(t[2]);
+    if (
+      r === 10 ||
+      r === 127 ||
+      r === 0 ||
+      (r === 169 && o === 254) ||
+      (r === 172 && o >= 16 && o <= 31) ||
+      (r === 192 && o === 168) ||
+      r >= 224
+    )
+      return true;
+  }
+  return false;
+}
+function Is(e) {
+  let n;
+  try {
+    n = new URL(e);
+  } catch {
+    return { ok: false, detail: "relative-url" };
+  }
+  return n.protocol !== "https:"
+    ? { ok: false, detail: "https-only" }
+    : n.username.length > 0 || n.password.length > 0
+      ? { ok: false, detail: "embedded-credentials" }
+      : lR(n.hostname)
+        ? { ok: false, detail: "private-network" }
+        : { ok: true, href: n.href };
+}
+function sR(e, n) {
+  try {
+    return new URL(n, e).href;
+  } catch {
+    return null;
+  }
+}
+function dR(e) {
+  let n = 0;
+  for (let o of e) n += o.length;
+  let t = new Uint8Array(n),
+    r = 0;
+  for (let o of e) (t.set(o, r), (r += o.length));
+  return t;
+}
+function cR(e) {
+  if (!e) return "unknown";
+  let n = e.split(";")[0]?.trim().toLowerCase() ?? "";
+  return n === "image/png"
+    ? "image/png"
+    : n === "image/jpeg" || n === "image/jpg"
+      ? "image/jpeg"
+      : n === "image/gif"
+        ? "image/gif"
+        : "unknown";
+}
+async function Qm(e, n, t, r = br(), o) {
+  if (typeof e.requestPublicHttps != "function")
+    return {
+      ok: false,
+      reason: "fetch-refused",
+      detail: "atomic-fetch-port-required",
+    };
+  let i = Is(n);
+  if (!i.ok) return { ok: false, reason: "fetch-refused", detail: i.detail };
+  let a = i.href,
+    l = 0;
+  for (;;) {
+    if (t.aborted)
+      return { ok: false, reason: "fetch-refused", detail: "aborted" };
+    let s = Is(a);
+    if (!s.ok) return { ok: false, reason: "fetch-refused", detail: s.detail };
+    a = s.href;
+    let d;
+    try {
+      d = await e.requestPublicHttps(a, { redirect: "manual", signal: t });
+    } catch {
+      return { ok: false, reason: "fetch-refused", detail: "network-error" };
+    }
+    if (d.connectedUrl !== a)
+      return {
+        ok: false,
+        reason: "fetch-refused",
+        detail: "connected-url-mismatch",
+      };
+    if (d.status >= 300 && d.status < 400 && d.location) {
+      if (l >= r.maxExternalRedirects)
+        return { ok: false, reason: "fetch-refused", detail: "redirect-limit" };
+      let p = sR(a, d.location);
+      if (p === null)
+        return { ok: false, reason: "fetch-refused", detail: "bad-redirect" };
+      let x = Is(p);
+      if (!x.ok)
+        return { ok: false, reason: "fetch-refused", detail: x.detail };
+      ((a = x.href), (l += 1));
+      continue;
+    }
+    if (d.status !== 200)
+      return {
+        ok: false,
+        reason: "fetch-refused",
+        detail: `status-${d.status}`,
+      };
+    let c = [],
+      u = 0;
+    try {
+      for await (let p of d.body) {
+        if (t.aborted)
+          return { ok: !1, reason: "fetch-refused", detail: "aborted" };
+        if (((u += p.length), u > r.maxEncodedBytes))
+          return { ok: !1, reason: "invalid-image", detail: "byte-limit" };
+        c.push(p);
+      }
+    } catch {
+      return { ok: false, reason: "fetch-refused", detail: "network-error" };
+    }
+    let f = dR(c),
+      m = Ur(f);
+    if (m !== "image/png" && m !== "image/jpeg" && m !== "image/gif")
+      return {
+        ok: false,
+        reason: "invalid-image",
+        detail: "unsupported-format",
+      };
+    let g = cR(d.contentType);
+    if (g !== "unknown" && g !== m)
+      return {
+        ok: false,
+        reason: "invalid-image",
+        detail: "content-type-spoof",
+      };
+    if (!Ts(f, m))
+      return { ok: false, reason: "invalid-image", detail: "invalid-bytes" };
+    if (o) {
+      let p = await xa(o, f, m, r);
+      return p.ok
+        ? { ok: true, bytes: p.bytes, mime: m }
+        : { ok: false, reason: "invalid-image", detail: "invalid-bytes" };
+    }
+    return { ok: true, bytes: ga(f), mime: m };
+  }
+}
+var er = 32;
+function Jm(e) {
+  return e.kind;
+}
+function Ke(e) {
+  return e.kind === "textValue"
+    ? false
+    : Jm(e) === "contentControl"
+      ? true
+      : e.kind === "generic" && e.localName === "sdt" && e.namespaceUri === y;
+}
+function ya(e) {
+  return e.kind === "textValue"
+    ? false
+    : Jm(e) === "contentControlContent"
+      ? true
+      : e.kind === "generic" &&
+        e.localName === "sdtContent" &&
+        e.namespaceUri === y;
+}
+function Ko(e) {
+  if (e.kind === "textValue" || !Ke(e)) return null;
+  for (let n of e.children)
+    if (n.kind !== "textValue" && ya(n)) return n.children;
+  return null;
+}
+function As(e) {
+  if (e.kind === "textValue" || !Ke(e)) return [];
+  let n = [];
+  for (let t of e.children)
+    if (t.kind !== "textValue" && ya(t)) for (let r of t.children) n.push(r);
+  return n;
+}
+function qD(e, n = 0, t = () => true) {
+  let r = [],
+    o = (i, a) => {
+      for (let l of i)
+        if (l.kind !== "textValue") {
+          if (l.kind === "paragraph" || l.kind === "table") {
+            t(l) && r.push(l);
+            continue;
+          }
+          Ke(l) && a < er && o(As(l), a + 1);
+        }
+    };
+  return (o(e, n), r);
+}
+function Ms(e, n, t) {
+  for (let r of e)
+    if (r.kind !== "textValue") {
+      if (r.kind === "paragraph" || r.kind === "table") {
+        t(r);
+        continue;
+      }
+      if (Ke(r) && n < er) {
+        let o = Ko(r);
+        o && Ms(o, n + 1, t);
+      }
+    }
+}
+function ha(e, n, t) {
+  for (let r of e)
+    if (r.kind !== "textValue") {
+      if (r.kind === "paragraph") t(r);
+      else if (r.kind === "table") {
+        for (let o of r.children)
+          if (o.kind === "tableRow")
+            for (let i of o.children)
+              i.kind === "tableCell" && ha(i.children, n, t);
+      } else if (Ke(r) && n < er) {
+        let o = Ko(r);
+        o && ha(o, n + 1, t);
+      }
+    }
+}
+function At(e, n, t) {
+  for (let r of e)
+    if (!(r.kind === "textValue" || r.kind === "paragraphProperties")) {
+      if (r.kind === "run") {
+        t(r);
+        continue;
+      }
+      if (r.kind === "hyperlink") {
+        n < er && At(r.children, n + 1, t);
+        continue;
+      }
+      if (Ke(r)) {
+        if (n < er) {
+          let o = Ko(r);
+          o && At(o, n + 1, t);
+        }
+        continue;
+      }
+      t(r);
+    }
+}
+var uR =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+  fR =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+  mR =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
+  pR = Object.freeze({
+    headers: new Map(),
+    footers: new Map(),
+    evenAndOddHeaders: false,
+    titlePage: false,
+  });
+function Ds(e) {
+  return e.kind === "textValue" ? [] : e.children;
+}
+function _s(e, n) {
+  return e.attributes.find((t) => t.localName === n)?.value;
+}
+function gR(e) {
+  return e === "default" || e === "first" || e === "even" ? e : null;
+}
+function Oa(e, n) {
+  for (let t of Ds(e))
+    if (t.kind !== "textValue" && t.localName === n) return t;
+}
+function tp(e) {
+  if (e.kind !== "textValue") {
+    if (e.kind === "body" || e.localName === "body") return e;
+    for (let n of e.children) {
+      let t = tp(n);
+      if (t) return t;
+    }
+  }
+}
+function xR(e) {
+  let n = [];
+  return (Ms(e.children, 0, (t) => n.push(t)), n);
+}
+function hR(e) {
+  let n =
+    e.children.find((t) => t.kind === "paragraphProperties") ?? Oa(e, "pPr");
+  if (!(!n || n.kind === "textValue")) return Oa(n, "sectPr");
+}
+function pt(e) {
+  let n = tp(e);
+  if (!n) return [];
+  let t = xR(n),
+    r = [],
+    o = 0;
+  for (let i = 0; i < t.length; i += 1) {
+    let a = t[i];
+    if (a.kind !== "paragraph") continue;
+    let l = hR(a);
+    l && (r.push(l), (o = i + 1));
+  }
+  if (o < t.length || r.length === 0) r.push(Oa(n, "sectPr") ?? null);
+  else {
+    let i = Oa(n, "sectPr");
+    i && r.push(i);
+  }
+  return r;
+}
+function yR(e, n) {
+  let t = new Map(),
+    r = new Map();
+  for (let o of Ds(e)) {
+    if (o.kind === "textValue") continue;
+    let i = o.localName === "headerReference",
+      a = o.localName === "footerReference";
+    if (!i && !a) continue;
+    let l = gR(_s(o, "type"));
+    if (!l) continue;
+    let s = n(_s(o, "id"), i ? uR : fR);
+    if (!s) continue;
+    let d = i ? t : r;
+    d.has(l) || d.set(l, s);
+  }
+  return { headers: t, footers: r, titlePage: Mo(e, "titlePg") };
+}
+function ep(e, n) {
+  let t = new Map();
+  if (e) for (let [r, o] of e) t.set(r, { ...o, inherited: true });
+  for (let [r, o] of n)
+    t.set(r, {
+      part: o.part,
+      partName: o.part.name,
+      rId: o.rId,
+      inherited: false,
+    });
+  return t;
+}
+function np(e) {
+  let n = new Map();
+  for (let [t, r] of e) n.set(t, r.part);
+  return n;
+}
+function Vr(e) {
+  let n = e.parts.get(e.mainDocumentPart);
+  if (!n) return [];
+  let t = e.relationships.get(e.mainDocumentPart) ?? [],
+    r = NR(e, t),
+    o = (s, d) => {
+      if (!s) return;
+      let c = t.find((m) => m.id === s && m.type === d);
+      if (!c) return;
+      let u = Ee(c);
+      if (u.mode !== "Internal" || !u.target.ok) return;
+      let f = e.parts.get(u.target.partName);
+      if (f) return { part: f, rId: s };
+    },
+    i = pt(n.root);
+  if (i.length === 0)
+    return [
+      Object.freeze({
+        headers: new Map(),
+        footers: new Map(),
+        evenAndOddHeaders: r,
+        titlePage: false,
+      }),
+    ];
+  let a = [],
+    l;
+  for (let s of i) {
+    let d = s
+        ? yR(s, o)
+        : { headers: new Map(), footers: new Map(), titlePage: false },
+      c = {
+        headers: ep(l?.headers, d.headers),
+        footers: ep(l?.footers, d.footers),
+        evenAndOddHeaders: r,
+        titlePage: d.titlePage,
+      };
+    (a.push(c), (l = c));
+  }
+  return a;
+}
+function OR(e) {
+  return Vr(e).map((n) => ({
+    headers: np(n.headers),
+    footers: np(n.footers),
+    evenAndOddHeaders: n.evenAndOddHeaders,
+    titlePage: n.titlePage,
+  }));
+}
+function nU(e) {
+  let n = OR(e);
+  return n[n.length - 1] ?? pR;
+}
+function NR(e, n) {
+  let t = n.find((i) => i.type === mR);
+  if (!t) return false;
+  let r = Ee(t);
+  if (r.mode !== "Internal" || !r.target.ok) return false;
+  let o = e.parts.get(r.target.partName);
+  if (!o) return false;
+  for (let i of Ds(o.root)) {
+    if (i.kind === "textValue" || i.localName !== "evenAndOddHeaders") continue;
+    let a = _s(i, "val");
+    return a !== "0" && a !== "false";
+  }
+  return false;
+}
+var kR = "\f";
+function rp(e) {
+  for (let n of e.attributes)
+    if (!(n.namespaceUri !== y || n.localName !== "type"))
+      switch (n.value) {
+        case "page":
+          return "page";
+        case "column":
+          return "column";
+        case "textWrapping":
+          return "line";
+        default:
+          return "other";
+      }
+  return "line";
+}
+function oU(e) {
+  return e.kind === "hardBreak" && rp(e) === "page";
+}
+function Na(e) {
+  return rp(e) === "page"
+    ? kR
+    : `
+`;
+}
+function op(e) {
+  return e === "line"
+    ? []
+    : [
+        {
+          kind: "genericExtension",
+          namespaceUri: y,
+          localName: "type",
+          prefix: "w",
+          value: "page",
+        },
+      ];
+}
+var bR = "\uFFFC",
+  PR = new Set(["begin", "separate", "end"]);
+function nr(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e))) {
+    for (let t of e.attributes)
+      if (
+        (t.namespaceUri === y && t.localName === n) ||
+        (t.namespaceUri === "" && t.localName === n)
+      )
+        return t.value;
+  }
+}
+function $e(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function tr(e) {
+  if (!$e(e, "fldChar")) return null;
+  let n = nr(e, "fldCharType");
+  return n === "begin" || n === "separate" || n === "end" ? n : null;
+}
+function sU(e) {
+  return e.kind === "fldChar";
+}
+function Us(e) {
+  return e.kind === "instrText";
+}
+function dU(e) {
+  return e.kind === "fldSimple";
+}
+function Mt(e, n) {
+  return tr(e) === n;
+}
+function $o(e) {
+  return (
+    e.kind === "instrText" ||
+    (e.kind === "generic" && ($e(e, "instrText") || $e(e, "delInstrText")))
+  );
+}
+function wR(e) {
+  return e.kind === "generic" && $e(e, "delInstrText");
+}
+function Wr(e) {
+  return e.kind === "fldSimple" || (e.kind === "generic" && $e(e, "fldSimple"));
+}
+function Ls(e) {
+  if (!$o(e) || e.kind === "textValue") return "";
+  let n = "",
+    t = [...(e.children ?? [])];
+  for (; t.length > 0;) {
+    let r = t.pop();
+    if (r.kind === "textValue") {
+      n = r.value + n;
+      continue;
+    }
+    for (let o of r.children ?? []) t.push(o);
+  }
+  return n;
+}
+function cU(e) {
+  if (Wr(e)) return nr(e, "instr");
+}
+function uU(e, n) {
+  if (e.kind === "textValue" || !("attributes" in e)) return;
+  let t = nr(e, n);
+  return t === void 0
+    ? e.attributes.some(
+        (o) =>
+          o.localName === n && (o.namespaceUri === y || o.namespaceUri === ""),
+      )
+      ? true
+      : void 0
+    : !(t === "0" || t === "false" || t === "off");
+}
+function Bs() {
+  return bR;
+}
+function lp(e) {
+  return tr(e) !== null ? true : $o(e);
+}
+function fU(e) {
+  if (e.kind === "textValue" || tr(e) === null) return false;
+  for (let n of e.children)
+    if (n.kind !== "textValue" && n.localName === "ffData" && $e(n, "ffData"))
+      return true;
+  return false;
+}
+var RR = 256,
+  sp = 64,
+  ER = 256,
+  IR = 2,
+  CR = 288,
+  TR = sp - 1;
+function ip(e) {
+  let n = nr(e, "val");
+  return n === void 0 ? true : !(n === "0" || n === "false" || n === "off");
+}
+function vR(e) {
+  let n = nr(e, "val");
+  if (n === void 0 || !/^\d{1,7}$/.test(n)) return null;
+  let t = Number.parseInt(n, 10);
+  return Math.min(CR, Math.max(IR, t));
+}
+function ap(e) {
+  let n = nr(e, "val");
+  if (n === void 0 || !/^-?\d{1,7}$/.test(n)) return null;
+  let t = Number.parseInt(n, 10);
+  return t >= 0 && t <= TR ? t : null;
+}
+function SR(e, n) {
+  let t,
+    r,
+    o = null,
+    i = false,
+    a = false;
+  if (e.kind !== "textValue")
+    for (let l of e.children) {
+      if (n.left-- <= 0) break;
+      l.kind !== "textValue" &&
+        ($e(l, "checked")
+          ? (t ??= ip(l))
+          : $e(l, "default")
+            ? (r ??= ip(l))
+            : $e(l, "size")
+              ? i || ((i = true), (o = vR(l)))
+              : $e(l, "sizeAuto") && (a = true));
+    }
+  return {
+    kind: "checkbox",
+    checked: t ?? r ?? false,
+    sizeHalfPoints: a ? null : o,
+  };
+}
+function AR(e, n) {
+  let t = null,
+    r = null,
+    o = false,
+    i = false,
+    a = [];
+  if (e.kind !== "textValue")
+    for (let s of e.children) {
+      if (n.left-- <= 0) break;
+      if (s.kind !== "textValue") {
+        if ($e(s, "result")) o || ((o = true), (t = ap(s)));
+        else if ($e(s, "default")) i || ((i = true), (r = ap(s)));
+        else if ($e(s, "listEntry")) {
+          if (a.length >= sp) continue;
+          let d = nr(s, "val");
+          d !== void 0 && a.push(d.slice(0, ER));
+        }
+      }
+    }
+  let l = (s) => s !== null && s >= 0 && s < a.length;
+  return {
+    kind: "dropdown",
+    entries: a,
+    selectedIndex: l(t) ? t : l(r) ? r : 0,
+  };
+}
+function mU(e) {
+  if (e.kind === "textValue" || tr(e) === null) return null;
+  let n = { left: RR };
+  for (let t of e.children) {
+    if (n.left-- <= 0) return null;
+    if (!(t.kind === "textValue" || !$e(t, "ffData"))) {
+      for (let r of t.children) {
+        if (n.left-- <= 0) return null;
+        if (r.kind !== "textValue") {
+          if ($e(r, "checkBox")) return SR(r, n);
+          if ($e(r, "ddList")) return AR(r, n);
+        }
+      }
+      return null;
+    }
+  }
+  return null;
+}
+var MR = /\s*\\\*\s*MERGEFORMAT\s*$/i,
+  dp = 4096;
+function _R(e, n = dp) {
+  if (e.length > n) return false;
+  let t = e.replace(/\s+/g, " ").trim().toUpperCase();
+  return t.length > n ? false : t.replace(MR, "").trim() === "FORMTEXT";
+}
+function DR(e, n) {
+  let t = n?.maxNesting ?? 4,
+    r = n?.maxInstructionChars ?? dp,
+    o = [],
+    i = [],
+    a = (d) => {
+      if (d.kind === "textValue") return [];
+      let c = [],
+        u = (f) => {
+          if (f.kind === "run") {
+            c.push(f.id);
+            return;
+          }
+          if (f.kind !== "textValue") for (let m of f.children ?? []) u(m);
+        };
+      for (let f of d.children ?? []) u(f);
+      return c;
+    },
+    l = (d, c = 0) => {
+      if (d.kind === "fldSimple" || (d.kind === "generic" && Wr(d))) {
+        o.push({
+          kind: "simple",
+          node: d,
+          runId: "",
+          removeNodeIds: [d.id],
+          formatRunIds: a(d),
+          addressing: "atomic",
+        });
+        return;
+      }
+      if (d.kind === "run") {
+        for (let u of d.children)
+          u.kind !== "runProperties" && i.push({ runId: d.id, node: u });
+        return;
+      }
+      if (Ke(d)) {
+        if (c < er) for (let u of As(d)) l(u, c + 1);
+        return;
+      }
+      if (d.kind !== "textValue" && (d.kind === "hyperlink" || Ne(d.kind)))
+        for (let u of d.children) l(u, c);
+    };
+  for (let d of e.children) l(d);
+  let s = 0;
+  for (; s < i.length;) {
+    let d = i[s];
+    if (!Mt(d.node, "begin")) {
+      s += 1;
+      continue;
+    }
+    let c = 0,
+      u = false,
+      f = 0,
+      m = "",
+      g = false,
+      p = 0,
+      x = "",
+      h = false,
+      N = false,
+      k = "instruction",
+      O = [],
+      b = [],
+      P = new Set(),
+      R,
+      w = -1;
+    for (let U = s; U < i.length; U += 1) {
+      let L = i[U],
+        T = L.node;
+      if (Mt(T, "begin")) {
+        ((c += 1), c > t && (u = true), O.push(T.id));
+        continue;
+      }
+      if ($o(T)) {
+        if (c === 1 && k === "instruction") {
+          let Qe = Ls(T);
+          wR(T)
+            ? ((p += Qe.length),
+              p > r ? ((h = true), (x = "")) : h || (x += Qe))
+            : ((N = true),
+              (f += Qe.length),
+              f > r ? ((g = true), (m = "")) : g || (m += Qe));
+        }
+        c >= 1 && O.push(T.id);
+        continue;
+      }
+      if (Mt(T, "separate")) {
+        (c === 1 && k === "instruction" && ((k = "result"), (R = L.runId)),
+          c >= 1 && O.push(T.id));
+        continue;
+      }
+      if (Mt(T, "end")) {
+        if ((c >= 1 && O.push(T.id), (c -= 1), c === 0)) {
+          ((k = "done"), (w = U));
+          break;
+        }
+        continue;
+      }
+      c >= 1 &&
+        (k === "result" && c === 1
+          ? T.kind === "text" ||
+            T.kind === "deletedText" ||
+            T.kind === "tab" ||
+            T.kind === "hardBreak" ||
+            T.kind === "textValue"
+            ? (O.push(T.id),
+              L.runId && !P.has(L.runId) && (P.add(L.runId), b.push(L.runId)))
+            : T.kind === "generic" && O.push(T.id)
+          : k === "instruction" && O.push(T.id));
+    }
+    if (w < 0 || u) break;
+    let I = N ? m : x,
+      S = b.length > 0 ? b : R ? [R] : d.runId ? [d.runId] : [];
+    (o.push({
+      kind: "complex",
+      node: d.node,
+      runId: d.runId,
+      removeNodeIds: [...new Set(O)],
+      formatRunIds: S,
+      addressing: _R(I, r) ? "editable-result" : "atomic",
+    }),
+      (s = w + 1));
+  }
+  return o;
+}
+function ka(e, n) {
+  return DR(e, n).filter((t) => t.addressing === "atomic");
+}
+function pU(e) {
+  return PR.has(e);
+}
+var cp = 256,
+  Hr = 512,
+  up = 512,
+  Fs = 4,
+  xU = 3;
+function Go(e) {
+  if (e.length > 256) return null;
+  let n = e.trim();
+  if (n.length === 0 || (n.split(/\s+/)[0] ?? "").toUpperCase() !== "TOC")
+    return null;
+  let r = /\\h\b/i.test(n),
+    o = /\\n\b/i.test(n),
+    i = 1,
+    a = 9,
+    l = /\\o\s*(?:"(\d{1,2})\s*-\s*(\d{1,2})"|(\d{1,2})\s*-\s*(\d{1,2}))/i.exec(
+      n,
+    );
+  if (l) {
+    let s = Number(l[1] ?? l[3]),
+      d = Number(l[2] ?? l[4]);
+    if (!Number.isInteger(s) || !Number.isInteger(d) || s < 1 || d > 9 || s > d)
+      return null;
+    ((i = s), (a = d));
+  }
+  return (
+    !r && /\\o\b/i.test(n) && (r = true),
+    {
+      keyword: "TOC",
+      hyperlink: r,
+      omitPageNumbers: o,
+      outlineStart: i,
+      outlineEnd: a,
+      raw: n,
+    }
+  );
+}
+function UR(e) {
+  if (e.root.kind === "body") return e.root;
+  for (let n of e.root.children) if (n.kind === "body") return n;
+  return null;
+}
+function LR(e) {
+  let n = UR(e);
+  if (!n) return [];
+  let t = [],
+    r = (o, i, a, l) => {
+      for (let s of o) {
+        if (s.kind === "paragraph") {
+          t.push({ paragraph: s, containerId: i, contentControlId: a });
+          continue;
+        }
+        if (!(!Ke(s) || l >= 4))
+          for (let d of s.children) ya(d) && r(d.children, d.id, s.id, l + 1);
+      }
+    };
+  return (r(n.children, n.id, void 0, 0), t);
+}
+var fp = new WeakMap();
+function BR(e) {
+  let n = fp.get(e);
+  if (n) return n;
+  let t = [],
+    r = (o) => {
+      if (o.kind !== "textValue") {
+        if (tr(o) !== null || Us(o)) {
+          t.push(o);
+          return;
+        }
+        for (let i of o.children) r(i);
+      }
+    };
+  for (let o of e.children) r(o);
+  return (fp.set(e, t), t);
+}
+var mp = new WeakMap();
+function FR(e) {
+  let n = [],
+    t = [];
+  for (let o of LR(e)) {
+    for (let i of BR(o.paragraph)) {
+      let a = tr(i);
+      if (a === "begin") {
+        n.length >= 4
+          ? n.push(null)
+          : n.push({
+              beginNodeId: i.id,
+              beginParagraphId: o.paragraph.id,
+              containerId: o.containerId,
+              contentControlId: o.contentControlId,
+              instructionChunks: [],
+              resultParagraphIds: [],
+              instructionLength: 0,
+              separated: false,
+              invalid: false,
+            });
+        continue;
+      }
+      let l = n[n.length - 1];
+      if (Us(i)) {
+        if (l && !l.separated) {
+          let d = Ls(i);
+          ((l.instructionLength += d.length),
+            l.instructionLength > 256
+              ? (l.invalid = true)
+              : l.instructionChunks.push(d));
+        }
+        continue;
+      }
+      if (a === "separate") {
+        l && (l.separated = true);
+        continue;
+      }
+      if (a !== "end" || n.length === 0) continue;
+      let s = n.pop();
+      if (
+        s &&
+        s.separated &&
+        !s.invalid &&
+        s.containerId === o.containerId &&
+        s.beginParagraphId !== o.paragraph.id
+      ) {
+        let d = Go(s.instructionChunks.join(""));
+        d &&
+          t.push({
+            beginNodeId: s.beginNodeId,
+            beginParagraphId: s.beginParagraphId,
+            endParagraphId: o.paragraph.id,
+            resultParagraphIds: s.resultParagraphIds,
+            containerId: s.containerId,
+            ...(s.contentControlId
+              ? { contentControlId: s.contentControlId }
+              : {}),
+            instruction: d,
+          });
+      }
+    }
+    for (let i of n)
+      i &&
+        i.separated &&
+        i.beginParagraphId !== o.paragraph.id &&
+        i.containerId === o.containerId &&
+        i.resultParagraphIds.push(o.paragraph.id);
+  }
+  let r = new Map();
+  for (let o of t)
+    o.contentControlId &&
+      r.set(o.contentControlId, (r.get(o.contentControlId) ?? 0) + 1);
+  return t.map((o) => ({
+    ...o,
+    id:
+      o.contentControlId && r.get(o.contentControlId) === 1
+        ? o.contentControlId
+        : o.beginNodeId,
+  }));
+}
+function jr(e) {
+  let n = mp.get(e);
+  if (n) return n;
+  let t = FR(e);
+  return (mp.set(e, t), t);
+}
+function Kr(e, n) {
+  return e.find((t) => t.id === n) ?? null;
+}
+var VR = 256,
+  pp = 1e4,
+  WR = "_GoBack";
+function HR(e, n) {
+  if (e.kind !== "textValue") {
+    for (let t of e.attributes)
+      if (t.namespaceUri === y && t.localName === n) return t.value;
+  }
+}
+function gp(e) {
+  let n = new Map(),
+    t = (i) => {
+      if (i.kind === "textValue") return i.value.length;
+      if (i.kind === "tab" || i.kind === "hardBreak") return 1;
+      if (i.kind === "runProperties" || i.kind === "generic") return 0;
+      let a = 0;
+      for (let l of i.children) a += t(l);
+      return a;
+    },
+    r = (i) => {
+      if (i.kind === "textValue") return;
+      let a = 0,
+        l = (s) => {
+          if (s.kind === "bookmarkStart") {
+            let d = HR(s, "name");
+            d !== void 0 &&
+              d.length > 0 &&
+              d.length <= VR &&
+              d !== WR &&
+              !n.has(d) &&
+              n.size < pp &&
+              n.set(d, { name: d, paragraphId: i.id, offset: a });
+            return;
+          }
+          if (s.kind === "run") {
+            a += t(s);
+            return;
+          }
+          if (s.kind === "hyperlink") for (let d of s.children) l(d);
+        };
+      for (let s of i.children) l(s);
+    },
+    o = (i) => {
+      if (!(i.kind === "textValue" || n.size >= pp)) {
+        if (i.kind === "paragraph") {
+          r(i);
+          return;
+        }
+        for (let a of i.children) o(a);
+      }
+    };
+  return (o(e.root), n);
+}
+var jR = 240;
+function Op(e) {
+  return Number.isFinite(e) ? Math.max(0, Math.min(8, Math.trunc(e))) * jR : 0;
+}
+function Pn(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: "w",
+    value: n,
+  };
+}
+function KR(e, n) {
+  return {
+    id: e(),
+    kind: "text",
+    namespaceUri: y,
+    localName: "t",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: /^\s|\s$/.test(n)
+      ? [
+          {
+            kind: "xmlSpace",
+            namespaceUri: J,
+            localName: "space",
+            prefix: "xml",
+            value: "preserve",
+          },
+        ]
+      : [],
+    children: [{ id: e(), kind: "textValue", value: n }],
+  };
+}
+function xp(e, n) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [KR(e, n)],
+  };
+}
+function $R(e) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [
+      {
+        id: e(),
+        kind: "generic",
+        namespaceUri: y,
+        localName: "ptab",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [
+          Pn("alignment", "right"),
+          Pn("relativeTo", "margin"),
+          Pn("leader", "dot"),
+        ],
+        children: [],
+      },
+    ],
+  };
+}
+function Vs(e, n) {
+  return {
+    id: e(),
+    kind: "fldChar",
+    namespaceUri: y,
+    localName: "fldChar",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [Pn("fldCharType", n)],
+    children: [],
+  };
+}
+function GR(e, n) {
+  return {
+    id: e(),
+    kind: "instrText",
+    namespaceUri: y,
+    localName: "instrText",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [
+      {
+        kind: "xmlSpace",
+        namespaceUri: J,
+        localName: "space",
+        prefix: "xml",
+        value: "preserve",
+      },
+    ],
+    children: [{ id: e(), kind: "textValue", value: ` ${n} ` }],
+  };
+}
+function hp(e, n) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [...n],
+  };
+}
+function yp(e, n) {
+  return {
+    id: e(),
+    kind: "paragraph",
+    namespaceUri: y,
+    localName: "p",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [...n],
+  };
+}
+function Np(e, n) {
+  return {
+    id: e(),
+    kind: "generic",
+    namespaceUri: y,
+    localName: "ind",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [Pn("left", String(n))],
+    children: [],
+  };
+}
+function zR(e) {
+  return e.kind === "textValue"
+    ? false
+    : e.children.some((n) => n.kind !== "textValue" && n.localName === "ind");
+}
+function XR(e, n) {
+  if (e.kind === "textValue") return e;
+  let t = [...e.children],
+    r = t.findIndex((o) => o.kind !== "textValue" && o.localName === "pStyle");
+  return (r >= 0 ? t.splice(r + 1, 0, n) : t.push(n), { ...e, children: t });
+}
+function YR(e, n, t) {
+  if (zR(e)) return e;
+  let r = Op(t);
+  return r === 0 ? e : XR(e, Np(n, r));
+}
+function qR(e, n, t) {
+  let r = [
+      {
+        id: e(),
+        kind: "generic",
+        namespaceUri: y,
+        localName: "pStyle",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [Pn("val", n)],
+        children: [],
+      },
+    ],
+    o = Op(t);
+  return (
+    o > 0 && r.push(Np(e, o)),
+    {
+      id: e(),
+      kind: "paragraphProperties",
+      namespaceUri: y,
+      localName: "pPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: r,
+    }
+  );
+}
+function kp(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => kp(t, n)) };
+}
+function Ws(e, n, t, r) {
+  let o = `TOC${Math.min(n.level + 1, 9)}`,
+    i = [xp(e, n.text)];
+  t.omitPageNumbers || (i.push($R(e)), i.push(xp(e, n.pageNumberText)));
+  let a = t.hyperlink
+      ? [
+          {
+            id: e(),
+            kind: "hyperlink",
+            namespaceUri: y,
+            localName: "hyperlink",
+            prefix: "w",
+            namespaceBindings: [],
+            attributes: [Pn("anchor", n.bookmarkName)],
+            children: i,
+          },
+        ]
+      : i,
+    l = r ? YR(kp(r, e), e, n.level) : qR(e, o, n.level);
+  return {
+    id: e(),
+    kind: "paragraph",
+    namespaceUri: y,
+    localName: "p",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [l, ...a],
+  };
+}
+function bp(e, n, t, r) {
+  let o = yp(e, [hp(e, [Vs(e, "begin"), GR(e, t.raw), Vs(e, "separate")])]),
+    i = yp(e, [hp(e, [Vs(e, "end")])]),
+    a = {
+      id: e(),
+      kind: "contentControlProperties",
+      namespaceUri: y,
+      localName: "sdtPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [
+        {
+          id: e(),
+          kind: "generic",
+          namespaceUri: y,
+          localName: "alias",
+          prefix: "w",
+          namespaceBindings: [],
+          attributes: [Pn("val", r)],
+          children: [],
+        },
+        {
+          id: e(),
+          kind: "generic",
+          namespaceUri: y,
+          localName: "docPartObj",
+          prefix: "w",
+          namespaceBindings: [],
+          attributes: [],
+          children: [
+            {
+              id: e(),
+              kind: "generic",
+              namespaceUri: y,
+              localName: "docPartGallery",
+              prefix: "w",
+              namespaceBindings: [],
+              attributes: [Pn("val", "Table of Contents")],
+              children: [],
+            },
+            {
+              id: e(),
+              kind: "generic",
+              namespaceUri: y,
+              localName: "docPartUnique",
+              prefix: "w",
+              namespaceBindings: [],
+              attributes: [],
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+    l = {
+      id: e(),
+      kind: "contentControlContent",
+      namespaceUri: y,
+      localName: "sdtContent",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [o, ...n.map((s) => Ws(e, s, t)), i],
+    };
+  return {
+    id: e(),
+    kind: "contentControl",
+    namespaceUri: y,
+    localName: "sdt",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [a, l],
+  };
+}
+function ZR(e) {
+  return (
+    e.length > 0 && e.length <= 40 && !/[\u0000-\u001F\u007F-\u009F]/.test(e)
+  );
+}
+function QR(e) {
+  return e
+    .replace(/[\t\n\r]+/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+function IU(e, n, t, r, o) {
+  let i = gp(e),
+    a = new Map();
+  for (let [u, f] of i)
+    u.startsWith("_Toc") && !a.has(f.paragraphId) && a.set(f.paragraphId, u);
+  let l = [],
+    s = [],
+    d = 0,
+    c = 16e8 + (i.size % 1e4);
+  for (let u of n) {
+    if (l.length >= 512) break;
+    if (o.has(u.blockId)) continue;
+    let f = u.level + 1;
+    if (f < t.outlineStart || f > t.outlineEnd) continue;
+    let m = a.get(u.blockId);
+    if (!m && t.hyperlink) {
+      if (d >= 512 || ((m = `_Toc${c}`), (c += 1), !ZR(m))) continue;
+      (s.push({ paragraphId: u.blockId, name: m }),
+        (d += 1),
+        a.set(u.blockId, m));
+    }
+    (m ||
+      (m = `_Toc${u.blockId.replace(/[^A-Za-z0-9]/g, "").slice(-12) || "0"}`),
+      l.push({
+        level: u.level,
+        text: QR(u.text),
+        headingParagraphId: u.blockId,
+        bookmarkName: m,
+        pageNumberText: r.get(u.blockId) ?? "1",
+      }));
+  }
+  return { entries: l, bookmarksToCreate: s };
+}
+function Pp(e, n, t) {
+  return {
+    start: {
+      id: e(),
+      kind: "bookmarkStart",
+      namespaceUri: y,
+      localName: "bookmarkStart",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [Pn("id", t), Pn("name", n)],
+      children: [],
+    },
+    end: {
+      id: e(),
+      kind: "bookmarkEnd",
+      namespaceUri: y,
+      localName: "bookmarkEnd",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [Pn("id", t)],
+      children: [],
+    },
+  };
+}
+function Hs(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function zo(e, n) {
+  for (let t of e.attributes)
+    if (t.namespaceUri === y && t.localName === n) return t.value;
+  return null;
+}
+function js(e) {
+  if (e.kind === "textValue") return e.value;
+  if (e.kind === "tab") return "	";
+  if (e.kind === "hardBreak") return Na(e);
+  if (
+    e.kind === "generic" ||
+    e.kind === "runProperties" ||
+    e.kind === "paragraphProperties"
+  )
+    return "";
+  if (e.kind === "hyperlink" || Ke(e)) {
+    let t = "",
+      r = e.kind === "hyperlink" ? e.children : (Ko(e) ?? []);
+    for (let o of r) t += js(o);
+    return t;
+  }
+  let n = "";
+  for (let t of e.children) n += js(t);
+  return n;
+}
+function JR(e, n) {
+  let t = [],
+    r = "",
+    o = (i) => {
+      i.kind === "run" && (t.push(i.id), (r += js(i)));
+    };
+  return (
+    At(e.children, 0, o),
+    { nodeId: e.id, ordinal: n, text: r, runIds: t }
+  );
+}
+function wp(e) {
+  if (e.kind === "body") return e;
+  for (let n of e.children) {
+    if (n.kind === "textValue") continue;
+    let t = wp(n);
+    if (t) return t;
+  }
+  return null;
+}
+function eE(e) {
+  let n = wp(e.root);
+  if (!n) return null;
+  let t = [];
+  return (
+    ha(n.children, 0, (r) => {
+      t.push(JR(r, t.length));
+    }),
+    { partName: e.name, rootId: n.id, paragraphs: t }
+  );
+}
+function nE(e) {
+  let n = new Map();
+  if (!e) return n;
+  let t = (r) => {
+    if (r.kind !== "textValue") {
+      if (Hs(r, "style")) {
+        let o = zo(r, "styleId");
+        if (o !== null) {
+          let i = null,
+            a = null;
+          for (let l of r.children)
+            (Hs(l, "name") && (i = zo(l, "val")),
+              Hs(l, "basedOn") && (a = zo(l, "val")));
+          n.has(o) ||
+            n.set(o, {
+              styleId: o,
+              type: zo(r, "type") ?? "",
+              nodeId: r.id,
+              name: i,
+              basedOn: a,
+              isDefault: (zo(r, "default") ?? "") === "1",
+            });
+        }
+      }
+      for (let o of r.children) t(o);
+    }
+  };
+  return (t(e.root), n);
+}
+var tE = /\/styles\.xml$/i;
+function rE(e) {
+  return [...e.parts.values()].find((n) => tE.test(n.name));
+}
+function AU(e, n) {
+  let t = new Map(),
+    r = new Map(),
+    o = e.parts.get(e.mainDocumentPart),
+    i = [
+      ...(o ? [o] : []),
+      ...[...e.parts.values()].filter((l) => l.name !== e.mainDocumentPart),
+    ];
+  for (let l of i) {
+    let s = eE(l);
+    if (s) {
+      t.set(l.name, s);
+      for (let d of s.paragraphs) r.set(d.nodeId, d);
+    }
+  }
+  let a = rE(e);
+  return Object.freeze({
+    revision: n,
+    stories: t,
+    paragraphs: r,
+    relationships: e.relationships,
+    styles: nE(a),
+  });
+}
+var oE = /^[0-9A-Fa-f]{8}$/;
+function Yn(e) {
+  if (!oE.test(e)) return false;
+  let n = Number.parseInt(e, 16);
+  return n !== 0 && n < 2147483648;
+}
+function ba(e) {
+  if (e.kind === "textValue") return null;
+  for (let n of e.attributes)
+    if (n.namespaceUri === W && n.localName === "paraId") return n.value;
+  return null;
+}
+function Xo(e) {
+  let n = 2166136261;
+  for (let t = 0; t < e.length; t += 1)
+    ((n ^= e.charCodeAt(t)), (n = Math.imul(n, 16777619)));
+  return n >>> 0;
+}
+function Rp(e) {
+  return e.toString(16).toUpperCase().padStart(8, "0");
+}
+function mn(e, n) {
+  let t = 0;
+  for (let r = 0; r < 64; r += 1) {
+    t = Xo(r === 0 ? e : `${e} ${r}`) & 2147483647;
+    let o = Rp(t);
+    if (t !== 0 && !n.has(o)) return o;
+  }
+  for (;;) {
+    t = (t % 2147483647) + 1;
+    let r = Rp(t);
+    if (!n.has(r)) return r;
+  }
+}
+var Ep = new WeakMap();
+function Mn(e) {
+  let n = Ep.get(e);
+  if (n) return n;
+  let t = new Set(),
+    r = (o) => {
+      if (o.kind === "textValue") return;
+      let i = ba(o);
+      i !== null && Yn(i) && t.add(i.toUpperCase());
+      for (let a of o.children) r(a);
+    };
+  return (r(e), Ep.set(e, t), t);
+}
+function Yo(e) {
+  for (let n of e.namespaceBindings)
+    if (n.namespaceUri === W && n.prefix !== "") return n.prefix;
+  return null;
+}
+function rr(e, n) {
+  let t = e.root.namespaceBindings.filter(
+    (i) => i.namespaceUri === W && i.prefix !== "",
+  );
+  if (t.length === 0) return null;
+  let r = [],
+    o = n;
+  for (; o && o.id !== e.root.id;) (r.push(o), (o = je(e, o.id)));
+  for (let i of t)
+    if (
+      !r.some((l) =>
+        l.namespaceBindings.some(
+          (s) => s.prefix === i.prefix && s.namespaceUri !== W,
+        ),
+      )
+    )
+      return i.prefix;
+  return null;
+}
+function gt(e, n) {
+  return Object.freeze([
+    Object.freeze({
+      kind: "genericExtension",
+      namespaceUri: W,
+      localName: "paraId",
+      prefix: e,
+      value: n,
+    }),
+    Object.freeze({
+      kind: "genericExtension",
+      namespaceUri: W,
+      localName: "textId",
+      prefix: e,
+      value: n,
+    }),
+  ]);
+}
+function iE(e) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === "p";
+}
+function aE(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        iE(r) && n.push(r);
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e), n);
+}
+function lE(e) {
+  return (
+    e.namespaceUri === W &&
+    (e.localName === "paraId" || e.localName === "textId")
+  );
+}
+function sE(e) {
+  let n = new Set(),
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        for (let o of r.namespaceBindings)
+          o.namespaceUri !== W && n.add(o.prefix);
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e), n);
+}
+function dE(e) {
+  if (!e.has("w14")) return "w14";
+  for (let n = 97; n <= 122; n += 1) {
+    let t = `w14${String.fromCharCode(n)}`;
+    if (!e.has(t)) return t;
+  }
+  for (let n = 2; ; n += 1) {
+    let t = `w14x${n}`;
+    if (!e.has(t)) return t;
+  }
+}
+function Ip(e) {
+  return (
+    Object.freeze(e.attributes),
+    Object.freeze(e.namespaceBindings),
+    Object.freeze(e.children),
+    Object.freeze(e)
+  );
+}
+function Ks(e) {
+  let n = aE(e.root),
+    t = new Set(),
+    r = [],
+    o = false;
+  for (let m of n) {
+    let g = ba(m),
+      p = g !== null && Yn(g) ? g.toUpperCase() : null;
+    p !== null && !t.has(p) ? (t.add(p), (o = true)) : r.push(m);
+  }
+  let i = Yo(e.root);
+  if (r.length === 0 && !(o && i === null)) return e;
+  let a = sE(e.root),
+    l = i !== null && !a.has(i) ? i : dE(a),
+    s = !e.root.namespaceBindings.some(
+      (m) => m.prefix === l && m.namespaceUri === W,
+    ),
+    d = new Map();
+  for (let m of r) {
+    let g = mn(m.id, t);
+    (t.add(g),
+      d.set(m.id, [...gt(l, g), ...m.attributes.filter((p) => !lE(p))]));
+  }
+  let c = (m) => {
+      if (m.kind === "textValue") return m;
+      let g = null;
+      m.children.forEach((x, h) => {
+        let N = c(x);
+        N !== x && ((g ??= [...m.children]), (g[h] = N));
+      });
+      let p = d.get(m.id);
+      return !p && !g
+        ? m
+        : Ip({
+            ...m,
+            ...(g ? { children: g } : {}),
+            ...(p ? { attributes: p } : {}),
+          });
+    },
+    u = c(e.root);
+  if (s) {
+    let m = [
+        ...u.namespaceBindings,
+        Object.freeze({ prefix: l, namespaceUri: W }),
+      ],
+      g = u.attributes.find(
+        (x) => x.namespaceUri === Ie && x.localName === "Ignorable",
+      ),
+      p = u.attributes;
+    (g &&
+      !g.value.trim().split(/\s+/).includes(l) &&
+      (p = u.attributes.map((x) =>
+        x === g
+          ? Object.freeze({
+              ...x,
+              value: [g.value.trim(), l].filter(Boolean).join(" "),
+            })
+          : x,
+      )),
+      (u = Ip({ ...u, namespaceBindings: m, attributes: p })));
+  }
+  let f = Object.freeze({ ...e, root: u });
+  return _o(f).ok ? f : e;
+}
+var cE = "http://schemas.openxmlformats.org/package/2006/relationships",
+  uE = "application/vnd.openxmlformats-package.relationships+xml",
+  fE = 2048;
+function mE(e) {
+  if (typeof e != "string" || e.length === 0 || e.length > fE || !Z(e))
+    return null;
+  let n = lt(e);
+  return !n.ok || n.href.length === 0 ? null : kr(n.href).ok ? n.href : null;
+}
+function Cp(e) {
+  let n = e.lastIndexOf("/");
+  return `${e.slice(0, n)}/_rels/${e.slice(n + 1)}.rels`;
+}
+function pE(e) {
+  let n = 0;
+  for (let t of e.relationships.values())
+    for (let r of t) {
+      let o = /^rId(\d{1,9})$/.exec(r.id);
+      o && (n = Math.max(n, Number(o[1])));
+    }
+  for (let t of e.externalTargets) {
+    let r = /^rId(\d{1,9})$/.exec(t.id);
+    r && (n = Math.max(n, Number(r[1])));
+  }
+  return `rId${n + 1}`;
+}
+function Tp(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => Tp(t, n)) };
+}
+function Pa(e, n, t = e.mainDocumentPart) {
+  let r = mE(n);
+  if (r === null) return null;
+  let o = t;
+  if (
+    typeof o != "string" ||
+    o.length === 0 ||
+    (o !== e.mainDocumentPart && !e.parts.has(o))
+  )
+    return null;
+  let i = e.externalTargets.find(
+    (g) => g.ownerPart === o && g.type === en && g.rawTarget === r,
+  );
+  if (i) return { pkg: e, relationshipId: i.id };
+  let a = Cp(o),
+    l = e.parts.get(a),
+    s = pE(e),
+    d = re(
+      `<Relationships xmlns="${cE}"><Relationship Id="${Je(s, "relationship id")}" Type="${en}" Target="${Je(r, "relationship target")}" TargetMode="External"/></Relationships>`,
+      { name: a, contentType: uE },
+    );
+  if (!d.ok) return null;
+  let c = [
+    ...e.externalTargets,
+    { ownerPart: o, id: s, type: en, rawTarget: r, sinkSafe: true },
+  ];
+  if (!l)
+    return {
+      pkg: Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [a, d.part]]),
+        externalTargets: c,
+      }),
+      relationshipId: s,
+    };
+  let u = A(l),
+    f = d.part.root.children[0];
+  if (!f) return null;
+  let m = _(l, l.root.id, l.root.children.length, [Tp(f, u)]);
+  return m.ok
+    ? {
+        pkg: Object.freeze({
+          ...e,
+          parts: new Map([...e.parts, [a, m.part]]),
+          externalTargets: c,
+        }),
+        relationshipId: s,
+      }
+    : null;
+}
+function KU(e, n, t) {
+  for (let o of e.externalTargets)
+    if (o.ownerPart === n && o.id === t)
+      return { target: o.rawTarget, external: true, sinkSafe: o.sinkSafe };
+  let r = (e.relationships.get(n) ?? []).find((o) => o.id === t);
+  return r ? { target: r.rawTarget, external: false } : null;
+}
+function gE(e) {
+  if (!(e.kind === "textValue" || !("attributes" in e)))
+    return e.attributes.find(
+      (n) => n.localName === "Id" && n.namespaceUri === "",
+    )?.value;
+}
+function xE(e) {
+  if (
+    !(e.kind === "textValue" || !("attributes" in e)) &&
+    e.kind === "generic" &&
+    !(e.namespaceUri !== B || e.localName !== "hlinkClick")
+  ) {
+    for (let n of e.attributes)
+      if (n.localName === "id" && n.namespaceUri === An) return n.value;
+  }
+}
+function vp(e, n) {
+  if ((n(e), e.kind !== "textValue")) for (let t of e.children) vp(t, n);
+}
+function hE(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return false;
+  let o = false;
+  return (
+    vp(r.root, (i) => {
+      if (!o) {
+        if (Uf(i)) {
+          os(i) === t && (o = true);
+          return;
+        }
+        xE(i) === t && (o = true);
+      }
+    }),
+    o
+  );
+}
+function yE(e, n, t) {
+  if (
+    !e.externalTargets.find(
+      (s) => s.ownerPart === n && s.id === t && s.type === en,
+    )
+  )
+    return e;
+  let o = Cp(n),
+    i = e.parts.get(o),
+    a = e.parts;
+  if (i) {
+    let s = i.root.children.find(
+      (d) =>
+        d.kind !== "textValue" && d.localName === "Relationship" && gE(d) === t,
+    );
+    if (s) {
+      let d = ie(i, s.id);
+      if (!d.ok) return null;
+      a = new Map([...e.parts, [o, d.part]]);
+    }
+  }
+  let l = Object.freeze(
+    e.externalTargets.filter((s) => !(s.ownerPart === n && s.id === t)),
+  );
+  return Object.freeze({ ...e, parts: a, externalTargets: l });
+}
+function $s(e, n, t) {
+  return t === null || hE(e, n, t) ? e : yE(e, n, t);
+}
+var zs = y,
+  wa = "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+  OE =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+  NE =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+  Ra =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
+  kE =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml",
+  bE =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml",
+  Sp =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
+  Gs = "/word/settings.xml",
+  Ap = 1e4,
+  PE = 31680,
+  Dp = 4096,
+  wE = new Set([
+    "createHeaderFooter",
+    "deleteHeaderFooter",
+    "linkToPrevious",
+    "unlinkFromPrevious",
+    "setSectionFurnitureOptions",
+  ]);
+function Xs(e) {
+  return wE.has(e.op);
+}
+function X(e, n) {
+  return n ? { ok: false, reason: e, detail: n } : { ok: false, reason: e };
+}
+function RE(e) {
+  return e === "default" || e === "first" || e === "even";
+}
+function EE(e) {
+  return e === "header" || e === "footer";
+}
+function Up(e) {
+  return typeof e == "number" && Number.isInteger(e) && e >= 0;
+}
+function Ia(e) {
+  return !Up(e.sectionIndex) || e.sectionIndex >= Dp
+    ? X("invalidArgs", "sectionIndex")
+    : EE(e.kind)
+      ? RE(e.variant)
+        ? null
+        : X("invalidArgs", "variant")
+      : X("invalidArgs", "kind");
+}
+function Lp(e, n) {
+  if (!Xs(n)) return X("invalidArgs", "unknown-op");
+  switch (n.op) {
+    case "createHeaderFooter":
+      return IE(e, n);
+    case "deleteHeaderFooter":
+      return CE(e, n);
+    case "linkToPrevious":
+      return TE(e, n);
+    case "unlinkFromPrevious":
+      return vE(e, n);
+    case "setSectionFurnitureOptions":
+      return SE(e, n);
+  }
+}
+function IE(e, n) {
+  let t = Ia(n);
+  if (t) return t;
+  let r = Vr(e);
+  if (n.sectionIndex >= r.length) return X("invalidArgs", "sectionIndex");
+  let o = r[n.sectionIndex];
+  if ((n.kind === "header" ? o.headers : o.footers).has(n.variant))
+    return X("invalidArgs", "slot-occupied");
+  let a = Bp(e, n.kind);
+  if (!a) return X("tree-invariant", "part-allocation");
+  let l = AE(a.partName, a.contentType, n.kind);
+  if (!l) return X("tree-invariant", "empty-part");
+  let s = D(e, l),
+    d = Jt(s, a.rId, a.relType, a.target);
+  if (!d) return X("tree-invariant", "relationship");
+  s = d;
+  let c = mt(s, a.partName, a.contentType);
+  if (!c) return X("tree-invariant", "content-type");
+  s = c;
+  let u = Vp(s, n.sectionIndex, n.kind, n.variant, a.rId);
+  if (!u) return X("tree-invariant", "sectPr-reference");
+  if (((s = u), n.titlePage === true)) {
+    let f = jp(s, n.sectionIndex, { titlePage: true });
+    if (!f) return X("tree-invariant", "sectPr-options");
+    s = f;
+  }
+  if (n.evenAndOddHeaders === true) {
+    let f = Kp(s, true);
+    if (!f) return X("tree-invariant", "settings");
+    s = f;
+  }
+  return {
+    ok: true,
+    package: s,
+    impact: "global",
+    createdRId: a.rId,
+    createdPartName: a.partName,
+  };
+}
+function CE(e, n) {
+  let t = Ia(n);
+  if (t) return t;
+  let r = Vr(e);
+  if (n.sectionIndex >= r.length) return X("invalidArgs", "sectionIndex");
+  let o = r[n.sectionIndex],
+    a = (n.kind === "header" ? o.headers : o.footers).get(n.variant);
+  if (!a || a.inherited) return X("invalidArgs", "not-declared");
+  let l = Wp(e, n.sectionIndex, n.kind, n.variant);
+  if (!l) return X("tree-invariant", "sectPr-reference");
+  if ($p(l, a.rId) > 0) return { ok: true, package: l, impact: "global" };
+  let d = Gp(l, a.rId, a.partName);
+  return d
+    ? { ok: true, package: d, impact: "global" }
+    : X("tree-invariant", "gc");
+}
+function TE(e, n) {
+  let t = Ia(n);
+  if (t) return t;
+  if (n.sectionIndex === 0) return X("invalidArgs", "first-section");
+  let r = Vr(e);
+  if (n.sectionIndex >= r.length) return X("invalidArgs", "sectionIndex");
+  let o = r[n.sectionIndex],
+    a = (n.kind === "header" ? o.headers : o.footers).get(n.variant);
+  if (!a || a.inherited) return X("invalidArgs", "not-declared");
+  let l = Wp(e, n.sectionIndex, n.kind, n.variant);
+  if (!l) return X("tree-invariant", "sectPr-reference");
+  if ($p(l, a.rId) > 0) return { ok: true, package: l, impact: "global" };
+  let d = Gp(l, a.rId, a.partName);
+  return d
+    ? { ok: true, package: d, impact: "global" }
+    : X("tree-invariant", "gc");
+}
+function vE(e, n) {
+  let t = Ia(n);
+  if (t) return t;
+  let r = Vr(e);
+  if (n.sectionIndex >= r.length) return X("invalidArgs", "sectionIndex");
+  let o = r[n.sectionIndex],
+    a = (n.kind === "header" ? o.headers : o.footers).get(n.variant);
+  if (!a) return X("invalidArgs", "nothing-to-unlink");
+  if (!a.inherited) return X("invalidArgs", "already-declared");
+  let l = e.parts.get(a.partName);
+  if (!l) return X("tree-invariant", "missing-source");
+  let s = Bp(e, n.kind);
+  if (!s) return X("tree-invariant", "part-allocation");
+  let d = ME(l, s.partName, s.contentType);
+  if (!d) return X("tree-invariant", "clone");
+  let c = D(e, d),
+    u = Vm(c, a.partName, s.partName);
+  if (!u) return X("tree-invariant", "owned-relationships");
+  c = u;
+  let f = Jt(c, s.rId, s.relType, s.target);
+  if (!f) return X("tree-invariant", "relationship");
+  c = f;
+  let m = mt(c, s.partName, s.contentType);
+  if (!m) return X("tree-invariant", "content-type");
+  c = m;
+  let g = Vp(c, n.sectionIndex, n.kind, n.variant, s.rId);
+  return g
+    ? {
+        ok: true,
+        package: g,
+        impact: "global",
+        createdRId: s.rId,
+        createdPartName: s.partName,
+      }
+    : X("tree-invariant", "sectPr-reference");
+}
+function SE(e, n) {
+  let t = n.titlePage !== void 0,
+    r = n.evenAndOddHeaders !== void 0,
+    o = n.headerDistanceTwips !== void 0,
+    i = n.footerDistanceTwips !== void 0;
+  if (!t && !r && !o && !i) return X("invalidArgs", "empty-options");
+  for (let s of [n.headerDistanceTwips, n.footerDistanceTwips])
+    if (s !== void 0 && (!Number.isInteger(s) || s < 0 || s > PE))
+      return X("invalidArgs", "distance");
+  let a = t || o || i;
+  if (
+    a &&
+    (n.sectionIndex === void 0 || !Up(n.sectionIndex) || n.sectionIndex >= Dp)
+  )
+    return X("invalidArgs", "sectionIndex");
+  let l = e;
+  if (a) {
+    let s = jp(l, n.sectionIndex, {
+      titlePage: n.titlePage,
+      headerDistanceTwips: n.headerDistanceTwips,
+      footerDistanceTwips: n.footerDistanceTwips,
+    });
+    if (!s) return X("tree-invariant", "sectPr-options");
+    l = s;
+  }
+  if (r) {
+    let s = Kp(l, n.evenAndOddHeaders);
+    if (!s) return X("tree-invariant", "settings");
+    l = s;
+  }
+  return { ok: true, package: l, impact: "global" };
+}
+function Bp(e, n) {
+  let t = n === "header" ? "header" : "footer",
+    r = n === "header" ? kE : bE,
+    o = n === "header" ? OE : NE,
+    i = 1;
+  for (; i <= Ap; i += 1) {
+    let l = `/word/${t}${i}.xml`;
+    if (!e.parts.has(l) && !e.partBytes.has(l)) break;
+  }
+  if (i > Ap) return null;
+  let a = `${t}${i}.xml`;
+  return /^(header|footer)\d{1,5}\.xml$/.test(a)
+    ? {
+        partName: `/word/${t}${i}.xml`,
+        target: a,
+        rId: ft(e),
+        relType: o,
+        contentType: r,
+      }
+    : null;
+}
+function AE(e, n, t) {
+  let r = t === "header" ? "hdr" : "ftr",
+    o = `<w:${r} xmlns:w="${zs}" xmlns:r="${wa}"><w:p><w:r><w:t></w:t></w:r></w:p></w:${r}>`,
+    i = re(o, { name: e, contentType: n });
+  return i.ok ? i.part : null;
+}
+function ME(e, n, t) {
+  let r = 0,
+    o = () => ((r += 1), `${n}#clone:${r}`),
+    i = Fp(e.root, o);
+  if (i.kind === "textValue") return null;
+  let a = i;
+  return Object.freeze({ id: `part:${n}`, name: n, contentType: t, root: a });
+}
+function Fp(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => Fp(t, n)) };
+}
+function _E(e) {
+  let n = e.root.namespaceBindings.find((r) => r.prefix === "r");
+  if (n) return n.namespaceUri === wa ? e : null;
+  let t = {
+    ...e.root,
+    namespaceBindings: Object.freeze([
+      ...e.root.namespaceBindings,
+      Object.freeze({ prefix: "r", namespaceUri: wa }),
+    ]),
+  };
+  return { ...e, root: t };
+}
+function Vp(e, n, t, r, o) {
+  if (!/^rId\d{1,9}$/.test(o)) return null;
+  let i = e.parts.get(e.mainDocumentPart);
+  if (!i) return null;
+  let a = _E(i);
+  if (!a) return null;
+  let l = pt(a.root);
+  if (n >= l.length) return null;
+  let s = t === "header" ? "headerReference" : "footerReference",
+    d = A(a),
+    c = UE(s, r, o, d);
+  if (!c) return null;
+  let u = l[n],
+    f;
+  if (u) {
+    let m = Hp(u, s, r),
+      g = [c, ...m.children],
+      p = F(a, u.id, g);
+    if (!p.ok) return null;
+    f = p.part;
+  } else {
+    let m = Ys(a.root);
+    if (!m) return null;
+    let g = qo(d(), "sectPr", [], [c]),
+      p = _(a, m.id, m.children.length, [g]);
+    if (!p.ok) return null;
+    f = p.part;
+  }
+  return D(e, f);
+}
+function Wp(e, n, t, r) {
+  let o = e.parts.get(e.mainDocumentPart);
+  if (!o) return null;
+  let i = pt(o.root);
+  if (n >= i.length) return null;
+  let a = i[n];
+  if (!a) return DE();
+  let s = Hp(a, t === "header" ? "headerReference" : "footerReference", r);
+  if (s.children.length === a.children.length) return null;
+  let d = F(o, a.id, s.children);
+  return d.ok ? D(e, d.part) : null;
+}
+function DE() {
+  return null;
+}
+function Hp(e, n, t) {
+  let r = e.children.filter((o) =>
+    o.kind === "textValue" || o.localName !== n ? true : Ea(o, "type") !== t,
+  );
+  return { ...e, children: r };
+}
+function UE(e, n, t, r) {
+  let o = `<w:sectPr xmlns:w="${zs}" xmlns:r="${wa}"><w:${e} w:type="${n}" r:id="${t}"/></w:sectPr>`,
+    i = re(o, {
+      name: "/word/document.xml",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    });
+  if (!i.ok) return null;
+  let a = i.part.root.children[0];
+  return !a ||
+    a.kind === "textValue" ||
+    a.localName !== e ||
+    Ea(a, "type") !== n ||
+    Ea(a, "id") !== t
+    ? null
+    : bn(a, r);
+}
+function jp(e, n, t) {
+  let r = e.parts.get(e.mainDocumentPart);
+  if (!r) return null;
+  let o = pt(r.root);
+  if (n >= o.length) return null;
+  let i = A(r),
+    a = o[n],
+    l = r;
+  if (!a) {
+    let c = Ys(r.root);
+    if (!c) return null;
+    let u = qo(i(), "sectPr", [], []),
+      f = _(r, c.id, c.children.length, [u]);
+    if (!f.ok || ((l = f.part), (a = pt(l.root)[n] ?? null), !a)) return null;
+  }
+  let s = [...a.children];
+  if (
+    t.titlePage !== void 0 &&
+    ((s = s.filter((c) => c.kind === "textValue" || c.localName !== "titlePg")),
+    t.titlePage)
+  ) {
+    let c = qo(i(), "titlePg", [], []);
+    s.splice(_p(s, "titlePg"), 0, c);
+  }
+  if (t.headerDistanceTwips !== void 0 || t.footerDistanceTwips !== void 0) {
+    let c = s.find((m) => m.kind !== "textValue" && m.localName === "pgMar"),
+      u = new Map();
+    if (c) for (let m of c.attributes) u.set(m.localName, m.value);
+    (t.headerDistanceTwips !== void 0 &&
+      u.set("header", String(t.headerDistanceTwips)),
+      t.footerDistanceTwips !== void 0 &&
+        u.set("footer", String(t.footerDistanceTwips)));
+    for (let m of ["top", "right", "bottom", "left"])
+      u.has(m) || u.set(m, "1440");
+    let f = qo(
+      c?.id ?? i(),
+      "pgMar",
+      [...u.entries()].map(([m, g]) => BE(m, g)),
+      [],
+    );
+    c
+      ? (s = s.map((m) => (m.id === c.id ? f : m)))
+      : s.splice(_p(s, "pgMar"), 0, f);
+  }
+  let d = F(l, a.id, s);
+  return d.ok ? D(e, d.part) : null;
+}
+function Kp(e, n) {
+  let t = e,
+    o = (t.relationships.get(t.mainDocumentPart) ?? []).find(
+      (u) => u.type === Ra,
+    );
+  if (!o) {
+    let u = LE(t);
+    if (
+      !u ||
+      ((t = u),
+      (o = (t.relationships.get(t.mainDocumentPart) ?? []).find(
+        (f) => f.type === Ra,
+      )),
+      !o)
+    )
+      return null;
+  }
+  let i = Ee(o);
+  if (i.mode !== "Internal" || !i.target.ok) return null;
+  let a = i.target.partName,
+    l = t.parts.get(a);
+  if (!l) return null;
+  let s = A(l),
+    d = l.root.children.filter(
+      (u) => u.kind === "textValue" || u.localName !== "evenAndOddHeaders",
+    );
+  if (n) {
+    let u = qo(s(), "evenAndOddHeaders", [], []);
+    d = [...d, u];
+  }
+  let c = F(l, l.root.id, d);
+  return c.ok ? D(t, c.part) : null;
+}
+function LE(e) {
+  if (e.parts.has(Gs)) return Jt(e, ft(e), Ra, "settings.xml");
+  let n = `<w:settings xmlns:w="${zs}"></w:settings>`,
+    t = re(n, { name: Gs, contentType: Sp });
+  if (!t.ok) return null;
+  let r = D(e, t.part),
+    o = Jt(r, ft(r), Ra, "settings.xml");
+  return o ? ((r = o), mt(r, Gs, Sp)) : null;
+}
+function $p(e, n) {
+  let t = e.parts.get(e.mainDocumentPart);
+  if (!t) return 0;
+  let r = 0;
+  for (let o of pt(t.root))
+    if (o)
+      for (let i of o.children)
+        i.kind !== "textValue" &&
+          ((i.localName !== "headerReference" &&
+            i.localName !== "footerReference") ||
+            (Ea(i, "id") === n && (r += 1)));
+  return r;
+}
+function Gp(e, n, t) {
+  let r = Es(e, n);
+  if (!r) return null;
+  let o = new Map(r.parts);
+  o.delete(t);
+  let i = new Map(r.partBytes);
+  return (
+    i.delete(t),
+    (r = Object.freeze({ ...r, parts: o, partBytes: i })),
+    (r = Wm(r, t)),
+    jo(r, t)
+  );
+}
+function Ea(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e)))
+    return e.attributes.find((t) => t.localName === n)?.value;
+}
+function Ys(e) {
+  if (e.kind !== "textValue") {
+    if (e.kind === "body" || e.localName === "body") return e;
+    for (let n of e.children) {
+      let t = Ys(n);
+      if (t) return t;
+    }
+  }
+}
+function BE(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: "w",
+    value: n,
+  };
+}
+function qo(e, n, t, r) {
+  return {
+    id: e,
+    kind: "generic",
+    namespaceUri: y,
+    localName: n,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: t,
+    children: r,
+  };
+}
+var Mp = [
+  "pgSz",
+  "pgMar",
+  "paperSrc",
+  "pgBorders",
+  "lnNumType",
+  "pgNumType",
+  "cols",
+  "formProt",
+  "vAlign",
+  "noEndnote",
+  "titlePg",
+  "textDirection",
+  "bidi",
+  "rtlGutter",
+  "docGrid",
+  "printerSettings",
+  "sectPrChange",
+];
+function _p(e, n) {
+  let t = Mp.indexOf(n);
+  if (t === -1) return e.length;
+  let r = new Set(Mp.slice(t + 1)),
+    o = e.findIndex(
+      (i) => i.kind !== "textValue" && "localName" in i && r.has(i.localName),
+    );
+  return o === -1 ? e.length : o;
+}
+var FE = "\uFFFC",
+  qs = 1,
+  Zo = 2147483647,
+  t1 = -1,
+  r1 = 0,
+  VE = new Set([
+    "normal",
+    "separator",
+    "continuationSeparator",
+    "continuationNotice",
+  ]),
+  WE = /^(footnote|endnote):(-?\d{1,10})$/;
+function Zs(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e))) {
+    for (let t of e.attributes)
+      if (
+        (t.namespaceUri === y && t.localName === n) ||
+        (t.namespaceUri === "" && t.localName === n)
+      )
+        return t.value;
+  }
+}
+function $r(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function zp(e) {
+  if (e === void 0 || e === "" || !/^-?\d{1,10}$/.test(e)) return null;
+  let n = Number(e);
+  return !Number.isInteger(n) || n < -2147483648 || n > 2147483647 ? null : n;
+}
+function o1(e, n) {
+  return `${e}:${n}`;
+}
+function i1(e) {
+  let n = WE.exec(e);
+  if (!n) return null;
+  let t = zp(n[2]);
+  return t === null ? null : { noteKind: n[1], noteId: t };
+}
+function a1(e) {
+  return e.kind === "footnotes";
+}
+function l1(e) {
+  return e.kind === "endnotes";
+}
+function s1(e) {
+  return e.kind === "note";
+}
+function d1(e) {
+  return e.kind === "noteReference";
+}
+function c1(e) {
+  return e.kind === "noteRef";
+}
+function u1(e) {
+  return e.kind === "separator";
+}
+function f1(e) {
+  return e.kind === "continuationSeparator";
+}
+function or(e) {
+  if (e.kind === "note")
+    return e.localName === "footnote"
+      ? "footnote"
+      : e.localName === "endnote"
+        ? "endnote"
+        : null;
+  if (e.kind === "generic") {
+    if ($r(e, "footnote")) return "footnote";
+    if ($r(e, "endnote")) return "endnote";
+  }
+  return null;
+}
+function sn(e) {
+  return zp(Zs(e, "id"));
+}
+function Qs(e) {
+  let n = Zs(e, "type");
+  if (n !== void 0) return VE.has(n) ? n : void 0;
+}
+function Js(e) {
+  let n = Qs(e);
+  return n === void 0 || n === "normal";
+}
+function Ca(e) {
+  if (e.kind === "noteReference")
+    return e.localName === "footnoteReference"
+      ? "footnote"
+      : e.localName === "endnoteReference"
+        ? "endnote"
+        : null;
+  if (e.kind === "generic") {
+    if ($r(e, "footnoteReference")) return "footnote";
+    if ($r(e, "endnoteReference")) return "endnote";
+  }
+  return null;
+}
+function Xp(e) {
+  if (e.kind === "noteRef")
+    return e.localName === "footnoteRef"
+      ? "footnote"
+      : e.localName === "endnoteRef"
+        ? "endnote"
+        : null;
+  if (e.kind === "generic") {
+    if ($r(e, "footnoteRef")) return "footnote";
+    if ($r(e, "endnoteRef")) return "endnote";
+  }
+  return null;
+}
+function m1(e) {
+  if (e.kind === "textValue" || !("attributes" in e)) return;
+  let n = Zs(e, "customMarkFollows");
+  return n === void 0
+    ? e.attributes.some(
+        (r) =>
+          r.localName === "customMarkFollows" &&
+          (r.namespaceUri === y || r.namespaceUri === ""),
+      )
+      ? true
+      : void 0
+    : !(n === "0" || n === "false" || n === "off");
+}
+function p1() {
+  return FE;
+}
+function Qo(e) {
+  return (
+    e.kind === "noteReference" ||
+    e.kind === "noteRef" ||
+    e.kind === "separator" ||
+    e.kind === "continuationSeparator"
+  );
+}
+function Ta(e) {
+  let n = [];
+  return (
+    At(e.children, 0, (t) => {
+      if (t.kind === "run")
+        for (let r of t.children)
+          Qo(r) &&
+            n.push({
+              kind: r.kind,
+              node: r,
+              runId: t.id,
+              removeNodeIds: [r.id],
+            });
+    }),
+    n
+  );
+}
+var Jo = 1e4;
+function ed(e) {
+  if (e.kind === "textValue") return null;
+  let n = 0,
+    t = 0;
+  for (let o of e.children) {
+    if (t >= Jo) break;
+    if (((t += 1), or(o) === null)) continue;
+    let i = sn(o);
+    i !== null && i > n && (n = i);
+  }
+  if (n >= Zo) return null;
+  let r = Math.max(n + 1, qs);
+  return r > Zo ? null : r;
+}
+function ir(e) {
+  if (e.kind !== "footnotes" && e.kind !== "endnotes") return [];
+  let n = [];
+  for (let t of e.children) {
+    if (n.length >= Jo) break;
+    t.kind === "note" && n.push(t);
+  }
+  return n;
+}
+function xt(e, n) {
+  for (let t of ir(e)) if (sn(t) === n) return t;
+}
+var Gr = Object.freeze({
+    pos: "pageBottom",
+    numFmt: "decimal",
+    numStart: 1,
+    numRestart: "continuous",
+  }),
+  zr = Object.freeze({
+    pos: "docEnd",
+    numFmt: "lowerRoman",
+    numStart: 1,
+    numRestart: "continuous",
+  }),
+  Yp = new Set(["pageBottom", "beneathText", "sectEnd", "docEnd"]),
+  qp = new Set(["sectEnd", "docEnd"]),
+  Zp = new Set(["continuous", "eachSect", "eachPage"]),
+  HE =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+function jE(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function ei(e, n) {
+  if (e.kind !== "textValue") {
+    for (let t of e.children) if (jE(t, n)) return t;
+  }
+}
+function va(e, n) {
+  for (let t of e.attributes)
+    if (t.localName === n && (t.namespaceUri === y || t.namespaceUri === ""))
+      return t.value;
+}
+function KE(e) {
+  if (e === void 0 || !/^\d{1,10}$/.test(e)) return;
+  let n = Number(e);
+  if (!(!Number.isInteger(n) || n < 0 || n > 2147483647)) return n;
+}
+function $E(e) {
+  if (!e || e.kind === "textValue") return;
+  let n = {},
+    t = false,
+    r = ei(e, "pos");
+  if (r) {
+    let l = va(r, "val");
+    l !== void 0 && ((n.pos = l), (t = true));
+  }
+  let o = ei(e, "numFmt");
+  if (o) {
+    let l = va(o, "val");
+    l !== void 0 && ((n.numFmt = l), (t = true));
+  }
+  let i = ei(e, "numStart");
+  if (i) {
+    let l = KE(va(i, "val"));
+    l !== void 0 && ((n.numStart = l), (t = true));
+  }
+  let a = ei(e, "numRestart");
+  if (a) {
+    let l = va(a, "val");
+    l !== void 0 && ((n.numRestart = l), (t = true));
+  }
+  return !t && e.children.length === 0
+    ? {}
+    : t || e.children.length > 0
+      ? n
+      : void 0;
+}
+function Sa(e, n) {
+  if (!e) return;
+  let t = ei(e, n);
+  return $E(t);
+}
+function y1(e) {
+  return Sa(e, "footnotePr");
+}
+function O1(e) {
+  return Sa(e, "endnotePr");
+}
+function ni(e) {
+  let n = e.relationships.get(e.mainDocumentPart) ?? [];
+  for (let t of n) {
+    if (t.type !== HE) continue;
+    let r = Ee(t);
+    if (!(r.mode !== "Internal" || !r.target.ok))
+      return e.parts.get(r.target.partName) ?? null;
+  }
+  return e.parts.get("/word/settings.xml") ?? null;
+}
+function N1(e) {
+  if (e) return Sa(e.root, "footnotePr");
+}
+function k1(e) {
+  if (e) return Sa(e.root, "endnotePr");
+}
+function _t(e, n, t) {
+  return e !== void 0 ? e : n !== void 0 ? n : t;
+}
+function Qp(e, n) {
+  return e !== void 0 && Zp.has(e) ? e : n;
+}
+function b1(e, n) {
+  let t = _t(e?.pos, n?.pos, Gr.pos);
+  return {
+    pos: Yp.has(t) ? t : Gr.pos,
+    numFmt: _t(e?.numFmt, n?.numFmt, Gr.numFmt),
+    numStart: _t(e?.numStart, n?.numStart, Gr.numStart),
+    numRestart: Qp(
+      _t(e?.numRestart, n?.numRestart, Gr.numRestart),
+      Gr.numRestart,
+    ),
+  };
+}
+function P1(e, n) {
+  let t = _t(e?.pos, n?.pos, zr.pos);
+  return {
+    pos: qp.has(t) ? t : zr.pos,
+    numFmt: _t(e?.numFmt, n?.numFmt, zr.numFmt),
+    numStart: _t(e?.numStart, n?.numStart, zr.numStart),
+    numRestart: Qp(
+      _t(e?.numRestart, n?.numRestart, zr.numRestart),
+      zr.numRestart,
+    ),
+  };
+}
+function Jp(e) {
+  return qp.has(e);
+}
+function eg(e) {
+  return Yp.has(e);
+}
+function ng(e) {
+  return Zp.has(e);
+}
+var H = [qt.story],
+  GE = "http://schemas.microsoft.com/office/word/2012/wordml",
+  zE = { checkbox: W, repeatingSection: GE },
+  Aa = 32;
+function Ma(e) {
+  return e.kind;
+}
+function ye(e) {
+  if (e.kind === "textValue") return false;
+  let n = Ma(e);
+  return n === "contentControl"
+    ? true
+    : n === "generic" && e.localName === "sdt" && e.namespaceUri === y;
+}
+function tg(e) {
+  if (e.kind === "textValue") return false;
+  let n = Ma(e);
+  return n === "contentControlContent"
+    ? true
+    : n === "generic" && e.localName === "sdtContent" && e.namespaceUri === y;
+}
+function rg(e) {
+  if (e.kind === "textValue") return false;
+  let n = Ma(e);
+  return n === "contentControlProperties"
+    ? true
+    : n === "generic" && e.localName === "sdtPr" && e.namespaceUri === y;
+}
+function XE(e) {
+  if (e.kind === "textValue") return false;
+  let n = Ma(e);
+  return n === "contentControlEndProperties"
+    ? true
+    : n === "generic" && e.localName === "sdtEndPr" && e.namespaceUri === y;
+}
+function _n(e) {
+  return e.kind === "textValue" || !ye(e)
+    ? void 0
+    : e.children.find((t) => t.kind !== "textValue" && rg(t));
+}
+function Dn(e) {
+  return e.kind === "textValue" || !ye(e)
+    ? void 0
+    : e.children.find((t) => t.kind !== "textValue" && tg(t));
+}
+function _a(e) {
+  if (e.kind === "textValue" || !ye(e)) return null;
+  let n = [],
+    t = 0;
+  for (let r of e.children)
+    if (r.kind !== "textValue" && !(rg(r) || XE(r))) {
+      if (tg(r)) {
+        if (((t += 1), t > 1)) return null;
+        n.push(...r.children);
+        continue;
+      }
+      n.push(r);
+    }
+  return n;
+}
+function be(e, n, t = zE[n] ?? y) {
+  return !e || e.kind === "textValue"
+    ? void 0
+    : e.children.find(
+        (o) =>
+          o.kind !== "textValue" && o.localName === n && o.namespaceUri === t,
+      );
+}
+function qn(e, n, t) {
+  if (!e || e.kind === "textValue") return;
+  let r = e.namespaceUri;
+  return e.attributes.find((o) => o.localName === n && o.namespaceUri === r)
+    ?.value;
+}
+function YE(e) {
+  switch (e) {
+    case "sdtLocked":
+      return { wrapper: true, content: false };
+    case "contentLocked":
+      return { wrapper: false, content: true };
+    case "sdtContentLocked":
+      return { wrapper: true, content: true };
+    default:
+      return { wrapper: false, content: false };
+  }
+}
+function nd(e, n) {
+  return { wrapper: e.wrapper || n.wrapper, content: e.content || n.content };
+}
+function Xr(e) {
+  let n = be(_n(e), "lock");
+  return YE(qn(n, "val"));
+}
+function Zn(e) {
+  return be(_n(e), "dataBinding") !== void 0;
+}
+function og(e) {
+  return be(_n(e), "repeatingSection") !== void 0;
+}
+function ti(e) {
+  let n = _n(e);
+  return n ? Mo(n, "showingPlcHdr") : false;
+}
+function dn(e) {
+  let n = _n(e);
+  return n ? Mo(n, "temporary") : false;
+}
+function Yr(e, n) {
+  let t = null,
+    r = (o, i) => {
+      if (o.kind === "textValue" || t) return;
+      if (o.id === n) {
+        t = i;
+        return;
+      }
+      let a =
+        o.kind === "hyperlink" ||
+        o.kind === "fldSimple" ||
+        o.kind === "contentControl" ||
+        (o.kind === "generic" && o.localName === "fldSimple")
+          ? o
+          : i;
+      for (let l of o.children) r(l, a);
+    };
+  for (let o of e.children) r(o, null);
+  return t;
+}
+function td(e, n, t) {
+  let r = Yr(e, n.runId);
+  return r === null ? false : t === void 0 || Yr(e, t.runId) !== r;
+}
+function Ge(e, n) {
+  let t = Ln(e, n);
+  if (t) return t;
+  let r = ht(e, n);
+  return r[r.length - 1] ?? null;
+}
+function qr(e) {
+  let n = _n(e);
+  return n
+    ? be(n, "repeatingSection")
+      ? "repeatingSection"
+      : be(n, "checkbox")
+        ? "checkbox"
+        : be(n, "dropDownList")
+          ? "dropdown"
+          : be(n, "comboBox")
+            ? "combo"
+            : be(n, "date")
+              ? "date"
+              : be(n, "picture")
+                ? "picture"
+                : be(n, "text")
+                  ? "text"
+                  : "richText"
+    : "richText";
+}
+function ht(e, n) {
+  let t = [],
+    r = ee(e, n);
+  for (; r;) (ye(r) && t.push(r), (r = ee(e, r.id)));
+  return t.reverse();
+}
+function Un(e, n) {
+  let t = Xr(n);
+  for (let r of ht(e, n.id)) t = nd(t, Xr(r));
+  return t;
+}
+function Ae(e, n) {
+  let t = { wrapper: false, content: false },
+    r = Ln(e, n);
+  r && (t = nd(t, Xr(r)));
+  for (let o of ht(e, n)) t = nd(t, Xr(o));
+  return t;
+}
+function Ln(e, n) {
+  let t = E(e, n);
+  return !t || t.kind === "textValue" || !ye(t) ? null : t;
+}
+function ri(e) {
+  let n = _n(e),
+    t = be(n, "dropDownList") ?? be(n, "comboBox");
+  if (!t) return [];
+  let r = [];
+  for (let o of t.children) {
+    if (
+      o.kind === "textValue" ||
+      o.localName !== "listItem" ||
+      o.namespaceUri !== y
+    )
+      continue;
+    let i = qn(o, "value") ?? "",
+      a = qn(o, "displayText") ?? i;
+    r.push({ displayText: a, value: i });
+  }
+  return r;
+}
+function ig(e) {
+  let n = be(_n(e), "checkbox");
+  if (!n) return null;
+  let t = n.children.find(
+      (l) =>
+        l.kind !== "textValue" &&
+        l.localName === "checked" &&
+        l.namespaceUri === W,
+    ),
+    r = qn(t, "val"),
+    o = r === void 0 || !(r === "0" || r === "false" || r === "off"),
+    i = n.children.find(
+      (l) =>
+        l.kind !== "textValue" &&
+        l.localName === "checkedState" &&
+        l.namespaceUri === W,
+    ),
+    a = n.children.find(
+      (l) =>
+        l.kind !== "textValue" &&
+        l.localName === "uncheckedState" &&
+        l.namespaceUri === W,
+    );
+  return {
+    checkbox: n,
+    checked: o,
+    checkedGlyph: qn(i, "val") ?? "2612",
+    uncheckedGlyph: qn(a, "val") ?? "2610",
+    checkedFont: qn(i, "font"),
+    uncheckedFont: qn(a, "font"),
+  };
+}
+function qE(e, n) {
+  return n < 1 || n > 12
+    ? 0
+    : n === 2
+      ? (e % 4 === 0 && e % 100 !== 0) || e % 400 === 0
+        ? 29
+        : 28
+      : n === 4 || n === 6 || n === 9 || n === 11
+        ? 30
+        : 31;
+}
+function oi(e) {
+  let n = e.trim(),
+    t =
+      /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?)?$/.exec(
+        n,
+      );
+  if (!t) return null;
+  let r = Number(t[1]),
+    o = Number(t[2]),
+    i = Number(t[3]),
+    a = qE(r, o);
+  if (a === 0 || i < 1 || i > a) return null;
+  let l = `${t[1]}-${t[2]}-${t[3]}`;
+  if (t[4] === void 0) return `${l}T00:00:00Z`;
+  let s = Number(t[4]),
+    d = Number(t[5]),
+    c = Number(t[6]);
+  if (s > 23 || d > 59 || c > 59) return null;
+  let u = t[7] !== void 0 ? `.${t[7]}` : "",
+    f = t[8] ?? "Z";
+  return ZE(f) ? `${l}T${t[4]}:${t[5]}:${t[6]}${u}${f}` : null;
+}
+function ZE(e) {
+  if (e === "Z") return true;
+  if (e.length !== 6 || (e[0] !== "+" && e[0] !== "-")) return false;
+  let n = e[0] === "+" ? 1 : -1,
+    t = Number(e.slice(1, 3)),
+    r = Number(e.slice(4, 6));
+  if (!Number.isInteger(t) || !Number.isInteger(r) || t < 0 || r < 0 || r > 59)
+    return false;
+  let o = n * (t * 60 + r);
+  return !(o > 840 || o < -840 || (Math.abs(o) === 840 && r !== 0));
+}
+function Da(e, n) {
+  let t = oi(e);
+  if (!t) return null;
+  let r = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (!r) return null;
+  let o = Number(r[1]),
+    i = Number(r[2]),
+    a = Number(r[3]),
+    l = n && n.length > 0 ? n : "M/d/yyyy",
+    s = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ],
+    d = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+  return l.replace(/yyyy|yy|MMMM|MMM|MM|M|dd|d/g, (c) => {
+    switch (c) {
+      case "yyyy":
+        return String(o);
+      case "yy":
+        return String(o).slice(-2);
+      case "MMMM":
+        return d[i - 1];
+      case "MMM":
+        return s[i - 1];
+      case "MM":
+        return String(i).padStart(2, "0");
+      case "M":
+        return String(i);
+      case "dd":
+        return String(a).padStart(2, "0");
+      case "d":
+        return String(a);
+      default:
+        return c;
+    }
+  });
+}
+function Zr(e) {
+  let n = e.trim().toLowerCase();
+  return n === "true" || n === "1" || n === "checked" || n === "on"
+    ? true
+    : n === "false" || n === "0" || n === "unchecked" || n === "off"
+      ? false
+      : null;
+}
+function Ce(e, n) {
+  let t = Ln(e, n);
+  return t && Zn(t) ? true : ht(e, n).some(Zn);
+}
+function Me(e, n) {
+  return { ok: true, part: e, effect: n };
+}
+function C(e, n) {
+  return e.ok
+    ? Me(e.part, n)
+    : { ok: false, reason: "tree-invariant", detail: JSON.stringify(e.issues) };
+}
+function ze(e, n) {
+  return e.kind === "textValue"
+    ? { id: n(), kind: "textValue", value: e.value }
+    : { ...e, id: n(), children: e.children.map((t) => ze(t, n)) };
+}
+function Oe(e) {
+  return e.kind === "textValue"
+    ? void 0
+    : e.children.find((t) => t.kind !== "textValue" && Dt(t));
+}
+function Dt(e) {
+  return e.kind === "paragraphProperties"
+    ? true
+    : e.kind === "generic" && e.localName === "pPr" && e.namespaceUri === y;
+}
+function yt(e) {
+  return e.kind === "textValue"
+    ? void 0
+    : e.children.find((t) => t.kind !== "textValue" && Ut(t));
+}
+function Ut(e) {
+  return e.kind === "runProperties"
+    ? true
+    : e.kind === "generic" && e.localName === "rPr" && e.namespaceUri === y;
+}
+function Bn(e, n) {
+  return !e || e.kind === "textValue"
+    ? void 0
+    : e.children.find(
+        (r) =>
+          r.kind !== "textValue" && r.localName === n && r.namespaceUri === y,
+      );
+}
+function ee(e, n) {
+  return je(e, n);
+}
+function pn(e) {
+  return e !== null && e.kind === "paragraph";
+}
+function Y(e) {
+  return lg(e, null);
+}
+var ag = new WeakMap();
+function _e(e) {
+  let n = ag.get(e);
+  if (n) return n;
+  let t = QE(e);
+  return (ag.set(e, t), t);
+}
+function QE(e) {
+  let n = new Map(),
+    t = lg(e, n),
+    r = t.length === 0 ? 0 : t[t.length - 1].end,
+    o = (i) => n.get(typeof i == "string" ? i : i.id) ?? null;
+  return {
+    length: r,
+    segments: t,
+    spanOf: o,
+    lengthOf: (i) => {
+      let a = o(i);
+      return a === null ? 0 : a.end - a.start;
+    },
+  };
+}
+function lg(e, n) {
+  let t = [],
+    r = 0,
+    o = (m, g) => {
+      n !== null && n.set(m.id, { start: g, end: r });
+    },
+    i = ka(e),
+    a = Ta(e),
+    l = new Map(i.map((m) => [m.node.id, m])),
+    s = new Map(a.map((m) => [m.node.id, m])),
+    d = new Set();
+  for (let m of i) for (let g of m.removeNodeIds) d.add(g);
+  let c = (m) => {
+      (t.push({
+        runId: m.runId,
+        node: m.node,
+        start: r,
+        end: r + 1,
+        removeNodeIds: m.removeNodeIds,
+        ...(m.formatRunIds && m.formatRunIds.length > 0
+          ? { formatRunIds: m.formatRunIds }
+          : {}),
+      }),
+        (r += 1));
+    },
+    u = (m, g, p = vr()) => {
+      let x = r,
+        h = m.kind !== "textValue" && "localName" in m ? kn(p, m) : p,
+        N = l.get(m.id);
+      if (N && N.kind === "complex") {
+        (c(N), o(m, x));
+        return;
+      }
+      if (d.has(m.id)) {
+        o(m, x);
+        return;
+      }
+      let k = s.get(m.id);
+      if (k) {
+        (c(k), o(m, x));
+        return;
+      }
+      if (Qo(m)) {
+        (c({ runId: g, node: m, removeNodeIds: [m.id] }), o(m, x));
+        return;
+      }
+      if (
+        lp(m) ||
+        Mt(m, "begin") ||
+        Mt(m, "separate") ||
+        Mt(m, "end") ||
+        $o(m)
+      ) {
+        o(m, x);
+        return;
+      }
+      if (m.kind === "textValue") {
+        (t.push({ runId: g, node: m, start: r, end: r + m.value.length }),
+          (r += m.value.length),
+          o(m, x));
+        return;
+      }
+      if (m.kind === "tab" || m.kind === "hardBreak") {
+        (t.push({ runId: g, node: m, start: r, end: r + 1 }),
+          (r += 1),
+          o(m, x));
+        return;
+      }
+      if (m.kind === "drawing") {
+        (c({ runId: g, node: m, removeNodeIds: [m.id] }), o(m, x));
+        return;
+      }
+      if (m.kind === "runProperties") {
+        o(m, x);
+        return;
+      }
+      if (m.kind === "generic") {
+        if (rm(m)) {
+          let O = oa(m, h, Gn);
+          c({ runId: g, node: O.segmentNode, removeNodeIds: O.removeNodeIds });
+        }
+        o(m, x);
+        return;
+      }
+      if (ye(m)) {
+        o(m, x);
+        return;
+      }
+      if (m.kind === "text" || m.kind === "deletedText") {
+        for (let O of m.children) u(O, g, h);
+        o(m, x);
+        return;
+      }
+      for (let O of m.children) u(O, g, h);
+      o(m, x);
+    },
+    f = (m, g) => {
+      let p = r;
+      if (m.kind === "textValue" || g >= sg) {
+        o(m, p);
+        return;
+      }
+      if (Wr(m)) {
+        let x = l.get(m.id);
+        (x && c(x), o(m, p));
+        return;
+      }
+      if (m.kind === "run") {
+        let x = kn(vr(), m);
+        for (let h of m.children) u(h, m.id, x);
+        o(m, p);
+        return;
+      }
+      if (m.kind === "hyperlink" || Ne(m.kind)) {
+        for (let x of m.children) f(x, g + 1);
+        o(m, p);
+        return;
+      }
+      if (ye(m) && g < Aa) {
+        let x = Dn(m);
+        if (x) {
+          let h = r;
+          for (let N of x.children) f(N, g + 1);
+          n?.set(x.id, { start: h, end: r });
+        }
+      }
+      o(m, p);
+    };
+  for (let m of e.children) f(m, 0);
+  return t;
+}
+var sg = 32;
+function Lt(e, n = 0) {
+  if (e.kind === "run") return [e];
+  if (e.kind === "textValue" || n >= sg) return [];
+  if (e.kind === "hyperlink" || Ne(e.kind))
+    return e.children.flatMap((t) => Lt(t, n + 1));
+  if (ye(e) && n < Aa) {
+    let t = Dn(e);
+    return t ? t.children.flatMap((r) => Lt(r, n + 1)) : [];
+  }
+  return [];
+}
+function rd(e, n, t) {
+  let r = Y(e),
+    o = t === null ? r : r.filter((d) => Ua(t, d.node.id));
+  for (let d of o)
+    if (d.node.kind === "textValue" && !(n <= d.start || n >= d.end))
+      return { kind: "withinValue", segment: d };
+  let i = o.find((d) => d.start === n);
+  if (i) return { kind: "atBoundary", segment: i };
+  let a =
+      t === null
+        ? e.children.filter((d) => d.kind === "run")
+        : e.children.flatMap((d) => Lt(d)).filter((d) => Ua(t, d.id)),
+    l = a[a.length - 1];
+  return l && l.kind !== "textValue"
+    ? { kind: "appendToRun", run: l }
+    : {
+        kind: "newRun",
+        holder: t === null || t.kind === "textValue" || Ua(t, e.id) ? e : JE(t),
+      };
+}
+function JE(e) {
+  for (let n of e.children)
+    if (
+      n.kind !== "textValue" &&
+      (n.kind === "contentControlContent" ||
+        (n.kind === "generic" && n.localName === "sdtContent"))
+    )
+      return n;
+  return e;
+}
+function dg(e, n, t) {
+  let r = rd(e, n, t);
+  return r.kind === "withinValue" || r.kind === "atBoundary"
+    ? r.segment.runId
+    : r.kind === "appendToRun"
+      ? r.run.id
+      : r.holder.id;
+}
+function Ua(e, n) {
+  return e.id === n
+    ? true
+    : e.kind === "textValue"
+      ? false
+      : e.children.some((t) => Ua(t, n));
+}
+function Qn(e) {
+  let n = Y(e);
+  return n.length === 0 ? 0 : n[n.length - 1].end;
+}
+function cg(e, n) {
+  if ((n.add(e.id), e.kind !== "textValue")) for (let t of e.children) cg(t, n);
+}
+function ug(e, n, t) {
+  let r = Yr(e, t);
+  return !r || r.kind !== "contentControl" ? null : fg(r, n);
+}
+function fg(e, n) {
+  let t = new Set();
+  cg(e, t);
+  let r = Number.MAX_SAFE_INTEGER,
+    o = -1;
+  for (let i of n)
+    t.has(i.runId) && (i.start < r && (r = i.start), i.end > o && (o = i.end));
+  return o < 0 ? null : { controlId: e.id, start: r, end: o };
+}
+function D1(e) {
+  let n = Y(e),
+    t = [],
+    r = (o, i) => {
+      if (o.kind === "textValue") return;
+      let a = ye(o),
+        l = a ? o.id : i;
+      if (a) {
+        let s = fg(o, n);
+        s && t.push({ ...s, parentControlId: i });
+      }
+      for (let s of o.children) r(s, l);
+    };
+  return (r(e, null), t);
+}
+function mg(e, n) {
+  let t = Y(e),
+    r = [...t].reverse().find((i) => i.end === n && i.end > i.start);
+  if (!r) return null;
+  let o = ug(e, t, r.runId);
+  return o && o.end === n ? o : null;
+}
+function pg(e, n) {
+  let t = Y(e),
+    r = t.find((i) => i.start === n && i.end > i.start);
+  if (!r) return null;
+  let o = ug(e, t, r.runId);
+  return o && o.start === n ? o : null;
+}
+function Xe(e, n) {
+  for (let t of Y(e)) {
+    if (t.node.kind !== "textValue" || n <= t.start || n >= t.end) continue;
+    let r = n - t.start,
+      o = t.node.value.charCodeAt(r - 1),
+      i = t.node.value.charCodeAt(r);
+    if (o >= 55296 && o <= 56319 && i >= 56320 && i <= 57343) return true;
+  }
+  return false;
+}
+var eI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+  nI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+  La = 2e4,
+  xg = 1e6,
+  tI = 256;
+function ii(e = La, n = tI) {
+  return { visited: 0, maxVisited: e, parts: 0, maxParts: n, truncated: false };
+}
+function gg(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function rI(e, n) {
+  if (!(e.kind === "textValue" || !("attributes" in e))) {
+    for (let t of e.attributes)
+      if (t.localName === n && (t.namespaceUri === y || t.namespaceUri === ""))
+        return t.value;
+  }
+}
+function oI(e) {
+  let n = rI(e, "customMarkFollows");
+  return n === void 0
+    ? e.kind === "textValue" || !("attributes" in e)
+      ? false
+      : e.attributes.some(
+          (t) =>
+            t.localName === "customMarkFollows" &&
+            (t.namespaceUri === y || t.namespaceUri === ""),
+        )
+    : !(n === "0" || n === "false" || n === "off");
+}
+function hg(e) {
+  return e
+    ? e.visited >= e.maxVisited
+      ? ((e.truncated = true), false)
+      : ((e.visited += 1), true)
+    : true;
+}
+function iI(e) {
+  return e.parts >= e.maxParts
+    ? ((e.truncated = true), false)
+    : ((e.parts += 1), true);
+}
+function De(e, n) {
+  let t = n === "footnote" ? eI : nI,
+    r = n === "footnote" ? "footnotes" : "endnotes",
+    o = e.relationships.get(e.mainDocumentPart) ?? [];
+  for (let i of o) {
+    if (i.type !== t) continue;
+    let a = Ee(i);
+    if (a.mode !== "Internal" || !a.target.ok) continue;
+    let l = e.parts.get(a.target.partName);
+    if (l && l.root.localName === r) return l;
+  }
+  return null;
+}
+function aI(e, n, t, r, o, i) {
+  let a = Ca(n);
+  if (!a) return;
+  let l = sn(n);
+  l === null ||
+    e.length >= i ||
+    e.push({
+      noteKind: a,
+      noteId: l,
+      nodeId: n.id,
+      paragraphId: t,
+      atomOffset: r,
+      customMarkFollows: oI(n),
+      partName: o,
+    });
+}
+function lI(e, n, t, r, o) {
+  if (!(n.length >= r || (t && t.truncated)))
+    for (let i of Y(e)) {
+      if (n.length >= r || (t && t.truncated) || !hg(t)) return;
+      i.node.kind === "noteReference" && aI(n, i.node, e.id, i.start, o, r);
+    }
+}
+function sI(e, n) {
+  let t = n?.maxHits ?? La,
+    r = n?.budget,
+    o = [],
+    i = (a, l) => {
+      if (!(o.length >= t || (r && r.truncated))) {
+        if (l > 64) {
+          r && (r.truncated = true);
+          return;
+        }
+        if (hg(r) && a.kind !== "textValue") {
+          if (a.kind === "paragraph") {
+            lI(a, o, r, t, e.name);
+            return;
+          }
+          for (let s of a.children) i(s, l + 1);
+        }
+      }
+    };
+  return (i(e.root, 0), o);
+}
+function ar(e, n) {
+  let t = n?.budget ?? ii(),
+    r = n?.maxHits ?? La,
+    o = [];
+  for (let i of e.parts.values()) {
+    if (t.truncated) break;
+    if (!i.name.endsWith(".xml")) continue;
+    if (!iI(t)) break;
+    let a = sI(i, {
+      maxHits: Number.isFinite(r) ? Math.max(0, r - o.length) : r,
+      budget: t,
+    });
+    o.push(...a);
+  }
+  return o;
+}
+function W1(e) {
+  let n = De(e, "footnote"),
+    t = De(e, "endnote"),
+    r = [],
+    o = ii(),
+    i = La,
+    a = ar(e, { budget: o, maxHits: i }),
+    l = (s, d) => {
+      let c = s === "footnote" ? n : t;
+      if (!c) return false;
+      let u = xt(c.root, d);
+      return u !== void 0 && (Js(u) || or(u) !== null);
+    };
+  for (let s of a)
+    if (
+      !l(s.noteKind, s.noteId) &&
+      (r.push({
+        code: "dangling-note-reference",
+        noteKind: s.noteKind,
+        noteId: s.noteId,
+        sourceNodeId: s.nodeId,
+      }),
+      r.length >= Jo)
+    )
+      break;
+  return (
+    (o.truncated || a.length >= i) &&
+      r.push({ code: "note-reference-scan-truncated" }),
+    r
+  );
+}
+function H1(e, n) {
+  return xt(e.root, n) !== void 0;
+}
+function yg(e) {
+  let n = [];
+  if (e.root.kind !== "footnotes" && e.root.kind !== "endnotes") return n;
+  for (let t of e.root.children) {
+    if (n.length >= Jo) break;
+    if (
+      (!gg(t, "footnote") && !gg(t, "endnote") && t.kind !== "note") ||
+      !Js(t)
+    )
+      continue;
+    let r = sn(t);
+    r !== null && r > 0 && n.push(r);
+  }
+  return n;
+}
+var dI = "http://schemas.openxmlformats.org/package/2006/relationships",
+  cI = "application/vnd.openxmlformats-package.relationships+xml";
+function uI(e) {
+  let n = e.lastIndexOf("/");
+  return `${e.slice(0, n)}/_rels/${e.slice(n + 1)}.rels`;
+}
+function Og(e, n, t, r) {
+  if (!/^(footnotes|endnotes)\.xml$/.test(r)) return null;
+  let o = e.mainDocumentPart,
+    i = uI(o),
+    a = e.parts.get(i),
+    l = re(
+      `<Relationships xmlns="${dI}"><Relationship Id="${n}" Type="${t}" Target="${r}"/></Relationships>`,
+      { name: i, contentType: cI },
+    );
+  if (!l.ok) return null;
+  let s = e.relationships.get(o) ?? [];
+  if (s.some((g) => g.id === n)) return null;
+  let d = {
+      ownerPart: o,
+      id: n,
+      type: t,
+      rawTarget: r,
+      targetMode: "Internal",
+      order: s.reduce((g, p) => Math.max(g, p.order), -1) + 1,
+    },
+    c = new Map([...e.relationships, [o, [...s, d]]]);
+  if (!a)
+    return Object.freeze({
+      ...e,
+      parts: new Map([...e.parts, [i, l.part]]),
+      relationships: c,
+    });
+  let u = A(a),
+    f = l.part.root.children[0];
+  if (!f) return null;
+  let m = _(a, a.root.id, a.root.children.length, [bn(f, u)]);
+  return m.ok
+    ? Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [i, m.part]]),
+        relationships: c,
+      })
+    : null;
+}
+var Fa = y,
+  fI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
+  Ng =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
+  od = "/word/settings.xml";
+function kg(e, n) {
+  let t = e,
+    r = ni(t);
+  if (!r) {
+    let i = mI(t);
+    if (!i) return null;
+    ((t = i), (r = ni(t)));
+  }
+  if (!r) return null;
+  let o = pI(r, n);
+  return o ? D(t, o) : null;
+}
+function mI(e) {
+  if (e.parts.has(od)) return e;
+  let n = `<w:settings xmlns:w="${Fa}"></w:settings>`,
+    t = re(n, { name: od, contentType: Ng });
+  if (!t.ok) return null;
+  let r = D(e, t.part),
+    o = ft(r),
+    i = Jt(r, o, fI, "settings.xml");
+  return i ? ((r = i), mt(r, od, Ng)) : null;
+}
+function pI(e, n) {
+  let t = A(e),
+    r = e.root.children.filter(
+      (a) =>
+        a.kind === "textValue" ||
+        (a.localName !== "footnotePr" && a.localName !== "endnotePr"),
+    ),
+    o = [];
+  if (n.footnote) o.push(Va(t, "footnotePr", n.footnote));
+  else {
+    let a = e.root.children.find(
+      (l) => l.kind !== "textValue" && l.localName === "footnotePr",
+    );
+    a && o.push(a);
+  }
+  if (n.endnote) o.push(Va(t, "endnotePr", n.endnote));
+  else {
+    let a = e.root.children.find(
+      (l) => l.kind !== "textValue" && l.localName === "endnotePr",
+    );
+    a && o.push(a);
+  }
+  let i = F(e, e.root.id, [...r, ...o]);
+  return i.ok ? i.part : null;
+}
+function bg(e, n, t) {
+  let r = e.parts.get(e.mainDocumentPart);
+  if (!r) return null;
+  let o = pt(r.root);
+  if (n >= o.length) return null;
+  let i = o[n];
+  if (!i) return null;
+  let a = A(r),
+    l = i.children.filter(
+      (c) =>
+        c.kind === "textValue" ||
+        (c.localName !== "footnotePr" && c.localName !== "endnotePr"),
+    ),
+    s = [];
+  if (t.footnote) s.push(Va(a, "footnotePr", t.footnote));
+  else {
+    let c = i.children.find(
+      (u) => u.kind !== "textValue" && u.localName === "footnotePr",
+    );
+    c && s.push(c);
+  }
+  if (t.endnote) s.push(Va(a, "endnotePr", t.endnote));
+  else {
+    let c = i.children.find(
+      (u) => u.kind !== "textValue" && u.localName === "endnotePr",
+    );
+    c && s.push(c);
+  }
+  let d = F(r, i.id, [...s, ...l]);
+  return d.ok ? D(e, d.part) : null;
+}
+function Va(e, n, t) {
+  let r = [];
+  return (
+    t.position !== void 0 && r.push(Ba(e, "pos", t.position)),
+    t.numFmt !== void 0 && r.push(Ba(e, "numFmt", t.numFmt)),
+    t.numStart !== void 0 && r.push(Ba(e, "numStart", String(t.numStart))),
+    t.numRestart !== void 0 && r.push(Ba(e, "numRestart", t.numRestart)),
+    {
+      id: e(),
+      kind: "generic",
+      namespaceUri: Fa,
+      localName: n,
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: r,
+    }
+  );
+}
+function Ba(e, n, t) {
+  return {
+    id: e(),
+    kind: "generic",
+    namespaceUri: Fa,
+    localName: n,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [
+      {
+        kind: "wmlVal",
+        namespaceUri: Fa,
+        localName: "val",
+        prefix: "w",
+        value: t,
+      },
+    ],
+    children: [],
+  };
+}
+var Jn = y,
+  gI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+  xI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+  hI =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml",
+  yI =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml",
+  OI = 4096,
+  Pg = { footnote: "FootnoteReference", endnote: "EndnoteReference" };
+function wg(e) {
+  return (
+    e.localName === "val" && (e.namespaceUri === y || e.namespaceUri === "")
+  );
+}
+function Eg(e, n, t) {
+  if (e.kind !== "run" || n === t || !e.children.some((l) => NI(l))) return e;
+  let r = Pg[n],
+    o = Pg[t],
+    i = false,
+    a = e.children.map((l) => {
+      if (l.kind !== "runProperties") return l;
+      let s = false,
+        d = l.children.map((c) =>
+          c.kind !== "generic" ||
+          c.namespaceUri !== y ||
+          c.localName !== "rStyle" ||
+          !c.attributes.some((f) => wg(f) && f.value === r)
+            ? c
+            : ((s = true),
+              (i = true),
+              {
+                ...c,
+                attributes: c.attributes.map((f) =>
+                  wg(f) && f.value === r ? { ...f, value: o } : f,
+                ),
+              }),
+        );
+      return s ? { ...l, children: d } : l;
+    });
+  return i ? { ...e, children: a } : e;
+}
+function NI(e) {
+  return Ca(e) !== null || Xp(e) !== null;
+}
+var kI = new Set([
+  "insertNote",
+  "deleteNote",
+  "convertNote",
+  "convertAllNotes",
+  "setNoteProperties",
+]);
+function id(e) {
+  return kI.has(e.op);
+}
+function V(e, n) {
+  return n ? { ok: false, reason: e, detail: n } : { ok: false, reason: e };
+}
+function Wa(e) {
+  return e === "footnote" || e === "endnote";
+}
+function Ig(e) {
+  return typeof e == "number" && Number.isInteger(e) && e >= qs && e <= Zo;
+}
+function ai() {
+  return ii(xg);
+}
+function Cg(e, n, t) {
+  if (!id(n)) return V("invalidArgs", "unknown-op");
+  switch (n.op) {
+    case "insertNote":
+      return bI(e, n);
+    case "deleteNote":
+      return Tg(e, n, t);
+    case "convertNote":
+      return Sg(e, n, t);
+    case "convertAllNotes":
+      return RI(e, n, t);
+    case "setNoteProperties":
+      return EI(e, n);
+  }
+}
+function bI(e, n) {
+  if (!Wa(n.noteKind)) return V("invalidArgs", "noteKind");
+  if (typeof n.paragraphId != "string" || n.paragraphId.length === 0)
+    return V("invalidArgs", "paragraphId");
+  if (!Number.isInteger(n.offset) || n.offset < 0)
+    return V("invalidArgs", "offset");
+  let t = TI(e, n.paragraphId);
+  if (!t.ok) return V("invalidArgs", t.detail);
+  let r = t.paragraph,
+    o = AI(r);
+  if (n.offset > o) return V("invalidArgs", "offset-out-of-range");
+  let i = e,
+    a = Ag(i, n.noteKind);
+  if (!a.ok) return a;
+  i = a.package;
+  let l = a.createdPartName,
+    s = De(i, n.noteKind);
+  if (!s) return V("tree-invariant", "missing-notes-part");
+  let d = ed(s.root);
+  if (d === null) return V("invalidArgs", "note-id-exhausted");
+  let c = CI(n.noteKind, d),
+    u = re(c, { name: s.name, contentType: s.contentType });
+  if (!u.ok) return V("tree-invariant", "note-body-parse");
+  let f = u.part.root.children.find((R) => R.kind === "note");
+  if (!f) return V("tree-invariant", "note-body-missing");
+  let m = A(s),
+    g = bn(f, m),
+    p = _(s, s.root.id, s.root.children.length, [g]);
+  if (!p.ok) return V("tree-invariant", "note-body-insert");
+  i = D(i, p.part);
+  let x = i.parts.get(t.partName);
+  if (!x) return V("tree-invariant", "story-missing");
+  let h = E(x, n.paragraphId);
+  if (!h || h.kind !== "paragraph")
+    return V("tree-invariant", "paragraph-missing");
+  if (!SI(x, n.paragraphId))
+    return V("tree-invariant", "paragraph-not-in-body");
+  let N = n.noteKind === "footnote" ? "footnoteReference" : "endnoteReference",
+    k = n.noteKind === "footnote" ? "FootnoteReference" : "EndnoteReference",
+    O = A(x),
+    b = MI(O, N, d, k),
+    P = _I(x, h, n.offset, [b]);
+  return P
+    ? ((i = D(i, P)),
+      {
+        ok: true,
+        package: i,
+        impact: "global",
+        noteId: d,
+        noteKind: n.noteKind,
+        ...(l ? { createdPartName: l } : {}),
+      })
+    : V("tree-invariant", "reference-insert");
+}
+function Tg(e, n, t) {
+  if (!Wa(n.noteKind)) return V("invalidArgs", "noteKind");
+  if (!Ig(n.noteId)) return V("invalidArgs", "noteId");
+  let r = De(e, n.noteKind);
+  if (!r) return V("invalidArgs", "missing-notes-part");
+  if (!xt(r.root, n.noteId)) return V("invalidArgs", "note-not-found");
+  let i = UI(e, n.noteKind, n.noteId, t?.scanBudget);
+  if (!i) return V("tree-invariant", "reference-scan-truncated");
+  let a = i,
+    l = De(a, n.noteKind);
+  if (!l) return V("tree-invariant", "notes-part-lost");
+  let s = xt(l.root, n.noteId);
+  if (!s)
+    return {
+      ok: true,
+      package: a,
+      impact: "global",
+      noteId: n.noteId,
+      noteKind: n.noteKind,
+    };
+  let d = ie(l, s.id);
+  return d.ok
+    ? ((a = D(a, d.part)),
+      {
+        ok: true,
+        package: a,
+        impact: "global",
+        noteId: n.noteId,
+        noteKind: n.noteKind,
+      })
+    : V("tree-invariant", "note-body-remove");
+}
+function vg(e, n, t) {
+  let r = t?.beforeBudget ?? ai(),
+    o = t?.afterBudget ?? ai(),
+    i = ar(e, { budget: r, maxHits: Number.POSITIVE_INFINITY }),
+    a = ar(n, { budget: o, maxHits: Number.POSITIVE_INFINITY });
+  if (r.truncated || o.truncated) return null;
+  let l = new Set(a.map((c) => `${c.noteKind}:${c.noteId}`)),
+    s = n,
+    d = new Set();
+  for (let c of i) {
+    let u = `${c.noteKind}:${c.noteId}`;
+    if (l.has(u) || d.has(u) || (d.add(u), c.noteId <= 0)) continue;
+    let f = De(s, c.noteKind);
+    if (!f || !xt(f.root, c.noteId)) continue;
+    let m = Tg(s, { noteKind: c.noteKind, noteId: c.noteId });
+    if (!m.ok) return null;
+    s = m.package;
+  }
+  return s;
+}
+function Sg(e, n, t, r) {
+  if (!Wa(n.fromKind)) return V("invalidArgs", "fromKind");
+  if (!Ig(n.noteId)) return V("invalidArgs", "noteId");
+  let o = n.fromKind === "footnote" ? "endnote" : "footnote",
+    i = De(e, n.fromKind);
+  if (!i) return V("invalidArgs", "missing-source-part");
+  let a = xt(i.root, n.noteId);
+  if (!a) return V("invalidArgs", "note-not-found");
+  let l = Qs(a);
+  if (
+    l === "separator" ||
+    l === "continuationSeparator" ||
+    l === "continuationNotice"
+  )
+    return V("invalidArgs", "separator-not-convertible");
+  let s = PI(e, n.fromKind, n.noteId, t, r);
+  if (!s) return V("tree-invariant", "reference-scan-truncated");
+  let d = e,
+    c = Ag(d, o);
+  if (!c.ok) return c;
+  d = c.package;
+  let u = c.createdPartName,
+    f = De(d, o);
+  if (!f) return V("tree-invariant", "missing-target-part");
+  let m = ed(f.root);
+  if (m === null) return V("invalidArgs", "note-id-exhausted");
+  let g = A(f),
+    p = FI(a, n.fromKind, o, m, g),
+    x = _(f, f.root.id, f.root.children.length, [p]);
+  if (!x.ok) return V("tree-invariant", "target-insert");
+  d = D(d, x.part);
+  let h = De(d, n.fromKind);
+  if (!h) return V("tree-invariant", "source-lost");
+  let N = xt(h.root, n.noteId);
+  if (N) {
+    let O = ie(h, N.id);
+    if (!O.ok) return V("tree-invariant", "source-remove");
+    d = D(d, O.part);
+  }
+  let k = BI(d, n.fromKind, o, m, s);
+  return k
+    ? ((d = k),
+      {
+        ok: true,
+        package: d,
+        impact: "global",
+        noteId: m,
+        noteKind: o,
+        ...(u ? { createdPartName: u } : {}),
+      })
+    : V("tree-invariant", "reference-rewrite");
+}
+function PI(e, n, t, r, o) {
+  let i = (s) => s.noteKind === n && s.noteId === t;
+  if (o) {
+    let s = o.filter(i);
+    if (s.every((d) => wI(e, d))) return s;
+  }
+  let a = r?.scanBudget ?? ai(),
+    l = ar(e, { budget: a, maxHits: Number.POSITIVE_INFINITY }).filter(i);
+  return a.truncated ? null : l;
+}
+function wI(e, n) {
+  let t = e.parts.get(n.partName);
+  return t !== void 0 && E(t, n.nodeId) !== null;
+}
+function RI(e, n, t) {
+  if (!Wa(n.fromKind)) return V("invalidArgs", "fromKind");
+  let r = De(e, n.fromKind);
+  if (!r) return { ok: true, package: e, impact: "global" };
+  let o = yg(r);
+  if (o.length === 0) return { ok: true, package: e, impact: "global" };
+  let i = t?.scanBudget ?? ai(),
+    a = ar(e, { budget: i, maxHits: Number.POSITIVE_INFINITY });
+  if (i.truncated) return V("tree-invariant", "reference-scan-truncated");
+  let l = e,
+    s,
+    d,
+    c = n.fromKind === "footnote" ? "endnote" : "footnote";
+  for (let u of o) {
+    let f = Sg(l, { fromKind: n.fromKind, noteId: u }, void 0, a);
+    if (!f.ok) return f;
+    ((l = f.package),
+      f.createdPartName && (s = f.createdPartName),
+      (d = f.noteId));
+  }
+  return {
+    ok: true,
+    package: l,
+    impact: "global",
+    ...(d !== void 0 ? { noteId: d, noteKind: c } : {}),
+    ...(s ? { createdPartName: s } : {}),
+  };
+}
+function EI(e, n) {
+  if (n.scope !== "document" && n.scope !== "section")
+    return V("invalidArgs", "scope");
+  if (!n.footnote && !n.endnote) return V("invalidArgs", "empty");
+  if (n.footnote?.position !== void 0 && !eg(n.footnote.position))
+    return V("invalidArgs", "footnote-position");
+  if (
+    n.endnote?.position !== void 0 &&
+    (n.endnote.position === "pageBottom" || !Jp(n.endnote.position))
+  )
+    return V("invalidArgs", "endnote-pageBottom");
+  for (let r of [n.footnote, n.endnote])
+    if (r) {
+      if (r.numRestart !== void 0 && !ng(r.numRestart))
+        return V("invalidArgs", "numRestart");
+      if (r.numFmt !== void 0 && (typeof r.numFmt != "string" || !Z(r.numFmt)))
+        return V("invalidArgs", "numFmt");
+      if (
+        r.numStart !== void 0 &&
+        (!Number.isInteger(r.numStart) || r.numStart < 0 || r.numStart > Zo)
+      )
+        return V("invalidArgs", "numStart");
+    }
+  if (n.scope === "document") {
+    let r = kg(e, n);
+    return r
+      ? { ok: true, package: r, impact: "global" }
+      : V("tree-invariant", "settings-write");
+  }
+  if (
+    n.sectionIndex === void 0 ||
+    !Number.isInteger(n.sectionIndex) ||
+    n.sectionIndex < 0 ||
+    n.sectionIndex >= OI
+  )
+    return V("invalidArgs", "sectionIndex");
+  let t = bg(e, n.sectionIndex, n);
+  return t
+    ? { ok: true, package: t, impact: "global" }
+    : V("invalidArgs", "section-write");
+}
+function Ag(e, n) {
+  if (De(e, n)) return { ok: true, package: e, impact: "global" };
+  let r = n === "footnote" ? "/word/footnotes.xml" : "/word/endnotes.xml",
+    o = n === "footnote" ? "footnotes.xml" : "endnotes.xml",
+    i = n === "footnote" ? gI : xI,
+    a = n === "footnote" ? hI : yI;
+  if (e.parts.has(r) || e.partBytes.has(r))
+    return V("tree-invariant", "part-name-collision");
+  let l = II(r, a, n);
+  if (!l) return V("tree-invariant", "empty-notes-part");
+  let s = D(e, l),
+    d = ft(s),
+    c = Og(s, d, i, o);
+  if (!c) return V("tree-invariant", "relationship");
+  s = c;
+  let u = mt(s, r, a);
+  return u
+    ? ((s = u), { ok: true, package: s, impact: "global", createdPartName: r })
+    : V("tree-invariant", "content-type");
+}
+function II(e, n, t) {
+  let r = t === "footnote" ? "footnotes" : "endnotes",
+    o = t === "footnote" ? "footnote" : "endnote",
+    i = `<w:${r} xmlns:w="${Jn}"><w:${o} w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:${o}><w:${o} w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:${o}></w:${r}>`,
+    a = re(i, { name: e, contentType: n });
+  return a.ok ? a.part : null;
+}
+function CI(e, n) {
+  let t = e === "footnote" ? "footnotes" : "endnotes",
+    r = e === "footnote" ? "footnote" : "endnote";
+  return `<w:${t} xmlns:w="${Jn}"><w:${r} w:id="${n}"><w:p><w:r><w:rPr><w:rStyle w:val="${e === "footnote" ? "FootnoteReference" : "EndnoteReference"}"/></w:rPr><w:${e === "footnote" ? "footnoteRef" : "endnoteRef"}/></w:r><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:${r}></w:${t}>`;
+}
+function TI(e, n) {
+  let t = e.parts.get(e.mainDocumentPart);
+  if (t) {
+    let o = Mg(t, n);
+    if (o) return { ok: true, partName: t.name, paragraph: o };
+  }
+  let r = ii();
+  for (let o of e.parts.values()) {
+    if (!o.name.endsWith(".xml")) continue;
+    if (r.parts >= r.maxParts) break;
+    r.parts += 1;
+    let i = E(o, n);
+    if (i && i.kind === "paragraph")
+      return o.name === e.mainDocumentPart
+        ? { ok: false, detail: "paragraph-not-in-body" }
+        : { ok: false, detail: "story-not-body" };
+  }
+  return { ok: false, detail: "paragraph-not-found" };
+}
+function vI(e) {
+  for (let n of e.root.children)
+    if (
+      n.kind === "body" ||
+      (n.kind !== "textValue" && n.namespaceUri === y && n.localName === "body")
+    )
+      return n;
+  return null;
+}
+function Mg(e, n) {
+  let t = vI(e);
+  return t ? _g(t, n, 0) : null;
+}
+function SI(e, n) {
+  return Mg(e, n) !== null;
+}
+function _g(e, n, t) {
+  if (t > 64) return null;
+  if (e.kind === "paragraph" && e.id === n) return e;
+  if (e.kind === "textValue") return null;
+  for (let r of e.children) {
+    let o = _g(r, n, t + 1);
+    if (o) return o;
+  }
+  return null;
+}
+function AI(e) {
+  return Dg(e).reduce((n, t) => Math.max(n, t.end), 0);
+}
+function Dg(e) {
+  let n = [],
+    t = 0,
+    r = ka(e),
+    o = Ta(e),
+    i = new Map(r.map((c) => [c.node.id, c])),
+    a = new Map(o.map((c) => [c.node.id, c])),
+    l = new Set();
+  for (let c of r) for (let u of c.removeNodeIds) l.add(u);
+  let s = (c, u) => {
+      (n.push({ runId: c, node: u, start: t, end: t + 1 }), (t += 1));
+    },
+    d = (c, u) => {
+      let f = i.get(c.id);
+      if (f && f.kind === "complex") {
+        s(u, c);
+        return;
+      }
+      if (!l.has(c.id)) {
+        if (a.has(c.id) || Qo(c)) {
+          s(u, c);
+          return;
+        }
+        if (c.kind === "textValue") {
+          (n.push({ runId: u, node: c, start: t, end: t + c.value.length }),
+            (t += c.value.length));
+          return;
+        }
+        if (c.kind === "tab" || c.kind === "hardBreak") {
+          s(u, c);
+          return;
+        }
+        if (!(c.kind === "runProperties" || c.kind === "generic" || Ke(c))) {
+          if (c.kind === "text") {
+            for (let m of c.children) d(m, u);
+            return;
+          }
+          for (let m of c.children) d(m, u);
+        }
+      }
+    };
+  return (
+    At(e.children, 0, (c) => {
+      if (Wr(c)) {
+        i.get(c.id) && s("", c);
+        return;
+      }
+      if (c.kind === "run") for (let u of c.children) d(u, c.id);
+    }),
+    n
+  );
+}
+function MI(e, n, t, r) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: Jn,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [
+      {
+        id: e(),
+        kind: "runProperties",
+        namespaceUri: Jn,
+        localName: "rPr",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [],
+        children: [
+          {
+            id: e(),
+            kind: "generic",
+            namespaceUri: Jn,
+            localName: "rStyle",
+            prefix: "w",
+            namespaceBindings: [],
+            attributes: [
+              {
+                kind: "wmlVal",
+                namespaceUri: Jn,
+                localName: "val",
+                prefix: "w",
+                value: r,
+              },
+            ],
+            children: [],
+          },
+        ],
+      },
+      {
+        id: e(),
+        kind: "noteReference",
+        namespaceUri: Jn,
+        localName: n,
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [
+          {
+            kind: "genericExtension",
+            namespaceUri: Jn,
+            localName: "id",
+            prefix: "w",
+            value: String(t),
+          },
+        ],
+        children: [],
+      },
+    ],
+  };
+}
+function _I(e, n, t, r) {
+  let o = Dg(n),
+    i = A(e),
+    a = o.reduce((d, c) => Math.max(d, c.end), 0);
+  for (let d of o) {
+    if (d.node.kind !== "textValue" || t <= d.start || t >= d.end) continue;
+    let c = t - d.start,
+      u = d.node.value,
+      f = DI(n, d.node.id);
+    if (!f) return null;
+    let m = E(e, d.runId);
+    if (
+      !m ||
+      m.kind !== "run" ||
+      n.children.findIndex((b) => b.id === m.id) < 0
+    )
+      return null;
+    let p = {
+        ...m,
+        id: i(),
+        children: m.children.flatMap((b) =>
+          b.id === f.id ? [Rg(i, u.slice(0, c))] : [b],
+        ),
+      },
+      x = {
+        ...m,
+        id: i(),
+        children: m.children.flatMap((b) =>
+          b.id === f.id ? [Rg(i, u.slice(c))] : [Ug(b, i)],
+        ),
+      },
+      h = bn(p, i),
+      N = bn(x, i),
+      k = n.children.flatMap((b) => (b.id === m.id ? [h, ...r, N] : [b])),
+      O = F(e, n.id, k);
+    return O.ok ? O.part : null;
+  }
+  if (t === 0) {
+    let d = n.children[0]?.kind === "paragraphProperties" ? 1 : 0,
+      c = _(e, n.id, d, r);
+    return c.ok ? c.part : null;
+  }
+  if (t >= a) {
+    let d = _(e, n.id, n.children.length, r);
+    return d.ok ? d.part : null;
+  }
+  let l = o.find((d) => d.start === t);
+  if (l?.runId) {
+    let d = n.children.findIndex((c) => c.id === l.runId);
+    if (d >= 0) {
+      let c = _(e, n.id, d, r);
+      return c.ok ? c.part : null;
+    }
+  }
+  if (l && !l.runId) {
+    let d = n.children.findIndex((u) => u.id === l.node.id),
+      c = _(e, n.id, Math.max(0, d), r);
+    return c.ok ? c.part : null;
+  }
+  let s = _(e, n.id, n.children.length, r);
+  return s.ok ? s.part : null;
+}
+function Ug(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => Ug(t, n)) };
+}
+function Rg(e, n) {
+  return {
+    id: e(),
+    kind: "text",
+    namespaceUri: Jn,
+    localName: "t",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [{ id: e(), kind: "textValue", value: n }],
+  };
+}
+function DI(e, n) {
+  let t = (r) => {
+    if (r.kind === "textValue") return null;
+    if (r.kind === "text" && r.children.some((o) => o.id === n)) return r;
+    for (let o of r.children) {
+      let i = t(o);
+      if (i) return i;
+    }
+    return null;
+  };
+  return t(e);
+}
+function UI(e, n, t, r) {
+  let o = r ?? ai(),
+    i = ar(e, { budget: o, maxHits: Number.POSITIVE_INFINITY }).filter(
+      (s) => s.noteKind === n && s.noteId === t,
+    );
+  if (o.truncated) return null;
+  let a = e,
+    l = new Map();
+  for (let s of i) {
+    let d = l.get(s.partName) ?? [];
+    (d.push(s.nodeId), l.set(s.partName, d));
+  }
+  for (let [s, d] of l) {
+    let c = a.parts.get(s);
+    if (!c) return null;
+    let u = c;
+    for (let f of d) {
+      if (!E(u, f)) continue;
+      let m = Lg(u, f),
+        g = m && LI(m, f) ? m.id : f,
+        p = ie(u, g);
+      if (!p.ok) return null;
+      u = p.part;
+    }
+    a = D(a, u);
+  }
+  return a;
+}
+function Lg(e, n) {
+  let t = [e.root];
+  for (; t.length > 0;) {
+    let r = t.pop();
+    if (r.kind !== "textValue") {
+      if (r.kind === "run" && r.children.some((o) => o.id === n)) return r;
+      for (let o of r.children) t.push(o);
+    }
+  }
+  return null;
+}
+function LI(e, n) {
+  for (let t of e.children)
+    if (t.kind !== "runProperties" && t.id !== n) return false;
+  return true;
+}
+function BI(e, n, t, r, o) {
+  let i = e,
+    a = t === "footnote" ? "footnoteReference" : "endnoteReference",
+    l = new Map();
+  for (let s of o) {
+    let d = l.get(s.partName) ?? [];
+    (d.push(s.nodeId), l.set(s.partName, d));
+  }
+  for (let [s, d] of l) {
+    let c = i.parts.get(s);
+    if (!c) return null;
+    let u = c;
+    for (let f of d) {
+      let m = E(u, f);
+      if (!m || m.kind === "textValue") return null;
+      let g = {
+          ...m,
+          kind: "noteReference",
+          localName: a,
+          attributes: m.attributes.map((h) =>
+            h.localName === "id" &&
+            (h.namespaceUri === y || h.namespaceUri === "")
+              ? { ...h, value: String(r) }
+              : h,
+          ),
+        },
+        p = j(u, f, g);
+      if (!p.ok) return null;
+      u = p.part;
+      let x = Lg(u, f);
+      if (x) {
+        let h = Eg(x, n, t);
+        if (h !== x) {
+          let N = j(u, x.id, h);
+          if (!N.ok) return null;
+          u = N.part;
+        }
+      }
+    }
+    i = D(i, u);
+  }
+  return i;
+}
+function FI(e, n, t, r, o) {
+  let i = t === "footnote" ? "footnote" : "endnote",
+    a = t === "footnote" ? "footnoteRef" : "endnoteRef",
+    l = (s) => {
+      if (s.kind === "textValue") return { ...s, id: o() };
+      let d = s.kind,
+        c = s.localName,
+        u = s.attributes;
+      s.id === e.id || (s.kind === "note" && sn(s) === sn(e))
+        ? ((d = "note"),
+          (c = i),
+          (u = s.attributes.map((g) =>
+            g.localName === "id" ? { ...g, value: String(r) } : g,
+          )),
+          u.some((g) => g.localName === "id") ||
+            (u = [
+              ...u,
+              {
+                kind: "genericExtension",
+                namespaceUri: Jn,
+                localName: "id",
+                prefix: "w",
+                value: String(r),
+              },
+            ]))
+        : (s.kind === "noteRef" ||
+            (or(s) === null &&
+              (s.localName === "footnoteRef" ||
+                s.localName === "endnoteRef"))) &&
+          ((d = "noteRef"), (c = a));
+      let f = s.children.map(l),
+        m = {
+          ...s,
+          id: o(),
+          kind: d,
+          localName: c,
+          attributes: u,
+          children: f,
+        };
+      return (s.kind === "run" && (m = Eg(m, n, t)), m);
+    };
+  return l(e);
+}
+var Ha = 32,
+  Bg = 1e4,
+  jg = 2147483647,
+  VI = new Set(["unlocked", "sdtLocked", "contentLocked", "sdtContentLocked"]),
+  Kg = {
+    richText: "richText",
+    text: "plainText",
+    dropDownList: "dropDownList",
+    comboBox: "comboBox",
+    date: "date",
+    picture: "picture",
+    docPartObj: "docPartObj",
+    docPartList: "docPartList",
+    group: "group",
+    citation: "citation",
+    bibliography: "bibliography",
+    equation: "equation",
+  };
+function yL(e) {
+  return e.kind === "contentControl";
+}
+function OL(e) {
+  return e.kind === "contentControlContent";
+}
+function ja(e) {
+  return e.kind === "contentControl"
+    ? true
+    : e.kind === "generic" && e.namespaceUri === y && e.localName === "sdt";
+}
+function ld(e) {
+  if (e.kind === "textValue") return [];
+  let n = [];
+  for (let t of e.children)
+    t.kind !== "textValue" &&
+      (t.kind === "contentControlContent" || t.localName === "sdtContent") &&
+      n.push(...t.children);
+  return n;
+}
+function si(e, n = Ha) {
+  let t = false;
+  for (let i of e)
+    if (ja(i)) {
+      t = true;
+      break;
+    }
+  if (!t) return e;
+  let r = [],
+    o = (i, a) => {
+      for (let l of i) {
+        if (!ja(l)) {
+          r.push(l);
+          continue;
+        }
+        if (a >= n) {
+          r.push(l);
+          continue;
+        }
+        o(ld(l), a + 1);
+      }
+    };
+  return (o(e, 0), r);
+}
+function Ka(e) {
+  if (e.kind === "contentControl")
+    return e.children.find((n) => n.kind === "contentControlProperties");
+}
+function WI(e) {
+  return e.kind !== "contentControl"
+    ? void 0
+    : e.children.find(
+        (t) =>
+          t.kind === "contentControlProperties" ||
+          (t.kind === "generic" &&
+            t.localName === "sdtPr" &&
+            t.namespaceUri === y),
+      );
+}
+function NL(e) {
+  if (e.kind === "contentControl")
+    return e.children.find((n) => n.kind === "contentControlEndProperties");
+}
+function Qr(e) {
+  if (e.kind === "contentControl")
+    return e.children.find((n) => n.kind === "contentControlContent");
+}
+function $g(e, n, t) {
+  if (e.kind !== "textValue") {
+    for (let r of e.attributes)
+      if (r.localName === n && (r.namespaceUri === t || r.namespaceUri === ""))
+        return r.value;
+  }
+}
+function Ue(e, n) {
+  return $g(e, n, y);
+}
+function ad(e, n) {
+  return $g(e, n, W);
+}
+function Gg(e, n, t) {
+  if (!e || e.kind === "textValue") return [];
+  let r = [];
+  for (let o of e.children)
+    o.kind !== "textValue" &&
+      o.namespaceUri === n &&
+      o.localName === t &&
+      r.push(o);
+  return r;
+}
+function nn(e, n, t) {
+  return Gg(e, n, t)[0];
+}
+function Fg(e) {
+  if (!e) return false;
+  let n = Ue(e, "val");
+  return n === void 0 || !(n === "0" || n === "false" || n === "off");
+}
+function HI(e) {
+  if (!e) return false;
+  let n = ad(e, "val");
+  return n === void 0 || !(n === "0" || n === "false" || n === "off");
+}
+function jI(e) {
+  if (e === void 0 || !/^-?\d{1,10}$/.test(e)) return;
+  let n = Number(e);
+  if (!(!Number.isInteger(n) || n < -2147483648 || n > jg)) return n;
+}
+function Vg(e, n) {
+  let t = nn(e, W, n);
+  if (!t) return;
+  let r = ad(t, "val");
+  if (r === void 0) return;
+  let o = ad(t, "font");
+  return o === void 0 ? { value: r } : { value: r, font: o };
+}
+function KI(e) {
+  let n = [];
+  for (let t of Gg(e, y, "listItem")) {
+    let r = Ue(t, "value") ?? "",
+      o = Ue(t, "displayText") ?? r;
+    n.push({ displayText: o, value: r });
+  }
+  return n;
+}
+function $I(e) {
+  let n = (l) => {
+      let s = nn(e, y, l);
+      return s ? Ue(s, "val") : void 0;
+    },
+    t = Ue(e, "fullDate"),
+    r = n("dateFormat"),
+    o = n("lid"),
+    i = n("storeMappedDataAs"),
+    a = n("calendar");
+  return {
+    ...(t === void 0 ? {} : { fullDate: t }),
+    ...(r === void 0 ? {} : { dateFormat: r }),
+    ...(o === void 0 ? {} : { lid: o }),
+    ...(i === void 0 ? {} : { storeMappedDataAs: i }),
+    ...(a === void 0 ? {} : { calendar: a }),
+  };
+}
+function Fn(e) {
+  let n = WI(e),
+    t = Ue(nn(n, y, "alias") ?? lr, "val"),
+    r = Ue(nn(n, y, "tag") ?? lr, "val"),
+    o = jI(Ue(nn(n, y, "id") ?? lr, "val")),
+    i = Ue(nn(n, y, "lock") ?? lr, "val"),
+    a = i !== void 0 && VI.has(i) ? i : "unlocked",
+    l = nn(n, y, "placeholder"),
+    s = l ? Ue(nn(l, y, "docPart") ?? lr, "val") : void 0,
+    d = nn(n, y, "dataBinding"),
+    c = d ? Ue(d, "xpath") : void 0,
+    u = d ? Ue(d, "storeItemID") : void 0,
+    f = d ? Ue(d, "prefixMappings") : void 0,
+    m = Ue(nn(n, y, "label") ?? lr, "val"),
+    g = Ue(nn(n, y, "tabIndex") ?? lr, "val"),
+    p = g !== void 0 && /^\d{1,10}$/.test(g) ? Number(g) : void 0,
+    x = "untyped",
+    h;
+  if (n)
+    for (let w of n.children) {
+      if (w.kind === "textValue" || w.namespaceUri !== y) continue;
+      let I = Kg[w.localName];
+      if (I !== void 0) {
+        ((x = I), (h = w));
+        break;
+      }
+    }
+  let N = nn(n, W, "checkbox"),
+    k;
+  if (N) {
+    let w = Vg(N, "checkedState"),
+      I = Vg(N, "uncheckedState");
+    ((k = {
+      checked: HI(nn(N, W, "checked")),
+      ...(w === void 0 ? {} : { checkedState: w }),
+      ...(I === void 0 ? {} : { uncheckedState: I }),
+    }),
+      x === "untyped" && (x = "checkbox"));
+  }
+  let O = h && (x === "dropDownList" || x === "comboBox") ? KI(h) : [],
+    b =
+      h && (x === "dropDownList" || x === "comboBox")
+        ? Ue(h, "lastValue")
+        : void 0,
+    P = h && x === "date" ? $I(h) : void 0,
+    R = h && x === "plainText" ? GI(h, "multiLine") : void 0;
+  return {
+    type: x,
+    ...(t === void 0 ? {} : { alias: t }),
+    ...(r === void 0 ? {} : { tag: r }),
+    ...(o === void 0 ? {} : { id: o }),
+    lock: a,
+    ...(s === void 0 ? {} : { placeholderDocPart: s }),
+    temporary: Fg(nn(n, y, "temporary")),
+    showingPlaceholder: Fg(nn(n, y, "showingPlcHdr")),
+    ...(d === void 0
+      ? {}
+      : {
+          dataBinding: {
+            ...(c === void 0 ? {} : { xpath: c }),
+            ...(u === void 0 ? {} : { storeItemID: u }),
+            ...(f === void 0 ? {} : { prefixMappings: f }),
+          },
+        }),
+    ...(m === void 0 ? {} : { label: m }),
+    ...(p === void 0 ? {} : { tabIndex: p }),
+    listItems: O,
+    ...(b === void 0 ? {} : { lastValue: b }),
+    ...(P === void 0 ? {} : { date: P }),
+    ...(R === void 0 ? {} : { multiLine: R }),
+    ...(k === void 0 ? {} : { checkbox: k }),
+  };
+}
+var lr = Object.freeze({
+  id: "",
+  kind: "generic",
+  namespaceUri: "",
+  localName: "",
+  namespaceBindings: Object.freeze([]),
+  attributes: Object.freeze([]),
+  children: Object.freeze([]),
+});
+function GI(e, n) {
+  let t = Ue(e, n);
+  if (t !== void 0) return !(t === "0" || t === "false" || t === "off");
+}
+function zI(e) {
+  let n = Qr(e);
+  if (!n) return "empty";
+  let t = false;
+  for (let r of n.children)
+    if (r.kind !== "textValue") {
+      if (r.kind === "tableRow") return "row";
+      if (r.kind === "tableCell") return "cell";
+      if (r.kind === "paragraph" || r.kind === "table") return "block";
+      if (r.kind === "contentControl") {
+        let o = zI(r);
+        if (o !== "empty") return o;
+        continue;
+      }
+      if (
+        r.kind === "run" ||
+        r.kind === "hyperlink" ||
+        r.kind === "fldSimple" ||
+        r.kind === "revisionInsert" ||
+        r.kind === "revisionDelete" ||
+        r.kind === "revisionMoveFrom" ||
+        r.kind === "revisionMoveTo"
+      ) {
+        t = true;
+        continue;
+      }
+    }
+  return t ? "inline" : n.children.length === 0 ? "empty" : "block";
+}
+var Wg = new WeakMap();
+function Hg(e, n, t, r = false) {
+  let o = [],
+    i = (a, l, s) => {
+      if (!(a.kind === "textValue" || o.length >= t))
+        for (let d of a.children) {
+          if (o.length >= t) return;
+          if (d.kind === "contentControl") {
+            if (l >= n) continue;
+            (o.push({ node: d, depth: l, ancestors: [...s] }),
+              i(d, l + 1, [...s, d]));
+            continue;
+          }
+          if (r && l === 0 && (d.kind === "paragraph" || d.kind === "table")) {
+            for (let c of Pe(d)) {
+              if (o.length >= t) return;
+              o.push(c);
+            }
+            continue;
+          }
+          i(d, l, s);
+        }
+    };
+  return (i(e, 0, []), o);
+}
+function XI(e) {
+  for (let n of e) (Object.freeze(n.ancestors), Object.freeze(n));
+  return Object.freeze(e);
+}
+function Pe(e, n) {
+  if (n === void 0) {
+    let t = Wg.get(e);
+    if (t !== void 0) return t;
+    let r = XI(Hg(e, Ha, Bg, true));
+    return (Wg.set(e, r), r);
+  }
+  return Hg(e, n.maxDepth ?? Ha, n.limit ?? Bg);
+}
+function kL(e, n) {
+  for (let t of Pe(e)) if (t.node.id === n) return t;
+  return null;
+}
+function bL(e) {
+  let n = Qr(e);
+  if (!n) return "";
+  let t = "",
+    r = 0,
+    o = (i, a) => {
+      if (!(r > YI || a > Ha * 4)) {
+        if (((r += 1), i.kind === "textValue")) {
+          t += i.value;
+          return;
+        }
+        if (!(i.kind === "deletedText" || i.kind === "instrText")) {
+          if (i.kind === "tab") {
+            t += "	";
+            return;
+          }
+          for (let l of i.children) o(l, a + 1);
+        }
+      }
+    };
+  for (let i of n.children) o(i, 0);
+  return t;
+}
+var YI = 1e5;
+function sd(e) {
+  let n = false,
+    t = false;
+  for (let r of e)
+    ((r === "sdtLocked" || r === "sdtContentLocked") && (n = true),
+      (r === "contentLocked" || r === "sdtContentLocked") && (t = true));
+  return n && t
+    ? "sdtContentLocked"
+    : n
+      ? "sdtLocked"
+      : t
+        ? "contentLocked"
+        : "unlocked";
+}
+function di(e) {
+  return e === "contentLocked" || e === "sdtContentLocked";
+}
+function $a(e) {
+  return e === "sdtLocked" || e === "sdtContentLocked";
+}
+var li = [
+    "rPr",
+    "alias",
+    "tag",
+    "id",
+    "lock",
+    "placeholder",
+    "temporary",
+    "showingPlcHdr",
+    "dataBinding",
+    "label",
+    "tabIndex",
+  ],
+  qI = new Set(Object.keys(Kg));
+function dd(e) {
+  let n = (t) => {
+    if (t.kind === "textValue" || t.namespaceUri !== y) return li.length + 2;
+    let r = li.indexOf(t.localName);
+    return r >= 0 ? r : qI.has(t.localName) ? li.length : li.length + 2;
+  };
+  return [...e]
+    .map((t, r) => ({ node: t, index: r, rank: n(t) }))
+    .sort((t, r) => (t.rank !== r.rank ? t.rank - r.rank : t.index - r.index))
+    .map((t) => t.node);
+}
+function PL(e) {
+  let n = 0;
+  for (let t of Pe(e)) {
+    let r = Fn(t.node).id;
+    r !== void 0 && r > n && (n = r);
+  }
+  return n >= jg ? null : n + 1;
+}
+var ZI = 32;
+function QI(e) {
+  return e.kind === "textValue"
+    ? null
+    : e.kind === "body"
+      ? "body"
+      : e.kind === "note"
+        ? "note"
+        : e.localName === "hdr"
+          ? "header"
+          : e.localName === "ftr"
+            ? "footer"
+            : null;
+}
+function ui(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind === "textValue") return;
+      let o = QI(r);
+      if (o) {
+        n.push({ kind: o, root: r });
+        return;
+      }
+      for (let i of r.children) t(i);
+    };
+  return (t(e.root), n);
+}
+function EL(e) {
+  for (let n of ui(e)) if (n.kind === "body") return n.root;
+  return null;
+}
+function IL(e) {
+  if (e.kind === "textValue") return [];
+  let n = [];
+  return (ci(e.children, n, 0), n);
+}
+function ci(e, n, t) {
+  for (let r of e) {
+    if (r.kind === "paragraph") {
+      n.push(r);
+      continue;
+    }
+    if (r.kind === "table") {
+      for (let o of si(r.children))
+        if (o.kind === "tableRow")
+          for (let i of si(o.children))
+            i.kind === "tableCell" && ci(i.children, n, t);
+      continue;
+    }
+    ja(r) && t < ZI && ci(ld(r), n, t + 1);
+  }
+}
+var gn = "http://schemas.microsoft.com/office/word/2012/wordml",
+  xn = "http://schemas.microsoft.com/office/word/2016/wordml/cid",
+  cd = "/word/comments.xml",
+  zg =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
+  JI =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
+  eC =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
+  nC = "application/vnd.ms-word.commentsExtended+xml",
+  tC = [eC, nC],
+  rC =
+    "http://schemas.microsoft.com/office/2011/relationships/commentsExtended",
+  oC =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml",
+  iC = "application/vnd.ms-word.commentsIds+xml",
+  aC = [oC, iC],
+  lC = "http://schemas.microsoft.com/office/2016/relationships/commentsIds",
+  sC = 512,
+  dC = 5e4,
+  Ga = 64;
+function Ot(e = dC, n = sC) {
+  return { visited: 0, maxVisited: e, parts: 0, maxParts: n, truncated: false };
+}
+function za(e) {
+  return e.visited >= e.maxVisited
+    ? ((e.truncated = true), false)
+    : ((e.visited += 1), true);
+}
+function cn(e) {
+  return e.parts >= e.maxParts
+    ? ((e.truncated = true), false)
+    : ((e.parts += 1), true);
+}
+function et(e, n, t, r = 0, o) {
+  if (!za(n)) return false;
+  if (e.kind === "textValue") return (o?.(e.value), true);
+  if (r > Ga) return ((n.truncated = true), false);
+  if (t(e)) return true;
+  for (let i of e.children) if (!et(i, n, t, r + 1, o)) return false;
+  return true;
+}
+function se(e, n, t) {
+  for (let r of e.attributes)
+    if (r.localName === t && r.namespaceUri === n) return r.value;
+}
+function cC(e, n) {
+  return n === null ? false : typeof e == "string" ? n === e : e.includes(n);
+}
+function ud(e, n, t, r) {
+  for (let o of ct(e, n)) {
+    if (o.type !== t) continue;
+    let i = Ve(n, o.rawTarget);
+    if (i.ok && e.parts.has(i.partName) && cC(r, Xn(e, i.partName)))
+      return i.partName;
+  }
+  return null;
+}
+function hn(e, n) {
+  let t = ud(e, n, JI, zg);
+  return t !== null ? t : e.parts.has(cd) && Xn(e, cd) === zg ? cd : null;
+}
+function Xa(e, n, t) {
+  let r = (o, i) => {
+    let a = ud(e, n, o, i);
+    return a !== null ? a : t === null || t === n ? null : ud(e, t, o, i);
+  };
+  return { extended: r(rC, tC), ids: r(lC, aC) };
+}
+function fd(e, n, t) {
+  let r = new Map(),
+    o = new Set(),
+    i = e.parts.get(n);
+  return !i || !cn(t)
+    ? { byId: r, duplicateIds: o }
+    : (et(i.root, t, (a) => {
+        if (a.kind !== "comment") return false;
+        let l = se(a, y, "id");
+        return (
+          l !== void 0 &&
+            (r.has(l) ? o.add(l) : r.set(l, { partName: i.name, node: a })),
+          true
+        );
+      }),
+      { byId: r, duplicateIds: o });
+}
+function Xg(e, n, t) {
+  return fd(e, n, t).byId;
+}
+function uC(e) {
+  return (
+    (e.namespaceUri === gn && e.localName === "commentEx") ||
+    (e.namespaceUri === xn && e.localName === "commentId")
+  );
+}
+function fC(e, n) {
+  return n.namespaceUri === gn && n.localName === "commentEx"
+    ? e.namespaceUri === gn && e.localName === "commentsEx"
+    : n.namespaceUri === xn && n.localName === "commentId"
+      ? e.namespaceUri === xn && e.localName === "commentsIds"
+      : false;
+}
+function Jr(e, n, t) {
+  let r = [],
+    o = new Set();
+  for (let i of n) {
+    if (i === null || o.has(i)) continue;
+    o.add(i);
+    let a = e.parts.get(i);
+    if (
+      !a ||
+      !cn(t) ||
+      !et(
+        a.root,
+        t,
+        (s) => (uC(s) && r.push({ partName: a.name, node: s }), false),
+      )
+    )
+      break;
+  }
+  return r;
+}
+function Yg(e, n) {
+  let t = new Map();
+  for (let r of n) {
+    let o = t.get(r.partName);
+    if (!o) {
+      let a = e.parts.get(r.partName);
+      if (!a) return true;
+      o = new Set();
+      for (let l of a.root.children) l.kind !== "textValue" && o.add(l.id);
+      t.set(r.partName, o);
+    }
+    let i = e.parts.get(r.partName);
+    if (i === void 0 || !o.has(r.node.id) || !fC(i.root, r.node)) return true;
+  }
+  return false;
+}
+function Ya(e, n, t, r, o) {
+  let i = new Set();
+  if (n.size === 0) return { marked: i, truncated: r.truncated };
+  for (let a of e.parts.values()) {
+    if (!a.name.endsWith(".xml")) continue;
+    if (!cn(r)) return { marked: n, truncated: true };
+    if (o != null && o === a.root) continue;
+    if (
+      !et(a.root, r, (s) => {
+        if (o != null && s === o) return true;
+        if (
+          s.kind !== "commentRangeStart" &&
+          s.kind !== "commentRangeEnd" &&
+          s.kind !== "commentReference"
+        )
+          return false;
+        let d = se(s, y, "id");
+        return (
+          d === void 0 || !n.has(d) || (hn(e, a.name) === t && i.add(d)),
+          true
+        );
+      })
+    )
+      return { marked: n, truncated: true };
+    if (i.size === n.size) return { marked: i, truncated: false };
+  }
+  return { marked: i, truncated: r.truncated };
+}
+function md(e, n, t) {
+  let r = [],
+    o = [],
+    i = et(e, t, (a) => {
+      if (
+        a.kind === "commentRangeStart" ||
+        a.kind === "commentRangeEnd" ||
+        a.kind === "commentReference"
+      ) {
+        let l = se(a, y, "id");
+        return (l !== void 0 && n.has(l) && r.push(a.id), true);
+      }
+      return a.kind === "run" &&
+        a.children.filter(
+          (s) =>
+            !(s.kind === "commentReference" && n.has(se(s, y, "id") ?? "")) &&
+            s.kind !== "runProperties",
+        ).length === 0 &&
+        a.children.some((s) => s.kind === "commentReference")
+        ? (o.push(a.id), true)
+        : false;
+    });
+  return { doomed: r, emptiedRuns: o, truncated: !i || t.truncated };
+}
+function qg(e, n) {
+  let t = new Map(),
+    r = new Map(),
+    o = 0,
+    i = (l, s, d) => {
+      let c = t.get(l);
+      t.set(l, {
+        covering: s || (c?.covering ?? false),
+        paired: d || (c?.paired ?? false),
+        anyMarker: true,
+      });
+    },
+    a = et(
+      e,
+      n,
+      (l) => {
+        if (l.kind === "commentRangeStart") {
+          let s = se(l, y, "id");
+          return (s !== void 0 && (r.set(s, o), i(s, false, false)), true);
+        }
+        if (l.kind === "commentRangeEnd") {
+          let s = se(l, y, "id");
+          if (s !== void 0) {
+            let d = r.get(s);
+            (r.delete(s), i(s, d !== void 0 && o > d, d !== void 0));
+          }
+          return true;
+        }
+        if (l.kind === "commentReference") {
+          let s = se(l, y, "id");
+          return (s !== void 0 && i(s, false, false), true);
+        }
+        return l.kind === "tab" ||
+          l.kind === "hardBreak" ||
+          l.kind === "noteReference" ||
+          l.kind === "drawing"
+          ? ((o += 1), true)
+          : false;
+      },
+      0,
+      (l) => {
+        o += l.length;
+      },
+    );
+  return { states: t, truncated: !a || n.truncated };
+}
+function Zg(e, n) {
+  let t = new Map(),
+    r = new Map(),
+    o = null,
+    i = 0,
+    a = et(
+      e,
+      n,
+      (l) => {
+        if (l.kind === "paragraph") return ((o = l.id), (i = 0), false);
+        if (l.kind === "commentRangeStart") {
+          let s = se(l, y, "id");
+          return (
+            s !== void 0 &&
+              o !== null &&
+              r.set(s, { paragraphId: o, offset: i }),
+            true
+          );
+        }
+        if (l.kind === "commentRangeEnd") {
+          let s = se(l, y, "id");
+          if (s !== void 0 && o !== null) {
+            let d = r.get(s);
+            (r.delete(s),
+              d !== void 0 &&
+                t.set(s, {
+                  startParagraphId: d.paragraphId,
+                  startOffset: d.offset,
+                  endParagraphId: o,
+                  endOffset: i,
+                }));
+          }
+          return true;
+        }
+        return l.kind === "commentReference"
+          ? true
+          : l.kind === "tab" ||
+              l.kind === "hardBreak" ||
+              l.kind === "noteReference" ||
+              l.kind === "drawing"
+            ? ((i += 1), true)
+            : false;
+      },
+      0,
+      (l) => {
+        i += l.length;
+      },
+    );
+  return { spans: t, truncated: !a || n.truncated };
+}
+function Qg(e, n) {
+  let t = new Set();
+  for (let r of e.parts.values()) {
+    if (!r.name.endsWith(".xml")) continue;
+    if (!cn(n)) return { used: t, truncated: true };
+    if (
+      !et(r.root, n, (i) => {
+        let a = se(i, W, "paraId");
+        return (a !== void 0 && Yn(a) && t.add(a.toUpperCase()), false);
+      })
+    )
+      return { used: t, truncated: true };
+  }
+  return { used: t, truncated: n.truncated };
+}
+function Bt(e) {
+  let n = new WeakMap(),
+    t = [];
+  return {
+    get: (r) => n.get(r),
+    set(r, o) {
+      if (!n.has(r))
+        for (t.push(new WeakRef(r)); t.length > e;) {
+          let i = t.shift().deref();
+          i && !t.some((a) => a.deref() === i) && n.delete(i);
+        }
+      n.set(r, o);
+    },
+  };
+}
+var qa = "http://schemas.microsoft.com/office/word/2012/wordml",
+  mC = "http://schemas.microsoft.com/office/word/2010/wordml",
+  pC = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+function eo(e, n, t) {
+  for (let r of e.attributes)
+    if (r.localName === t && r.namespaceUri === n) return r.value;
+}
+function fi(e, n) {
+  return eo(e, y, n);
+}
+function gC(e) {
+  let n = Jg.get(e);
+  if (n) return n;
+  let t = xC(e);
+  return (Jg.set(e, t), t);
+}
+var Jg = new WeakMap();
+function xC(e) {
+  let n = _e(e),
+    t = [],
+    r = (o, i) => {
+      for (let a of o)
+        if (a.kind !== "textValue") {
+          if (a.kind === "commentRangeStart" || a.kind === "commentRangeEnd") {
+            let l = fi(a, "id"),
+              s = n.spanOf(a);
+            l !== void 0 &&
+              s &&
+              t.push({
+                commentId: l,
+                kind: a.kind === "commentRangeStart" ? "start" : "end",
+                offset: s.start,
+              });
+            continue;
+          }
+          (a.kind === "hyperlink" || Ne(a.kind)) &&
+            i < 32 &&
+            r(a.children, i + 1);
+        }
+    };
+  return (r(e.children, 0), t);
+}
+function nx(e) {
+  let n = new Map(),
+    t = [],
+    r = null;
+  for (let o of hC(e))
+    for (let i of gC(o)) {
+      let a = { paragraphId: o.id, offset: i.offset };
+      if (((r = a), i.kind === "start")) {
+        n.set(i.commentId, a);
+        continue;
+      }
+      let l = n.get(i.commentId);
+      if (l === void 0) {
+        t.push({
+          commentId: i.commentId,
+          partName: e.name,
+          start: a,
+          end: a,
+          orphaned: true,
+        });
+        continue;
+      }
+      (n.delete(i.commentId),
+        t.push({
+          commentId: i.commentId,
+          partName: e.name,
+          start: l,
+          end: a,
+          orphaned: false,
+        }));
+    }
+  for (let [o, i] of n)
+    t.push({
+      commentId: o,
+      partName: e.name,
+      start: i,
+      end: r ?? i,
+      orphaned: true,
+    });
+  return t;
+}
+function hC(e) {
+  let n = ex.get(e.root);
+  if (n) return n;
+  let t = [];
+  for (let o of ui(e)) o.root.kind !== "textValue" && ci(o.root.children, t, 0);
+  let r = t.filter((o) => o.kind === "paragraph");
+  return (ex.set(e.root, r), r);
+}
+var ex = Bt(8);
+function tx(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        if (r.kind === "comment") {
+          let o = fi(r, "id");
+          if (o !== void 0) {
+            let i = [];
+            for (let f of r.children)
+              (f.kind === "paragraph" || f.kind === "table") && i.push(f);
+            let a = fi(r, "initials"),
+              l = fi(r, "date"),
+              s;
+            for (let f = i.length - 1; f >= 0; f -= 1)
+              if (i[f]?.kind === "paragraph") {
+                s = i[f];
+                break;
+              }
+            let d = s ? eo(s, mC, "paraId") : void 0,
+              c = eo(r, pC, "parentId"),
+              u = c === o ? void 0 : c;
+            n.push({
+              id: o,
+              author: fi(r, "author") ?? "",
+              ...(a === void 0 ? {} : { initials: a }),
+              ...(l === void 0 ? {} : { date: l }),
+              blocks: i,
+              ...(d === void 0 ? {} : { paraId: d }),
+              ...(u === void 0 ? {} : { parentCommentId: u }),
+            });
+          }
+          return;
+        }
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e.root), n);
+}
+function rx(e) {
+  let n = new Map(),
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        if (r.namespaceUri === qa && r.localName === "commentEx") {
+          let o = eo(r, qa, "paraId");
+          if (o !== void 0) {
+            let i = eo(r, qa, "paraIdParent"),
+              a = eo(r, qa, "done");
+            n.set(o.toUpperCase(), {
+              ...(i === void 0 ? {} : { parentParaId: i.toUpperCase() }),
+              done: a === "1" || a === "true" || a === "on",
+            });
+          }
+          return;
+        }
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e.root), n);
+}
+function pd(e) {
+  let n = Ot();
+  for (let t of e.parts.values()) {
+    if (!t.name.endsWith(".xml")) continue;
+    if (!cn(n)) return true;
+    let r = false,
+      o = et(t.root, n, (i) =>
+        i.kind !== "comment" ? false : ((r = true), true),
+      );
+    if (r || !o) return true;
+  }
+  return false;
+}
+function yC(e) {
+  return e === "1" || e === "true" || e === "on";
+}
+function OC(e, n) {
+  let t = e.parts.get(n.storyPartName);
+  if (!t) return null;
+  if (n.noteId === void 0) return t.root;
+  for (let r of ir(t.root)) if (sn(r) === n.noteId) return r;
+  return null;
+}
+function gd(e) {
+  for (let n = e.children.length - 1; n >= 0; n -= 1) {
+    let t = e.children[n];
+    if (t.kind !== "paragraph") continue;
+    let r = se(t, W, "paraId");
+    return r === void 0 ? null : r.toUpperCase();
+  }
+  return null;
+}
+function NC(e) {
+  return `${e.startParagraphId}:${e.startOffset}|${e.endParagraphId}:${e.endOffset}`;
+}
+function kC(e) {
+  return (
+    e.startParagraphId === e.endParagraphId && e.startOffset === e.endOffset
+  );
+}
+function mi(e, n) {
+  let t = hn(e, n.storyPartName);
+  return Xa(e, n.storyPartName, t);
+}
+function xd(e, n, t, r) {
+  let o = hn(e, n.storyPartName),
+    i = o === null ? { byId: new Map(), duplicateIds: new Set() } : fd(e, o, t),
+    a = i.byId,
+    l = new Map(),
+    s = new Map(),
+    d = new Map(),
+    c = new Map(),
+    u = new Map(),
+    f = mi(e, n),
+    m = {
+      childrenOf: l,
+      records: a,
+      duplicateIds: i.duplicateIds,
+      parentParaIdByCommentId: d,
+      parentCommentIdByChildId: c,
+      commentExByParaId: u,
+      extendedPartName: f.extended,
+      malformed: false,
+    };
+  if (t.truncated) return m;
+  let g = new Map();
+  for (let [P, R] of a) {
+    let w = gd(R.node);
+    if (w === null) continue;
+    let I = g.get(w);
+    if (I !== void 0 && I !== P) return { ...m, malformed: true };
+    g.set(w, P);
+  }
+  let p = false,
+    x = (P, R) => {
+      if (P === R) {
+        p = true;
+        return;
+      }
+      let w = c.get(R);
+      if (w !== void 0 && w !== P) {
+        p = true;
+        return;
+      }
+      c.set(R, P);
+      let I = a.get(P)?.node,
+        S = I === void 0 ? null : gd(I);
+      S !== null && !d.has(R) && d.set(R, S);
+      let U = l.get(P),
+        L = s.get(P);
+      ((!U || !L) && ((U = []), (L = new Set()), l.set(P, U), s.set(P, L)),
+        !L.has(R) && (L.add(R), U.push(R)));
+    };
+  for (let [P, R] of a) {
+    let w = se(R.node, xn, "parentId");
+    if (w !== void 0) {
+      if (w === P) {
+        p = true;
+        continue;
+      }
+      a.has(w) && x(w, P);
+    }
+  }
+  let h = new Set(),
+    N = new Set(),
+    k = new Set(),
+    O = new Set(),
+    b = Jr(e, [f.extended, f.ids], t);
+  if (t.truncated) return { ...m, malformed: false };
+  if (Yg(e, b)) return { ...m, malformed: true };
+  for (let P of b) {
+    if (P.node.namespaceUri === gn && P.node.localName === "commentEx") {
+      let I = se(P.node, gn, "paraId");
+      if (I === void 0) continue;
+      let S = I.toUpperCase();
+      if (N.has(S)) return { ...m, malformed: true };
+      N.add(S);
+      let U = se(P.node, gn, "paraIdParent"),
+        L = U === void 0 ? void 0 : U.toUpperCase();
+      if (
+        (h.add(S),
+        u.set(S, {
+          partName: P.partName,
+          node: P.node,
+          paraId: S,
+          ...(L === void 0 ? {} : { parentParaId: L }),
+          done: yC(se(P.node, gn, "done")),
+        }),
+        L === void 0)
+      )
+        continue;
+      let T = g.get(S),
+        Qe = g.get(L);
+      T !== void 0 && Qe !== void 0 && (d.set(T, L), x(Qe, T));
+      continue;
+    }
+    if (P.node.namespaceUri !== xn || P.node.localName !== "commentId")
+      continue;
+    let R = se(P.node, xn, "paraId"),
+      w = se(P.node, xn, "durableId");
+    if (R !== void 0) {
+      let I = R.toUpperCase();
+      if (k.has(I)) return { ...m, malformed: true };
+      k.add(I);
+    }
+    if (w !== void 0) {
+      let I = w.toUpperCase();
+      if (O.has(I)) return { ...m, malformed: true };
+      O.add(I);
+    }
+  }
+  if (t.truncated) return { ...m, malformed: false };
+  if (p) return { ...m, malformed: true };
+  if (r) {
+    let P = OC(e, n);
+    if (P) {
+      if (!cn(t)) return { ...m, malformed: false };
+      let { spans: R, truncated: w } = Zg(P, t);
+      if (w) return { ...m, malformed: false };
+      let I = new Map();
+      for (let S of a.keys()) {
+        let U = R.get(S);
+        if (U === void 0 || kC(U)) continue;
+        let L = NC(U);
+        if (!I.has(L)) {
+          I.set(L, S);
+          continue;
+        }
+        let T = gd(a.get(S).node);
+        (T !== null && h.has(T)) || x(I.get(L), S);
+      }
+    }
+  }
+  return p
+    ? { ...m, malformed: true }
+    : bC(c, t)
+      ? { ...m, malformed: true }
+      : t.truncated
+        ? { ...m, malformed: false }
+        : {
+            childrenOf: l,
+            records: a,
+            duplicateIds: i.duplicateIds,
+            parentParaIdByCommentId: d,
+            parentCommentIdByChildId: c,
+            commentExByParaId: u,
+            extendedPartName: f.extended,
+            malformed: false,
+          };
+}
+function bC(e, n) {
+  let t = new Set();
+  for (let r of e.keys()) {
+    if (t.has(r)) continue;
+    let o = new Set(),
+      i = r,
+      a = 0;
+    for (; i !== void 0;) {
+      if (a > Ga) return ((n.truncated = true), false);
+      if (o.has(i)) return true;
+      if (t.has(i)) break;
+      (o.add(i), t.add(i), (i = e.get(i)), (a += 1));
+    }
+  }
+  return false;
+}
+function hd(e, n, t) {
+  let r = new Set([e]),
+    o = [e],
+    i = 0,
+    a = 0,
+    l = 1;
+  for (; i < o.length;) {
+    if (a > Ga) return ((t.truncated = true), r);
+    let s = o[i];
+    i += 1;
+    for (let d of n.get(s) ?? []) r.has(d) || (r.add(d), o.push(d));
+    i === l && ((a += 1), (l = o.length));
+  }
+  return r;
+}
+function yd(e, n, t, r) {
+  let o = xd(e, t, r, true);
+  if (r.truncated) return { ok: false, reason: "scan-truncated" };
+  if (o.malformed) return { ok: false, reason: "malformed-metadata" };
+  if (!o.records.has(n)) return { ok: false, reason: "unknown-comment" };
+  let i = hd(n, o.childrenOf, r);
+  if (r.truncated) return { ok: false, reason: "scan-truncated" };
+  for (let a of i)
+    if (o.duplicateIds.has(a))
+      return { ok: false, reason: "duplicate-comment" };
+  return {
+    ok: true,
+    ids: i,
+    records: o.records,
+    parentParaIdByCommentId: o.parentParaIdByCommentId,
+    parentCommentIdByChildId: o.parentCommentIdByChildId,
+    commentExByParaId: o.commentExByParaId,
+    extendedPartName: o.extendedPartName,
+  };
+}
+var PC = "http://schemas.microsoft.com/office/word/2010/wordml";
+function lx(e) {
+  return { storyPartName: e.mainDocumentPart };
+}
+var ox = new WeakMap();
+function sx(e) {
+  let n = ox.get(e);
+  if (n) return n;
+  let t = new Map();
+  for (let r of ir(e)) {
+    let o = sn(r);
+    o !== null && t.set(o, r);
+  }
+  return (ox.set(e, t), t);
+}
+function Od(e, n) {
+  let t = e.parts.get(n.storyPartName);
+  return t
+    ? n.noteId === void 0
+      ? t.root
+      : (sx(t.root).get(n.noteId) ?? null)
+    : null;
+}
+function wC(e, n, t) {
+  if (n.noteId !== void 0) return [n];
+  let r = e.parts.get(n.storyPartName);
+  if (!r || (r.root.kind !== "footnotes" && r.root.kind !== "endnotes"))
+    return [n];
+  if (!cn(t)) return [];
+  let o = [];
+  for (let i of ir(r.root)) {
+    if (!za(t)) return o;
+    let a = sn(i);
+    a === null ||
+      a <= 0 ||
+      o.push({ storyPartName: n.storyPartName, noteId: a });
+  }
+  return o.length > 0 ? o : [n];
+}
+function RC(e, n, t) {
+  let r = [];
+  for (let o of e.parts.values()) {
+    if (o.root.kind !== "footnotes" && o.root.kind !== "endnotes") continue;
+    if (!cn(t)) return r;
+    let i = n.parts.get(o.name),
+      a = i === void 0 ? new Set() : sx(i.root);
+    for (let l of ir(o.root)) {
+      if (!za(t)) return r;
+      let s = sn(l);
+      s === null ||
+        s <= 0 ||
+        a.has(s) ||
+        r.push({ storyPartName: o.name, noteId: s });
+    }
+  }
+  return r;
+}
+function ix(e, n, t) {
+  let r = Od(e, n);
+  if (!r) return new Map();
+  if (!cn(t)) return null;
+  let { states: o, truncated: i } = qg(r, t);
+  return i ? null : o;
+}
+function Za(e) {
+  for (let n = e.children.length - 1; n >= 0; n -= 1) {
+    let t = e.children[n];
+    if (t.kind !== "paragraph") continue;
+    let r = se(t, PC, "paraId");
+    return r === void 0 ? null : r.toUpperCase();
+  }
+  return null;
+}
+function Nd(e, n, t) {
+  let r = hn(e, n.storyPartName);
+  return r === null ? new Map() : Xg(e, r, t);
+}
+function dx(e, n, t, r) {
+  let o = xd(e, t, r, false);
+  return hd(n, o.childrenOf, r);
+}
+function Ft(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return e;
+  let o = r;
+  for (let i of t) {
+    if (!E(o, i)) continue;
+    let a = ie(o, i, { deferValidation: true });
+    if (!a.ok) return null;
+    o = a.part;
+  }
+  return o === r ? e : D(e, o);
+}
+function ax(e, n, t, r, o) {
+  let i = e.parts.get(n);
+  if (!i || t.size === 0) return e;
+  let a = i;
+  for (let [l, s] of t) {
+    let d = E(a, l);
+    if (!d || d.kind === "textValue") continue;
+    let c = false,
+      u = d.attributes.map((g) =>
+        g.kind !== "genericExtension" ||
+        g.namespaceUri !== r ||
+        g.localName !== o
+          ? g
+          : ((c = g.value !== s), c ? { ...g, value: s } : g),
+      );
+    if (!c) continue;
+    let f = { ...d, attributes: u },
+      m = j(a, l, f, { deferValidation: true });
+    if (!m.ok) return null;
+    a = m.part;
+  }
+  return a === i ? e : D(e, a);
+}
+function cx(e, n, t, r) {
+  let o = e.parts.get(t.storyPartName),
+    i = Od(e, t);
+  if (!o || !i) return { pkg: e, truncated: false };
+  if (!cn(r)) return { pkg: e, truncated: true };
+  let a = md(i, n, r);
+  if (a.truncated) return { pkg: e, truncated: true };
+  if (a.doomed.length === 0 && a.emptiedRuns.length === 0)
+    return { pkg: e, truncated: false };
+  let l = Ft(e, o.name, [...a.emptiedRuns, ...a.doomed]);
+  return l === null ? null : { pkg: l, truncated: false };
+}
+function ux(e, n, t, r) {
+  if (n.size === 0) return e;
+  let o = mi(e, t),
+    i = new Map();
+  for (let l of Jr(e, [o.extended, o.ids], r)) {
+    let s = se(l.node, gn, "paraId") ?? se(l.node, xn, "paraId");
+    if (s === void 0 || !n.has(s.toUpperCase())) continue;
+    let d = i.get(l.partName);
+    d ? d.push(l.node.id) : i.set(l.partName, [l.node.id]);
+  }
+  if (r.truncated) return e;
+  let a = e;
+  for (let [l, s] of i) {
+    let d = Ft(a, l, s);
+    if (d === null) return null;
+    a = d;
+  }
+  return a;
+}
+function fx(e, n, t, r) {
+  let o = Nd(e, t, r);
+  if (!o.has(n)) return e;
+  let i = dx(e, n, t, r);
+  if (r.truncated) return e;
+  let a = cx(e, i, t, r);
+  if (a === null) return null;
+  if (a.truncated) return e;
+  let l = a.pkg,
+    s = Ya(l, i, hn(e, t.storyPartName), r);
+  if (s.truncated) return l;
+  let d = new Set([...i].filter((f) => !s.marked.has(f))),
+    c = new Set(),
+    u = new Map();
+  for (let f of d) {
+    let m = o.get(f);
+    if (!m) continue;
+    let g = Za(m.node);
+    g !== null && c.add(g);
+    let p = u.get(m.partName);
+    p ? p.push(m.node.id) : u.set(m.partName, [m.node.id]);
+  }
+  for (let [f, m] of u) {
+    let g = Ft(l, f, m);
+    if (g === null) return null;
+    l = g;
+  }
+  return ux(l, c, t, r);
+}
+function QL(e, n, t) {
+  return fx(e, n, t ?? lx(e), Ot());
+}
+function JL(e, n, t) {
+  return fx(e, n, t, Ot());
+}
+function eB(e, n, t, r) {
+  return EC(e, n, t, r, Ot());
+}
+function EC(e, n, t, r, o) {
+  let i = Nd(e, r, o);
+  if (o.truncated) return e;
+  let a = i.get(n),
+    l = i.get(t);
+  if (!a || !l || n === t) return e;
+  let s = e.parts.get(r.storyPartName),
+    d = Od(e, r),
+    c = { doomed: [], emptiedRuns: [], truncated: false };
+  if (s && d && (!cn(o) || ((c = md(d, new Set([n]), o)), c.truncated)))
+    return e;
+  let u = Ya(e, new Set([n]), hn(e, r.storyPartName), o, d);
+  if (u.truncated) return e;
+  if (u.marked.has(n))
+    return !s || (c.doomed.length === 0 && c.emptiedRuns.length === 0)
+      ? e
+      : Ft(e, s.name, [...c.emptiedRuns, ...c.doomed]);
+  let m = Za(a.node),
+    g = Za(l.node),
+    p = new Map();
+  for (let O of i.values()) {
+    if (se(O.node, xn, "parentId") !== n) continue;
+    let b = p.get(O.partName);
+    (b || ((b = new Map()), p.set(O.partName, b)), b.set(O.node.id, t));
+  }
+  let x = new Map();
+  if (m !== null && g !== null) {
+    let O = mi(e, r);
+    for (let b of Jr(e, [O.extended], o)) {
+      if (se(b.node, gn, "paraIdParent")?.toUpperCase() !== m) continue;
+      let R = x.get(b.partName);
+      (R || ((R = new Map()), x.set(b.partName, R)), R.set(b.node.id, g));
+    }
+    if (o.truncated) return e;
+  }
+  let h = new Map();
+  if (m !== null) {
+    let O = mi(e, r);
+    for (let b of Jr(e, [O.extended, O.ids], o)) {
+      let P = se(b.node, gn, "paraId") ?? se(b.node, xn, "paraId");
+      if (P === void 0 || P.toUpperCase() !== m) continue;
+      let R = h.get(b.partName);
+      R ? R.push(b.node.id) : h.set(b.partName, [b.node.id]);
+    }
+    if (o.truncated) return e;
+  }
+  let N = e;
+  for (let [O, b] of p) {
+    let P = ax(N, O, b, xn, "parentId");
+    if (P === null) return null;
+    N = P;
+  }
+  for (let [O, b] of x) {
+    let P = ax(N, O, b, gn, "paraIdParent");
+    if (P === null) return null;
+    N = P;
+  }
+  if (s && (c.doomed.length > 0 || c.emptiedRuns.length > 0)) {
+    let O = Ft(N, s.name, [...c.emptiedRuns, ...c.doomed]);
+    if (O === null) return null;
+    N = O;
+  }
+  let k = Ft(N, a.partName, [a.node.id]);
+  if (k === null) return null;
+  N = k;
+  for (let [O, b] of h) {
+    let P = Ft(N, O, b);
+    if (P === null) return null;
+    N = P;
+  }
+  return N;
+}
+function mx(e, n, t) {
+  return IC(e, n, t, Ot());
+}
+function IC(e, n, t, r) {
+  let o = r,
+    i = t ?? lx(e),
+    a = [...wC(e, i, o)];
+  if (o.truncated) return n;
+  for (let f of RC(e, n, o)) {
+    if (o.truncated) return n;
+    a.some(
+      (m) => m.storyPartName === f.storyPartName && m.noteId === f.noteId,
+    ) || a.push(f);
+  }
+  let l = n,
+    s = [];
+  for (let f of a) {
+    if (o.truncated) return n;
+    let m = ix(e, f, o),
+      g = ix(l, f, o);
+    if (m === null || g === null) return n;
+    for (let [p, x] of m) {
+      if (!x.covering) continue;
+      let h = g.get(p);
+      (!(h === void 0 || !h.anyMarker) && !(h.paired && !h.covering)) ||
+        s.push({ owner: f, commentId: p });
+    }
+  }
+  let d = [];
+  for (let f of s) {
+    if (o.truncated) return n;
+    let m = dx(l, f.commentId, f.owner, o);
+    if (o.truncated) return n;
+    let g = cx(l, m, f.owner, o);
+    if (g === null) return null;
+    if (g.truncated) return n;
+    ((l = g.pkg), d.push({ owner: f.owner, ids: m }));
+  }
+  let c = new Map();
+  for (let f of d) {
+    let m = hn(l, f.owner.storyPartName),
+      g = c.get(m);
+    g || ((g = new Set()), c.set(m, g));
+    for (let p of f.ids) g.add(p);
+  }
+  let u = new Map();
+  for (let [f, m] of c) {
+    let g = Ya(l, m, f, o);
+    u.set(f, g.truncated ? m : g.marked);
+  }
+  for (let f of d) {
+    let m = hn(l, f.owner.storyPartName),
+      g = u.get(m) ?? f.ids,
+      p = new Set([...f.ids].filter((O) => !g.has(O)));
+    if (p.size === 0) continue;
+    let x = Nd(l, f.owner, o),
+      h = new Set(),
+      N = new Map();
+    for (let O of p) {
+      let b = x.get(O);
+      if (!b) continue;
+      let P = Za(b.node);
+      P !== null && h.add(P);
+      let R = N.get(b.partName);
+      R ? R.push(b.node.id) : N.set(b.partName, [b.node.id]);
+    }
+    for (let [O, b] of N) {
+      let P = Ft(l, O, b);
+      if (P === null) return null;
+      l = P;
+    }
+    let k = ux(l, h, f.owner, o);
+    if (k === null) return null;
+    l = k;
+  }
+  return l;
+}
+var yx =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+  Ox =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps",
+  kd = "application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+  Qa = "http://schemas.openxmlformats.org/officeDocument/2006/customXml";
+function px(e) {
+  let n = (a) => Xo(`${a} ${e}`).toString(16).padStart(8, "0").toUpperCase(),
+    t = n("a"),
+    r = n("b"),
+    o = n("c"),
+    i = n("d");
+  return `{${t}-${r.slice(0, 4)}-${r.slice(4)}-${o.slice(0, 4)}-${o.slice(4)}${i}}`;
+}
+var CC = ["/docProps/core.xml", "/word/settings.xml"];
+function TC(e) {
+  let n = 2166136261,
+    t = 0;
+  for (let r of [e.mainDocumentPart, ...CC]) {
+    let o = e.partBytes.get(r);
+    if (o) {
+      t += o.length;
+      for (let i of o) ((n ^= i), (n = Math.imul(n, 16777619) >>> 0));
+    }
+  }
+  return `${e.mainDocumentPart}#${String(t)}#${n.toString(16)}`;
+}
+var vC = /\/_rels\/[^/]*\.rels$/i;
+function SC(e, n) {
+  let t = e.split("/").slice(1, -1),
+    r = n.split("/").slice(1),
+    o = 0;
+  for (; o < t.length && o < r.length - 1 && t[o] === r[o];) o += 1;
+  return `${"../".repeat(t.length - o)}${r.slice(o).join("/")}`;
+}
+function gx(e) {
+  return {
+    item: `/customXml/item${String(e)}.xml`,
+    props: `/customXml/itemProps${String(e)}.xml`,
+  };
+}
+function xx(e, n) {
+  let t = re(n, { name: e, contentType: "application/xml" });
+  return t.ok ? t.part.root : null;
+}
+function AC(e, n) {
+  let t = e.parts.get(n);
+  if (!t) return null;
+  let r = t.root.attributes.find(
+    (o) => o.localName === "itemID" && o.namespaceUri === Qa,
+  );
+  return r && r.value.length > 0 ? r.value : null;
+}
+function gi(e, n) {
+  let t = [];
+  for (let r of ct(e, n)) {
+    if (r.type !== yx || r.targetMode === "External") continue;
+    let o = Ve(n, r.rawTarget);
+    if (!o.ok) continue;
+    let i = e.parts.get(o.partName);
+    if (!i || vC.test(o.partName)) continue;
+    let a = ct(e, o.partName).find(
+      (d) => d.type === Ox && d.targetMode !== "External",
+    );
+    if (!a) continue;
+    let l = Ve(o.partName, a.rawTarget);
+    if (!l.ok || Xn(e, l.partName) !== kd) continue;
+    let s = AC(e, l.partName);
+    s !== null &&
+      t.push({
+        partName: o.partName,
+        propsPartName: l.partName,
+        itemId: s,
+        namespaceUri: i.root.namespaceUri,
+      });
+  }
+  return t;
+}
+function pi(e, n, t) {
+  return gi(e, n).find((r) => r.namespaceUri === t) ?? null;
+}
+function Nx(e, n, t, r) {
+  let o = pi(e, n, t);
+  if (o) {
+    let O = e.parts.get(o.partName)?.root;
+    return O && O.localName !== r
+      ? { pkg: e, part: null }
+      : { pkg: e, part: o };
+  }
+  if (!he(r)) return { pkg: e, part: null };
+  let i = new Set();
+  for (let O of e.parts.keys()) i.add($(O));
+  for (let O of e.partBytes.keys()) i.add($(O));
+  let a = (O) => {
+      let { item: b, props: P } = gx(O);
+      return !i.has($(b)) && !i.has($(P)) && !i.has($(zn(b)));
+    },
+    l = 1;
+  for (; !a(l);) l += 1;
+  let s = gx(l),
+    d = MC(e),
+    c = `${TC(e)} ${n} ${t} ${s.item}`,
+    u = px(c);
+  for (let O = 1; d.has(u.toUpperCase()) && O < 64; O += 1)
+    u = px(`${c} ${String(O)}`);
+  if (d.has(u.toUpperCase())) return { pkg: e, part: null };
+  let f = hx(t),
+    m = hx(u);
+  if (f === null || m === null) return { pkg: e, part: null };
+  let g = xx(s.item, `<${r} xmlns="${f}"/>`),
+    p = xx(
+      s.props,
+      `<ds:datastoreItem ds:itemID="${m}" xmlns:ds="${Qa}"><ds:schemaRefs><ds:schemaRef ds:uri="${f}"/></ds:schemaRefs></ds:datastoreItem>`,
+    );
+  if (!g || !p) return { pkg: e, part: null };
+  let x = Qt(e, s.item, g, "application/xml");
+  if (
+    ((x = Qt(x, s.props, p, kd)), !x.parts.has(s.item) || !x.parts.has(s.props))
+  )
+    return { pkg: e, part: null };
+  x = Fr(x, s.props, kd);
+  let h = ut(ws(x, n), n, yx, SC(n, s.item));
+  if (!h.ok) return { pkg: e, part: null };
+  let N = ut(ws(h.pkg, s.item), s.item, Ox, `itemProps${String(l)}.xml`);
+  if (!N.ok) return { pkg: e, part: null };
+  let k = pi(N.pkg, n, t);
+  return !k || k.partName !== s.item
+    ? { pkg: e, part: null }
+    : {
+        pkg: N.pkg,
+        part: {
+          partName: s.item,
+          propsPartName: s.props,
+          itemId: u,
+          namespaceUri: t,
+        },
+      };
+}
+function hx(e) {
+  return /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(e)
+    ? null
+    : e
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+function MC(e) {
+  let n = new Set();
+  for (let t of e.parts.values()) {
+    if (t.root.localName !== "datastoreItem" || t.root.namespaceUri !== Qa)
+      continue;
+    let r = t.root.attributes.find(
+      (o) => o.localName === "itemID" && o.namespaceUri === Qa,
+    );
+    r && n.add(r.value.toUpperCase());
+  }
+  return n;
+}
+function dB(e, n, t) {
+  let r = e;
+  for (let o of gi(e, n)) {
+    if (o.namespaceUri !== t) continue;
+    let i = Ps(r, o.partName);
+    if (!i.ok) return { pkg: e, ok: false };
+    let a = Ps(i.pkg, o.propsPartName);
+    if (!a.ok) return { pkg: e, ok: false };
+    r = a.pkg;
+  }
+  return { pkg: r, ok: true };
+}
+var xi = /^[A-Za-z_][\w.-]{0,127}$/,
+  Pd = "label",
+  Px = "data",
+  wd = "node";
+function bd(e) {
+  if (e.kind === "textValue") return e.value;
+  let n = "";
+  for (let t of e.children) n += bd(t);
+  return n;
+}
+function kx(e, n) {
+  return (
+    e.children.find((t) => t.kind !== "textValue" && t.localName === n) ?? null
+  );
+}
+function hi(e) {
+  let n = e.attributes.find(
+    (t) => t.localName === "id" && t.namespaceUri === "",
+  );
+  return n && n.value.length > 0 ? n.value : null;
+}
+function Ja(e) {
+  let n = [];
+  for (let t of e.root.children)
+    t.kind !== "textValue" &&
+      t.localName === wd &&
+      t.namespaceUri === e.root.namespaceUri &&
+      n.push(t);
+  return n;
+}
+function wx(e, n, t, r, o) {
+  return {
+    id: e,
+    kind: "generic",
+    namespaceUri: n,
+    localName: t,
+    namespaceBindings: [],
+    attributes: Object.entries(r).map(([i, a]) => ({
+      kind: "genericExtension",
+      namespaceUri: "",
+      localName: i,
+      value: a,
+    })),
+    children: o,
+  };
+}
+function bx(e, n, t, r) {
+  let o = wx(e, n, t, {}, [{ id: `${e}#text`, kind: "textValue", value: r }]);
+  return r === r.trim()
+    ? o
+    : {
+        ...o,
+        attributes: [
+          ...o.attributes,
+          {
+            kind: "xmlSpace",
+            namespaceUri: J,
+            localName: "space",
+            prefix: "xml",
+            value: "preserve",
+          },
+        ],
+      };
+}
+function yi(e, n) {
+  let t = e.parts.get(n);
+  if (!t) return [];
+  let r = [];
+  for (let o of Ja(t)) {
+    let i = hi(o);
+    if (i === null) continue;
+    let a = kx(o, Pd),
+      l = kx(o, Px);
+    r.push({ id: i, label: a ? bd(a) : "", data: l ? bd(l) : "" });
+  }
+  return r;
+}
+function Rx(e, n, t) {
+  return yi(e, n).find((r) => r.id === t) ?? null;
+}
+function Ex(e, n, t) {
+  if (!xi.test(t.id)) return e;
+  let r = e.parts.get(n);
+  if (!r) return e;
+  let o = r.root.namespaceUri,
+    i = `${n}#node-${t.id}`,
+    a = wx(i, o, wd, { id: t.id }, [
+      bx(`${i}-label`, o, Pd, t.label),
+      bx(`${i}-data`, o, Px, t.data),
+    ]),
+    l = Ja(r).find((d) => hi(d) === t.id);
+  if (l) {
+    let d = F(r, r.root.id, [
+      ...r.root.children.map((c) => (c.id === l.id ? a : c)),
+    ]);
+    return d.ok ? D(e, d.part) : e;
+  }
+  let s = _(r, r.root.id, r.root.children.length, [a], {
+    deferValidation: true,
+  });
+  return s.ok ? D(e, s.part) : e;
+}
+function Rd(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return e;
+  let o = Ja(r).find((a) => hi(a) === t);
+  if (!o) return e;
+  let i = ie(r, o.id);
+  return i.ok ? D(e, i.part) : e;
+}
+function Ix(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return { pkg: e, removed: [] };
+  let o = Ja(r).filter((s) => {
+    let d = hi(s);
+    return d !== null && !t.has(d);
+  });
+  if (o.length === 0) return { pkg: e, removed: [] };
+  let i = new Set(o.map((s) => s.id)),
+    a = r.root.children.filter((s) => !i.has(s.id)),
+    l = F(r, r.root.id, a);
+  return l.ok
+    ? {
+        pkg: D(e, l.part),
+        removed: o.map((s) => hi(s) ?? "").filter((s) => s.length > 0),
+      }
+    : { pkg: e, removed: [] };
+}
+function Cx(e, n, t) {
+  return !xi.test(e) || !xi.test(n) || !xi.test(t)
+    ? null
+    : `/${e}:${n}/${e}:${wd}[@id='${t}']/${e}:${Pd}`;
+}
+function Tx(e, n) {
+  return !xi.test(e) ||
+    /['"<>&]/.test(n) ||
+    /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(n)
+    ? null
+    : `xmlns:${e}='${n}'`;
+}
+var vx = "ns0",
+  _C =
+    /^\/([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)\/\1:node\[@id='([A-Za-z_][\w.-]{0,127})'\]\/\1:label$/;
+function Sx(e, n, t) {
+  let r = Cx(vx, n, t),
+    o = Tx(vx, e.namespaceUri);
+  return r === null || o === null
+    ? null
+    : { prefixMappings: o, xpath: r, storeItemId: e.itemId };
+}
+var DC = 2048;
+function Ax(e) {
+  if (typeof e != "object" || e === null) return false;
+  let n = e;
+  for (let t of [n.prefixMappings, n.xpath, n.storeItemId])
+    if (typeof t != "string" || t.length === 0 || t.length > DC || !Z(t))
+      return false;
+  return true;
+}
+function UC(e, n) {
+  let t = (r) => r.replace(/^\{|\}$/g, "").toUpperCase();
+  return t(e) === t(n);
+}
+function LC(e, n) {
+  let t = new Set();
+  for (let r of Pe(e.root)) {
+    let o = el(r.node, n);
+    o !== null && t.add(o);
+  }
+  return t;
+}
+function Mx(e, n) {
+  let t = new Set();
+  for (let r of e.parts.values())
+    if (ui(r).length !== 0) for (let o of LC(r, n)) t.add(o);
+  return t;
+}
+function el(e, n) {
+  let t = Fn(e).dataBinding;
+  return !t?.xpath || !t.storeItemID || !UC(t.storeItemID, n)
+    ? null
+    : (_C.exec(t.xpath)?.[3] ?? null);
+}
+function sr(e, n) {
+  let t = E(e, n);
+  if (t === null) return null;
+  let r = or(t);
+  if (r === null) return null;
+  let o = r === "footnote" ? "footnotes" : "endnotes";
+  return e.root.kind !== o ? null : je(e, t.id)?.id === e.root.id ? t : null;
+}
+var _x = new Set([
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+    "trPrChange",
+    "tcPrChange",
+    "tblPrChange",
+    "tblPrExChange",
+    "tblGridChange",
+    "sectPrChange",
+  ]),
+  Dx = new Set(["rPrChange", "pPrChange"]),
+  BC = new Set(["moveFrom", "moveTo"]),
+  FC = new Set(["trPr", "tcPr", "tblPr", "tblPrEx", "numPr", "sectPr"]);
+function VC(e, n, t) {
+  return (e.localName === "ins" || e.localName === "del") &&
+    n === "trPr" &&
+    t === "tr"
+    ? true
+    : (e.localName === "cellIns" || e.localName === "cellDel") &&
+        n === "tcPr" &&
+        t === "tc";
+}
+function no(e, n) {
+  for (let t of e.attributes)
+    if (t.localName === n && t.namespaceUri === y) return t.value;
+}
+function Lx(e) {
+  let n = no(e, "id"),
+    t = no(e, "author");
+  if (n === void 0 || t === void 0) return null;
+  let r = no(e, "date");
+  return r === void 0 ? { id: n, author: t } : { id: n, author: t, date: r };
+}
+function WC(e, n) {
+  return (
+    e.id === n.id &&
+    e.author === n.author &&
+    (e.date ?? null) === (n.date ?? null)
+  );
+}
+var Ux = new WeakMap();
+function Ed(e, n) {
+  let t = [],
+    r = (i, a, l, s) => {
+      if (i.kind === "textValue") return;
+      if (i.kind === "paragraph" || i.kind === "table") {
+        let f = Ux.get(i);
+        if (f) {
+          for (let p of f) t.push(p);
+          return;
+        }
+        let m = t.length;
+        for (let p of i.children) r(p, i, a, 0);
+        let g = t.slice(m);
+        Ux.set(i, g);
+        return;
+      }
+      let d = a?.namespaceUri === y ? a.localName : void 0,
+        c = l?.namespaceUri === y ? l.localName : void 0;
+      if (i.namespaceUri === y) {
+        let f = Ne(i.kind),
+          m = d === "rPr" && c === "pPr" && BC.has(i.localName);
+        if (
+          (f ||
+            m ||
+            _x.has(i.localName) ||
+            Dx.has(i.localName) ||
+            i.localName === "ins" ||
+            i.localName === "del") &&
+          Lx(i) !== null
+        ) {
+          let p =
+              d === "rPr" &&
+              c !== "pPr" &&
+              (i.localName === "ins" || i.localName === "del"),
+            x = VC(i, d, c),
+            h = p || _x.has(i.localName) || (d !== void 0 && FC.has(d)),
+            N = (!f || m) && d === "rPr" && c === "pPr" && !h;
+          t.push({
+            node: i,
+            parent: a,
+            refused: h && !x,
+            paragraphMark: N,
+            propertyChange: Dx.has(i.localName),
+            nesting: s,
+          });
+        }
+      }
+      let u = Ne(i.kind) ? s + 1 : s;
+      for (let f of i.children) r(f, i, a, u);
+    },
+    o = n === void 0 ? e.root : E(e, n);
+  return (o !== null && r(o, null, null, 0), t);
+}
+function Bx(e) {
+  return Ed(e);
+}
+function HC(e) {
+  let n = new Map(),
+    t = (i) => {
+      let a = n.get(i);
+      if (a) return a;
+      let l = { wrappers: [], markers: [] };
+      return (n.set(i, l), l);
+    },
+    r = [],
+    o = (i) => {
+      if (i.kind !== "textValue") {
+        for (let a of i.children)
+          if (a.kind !== "textValue") {
+            if (
+              a.kind === "moveFromRangeStart" ||
+              a.kind === "moveToRangeStart"
+            ) {
+              let l = no(a, "name");
+              l !== void 0 &&
+                (r.push({ name: l, id: no(a, "id") }), t(l).markers.push(a));
+              continue;
+            }
+            if (a.kind === "moveFromRangeEnd" || a.kind === "moveToRangeEnd") {
+              let l = no(a, "id"),
+                s = -1;
+              for (let c = r.length - 1; c >= 0; c -= 1)
+                if (r[c].id === l) {
+                  s = c;
+                  break;
+                }
+              let d = s >= 0 ? r.splice(s, 1)[0] : r.pop();
+              d && t(d.name).markers.push(a);
+              continue;
+            }
+            if (a.kind === "revisionMoveFrom" || a.kind === "revisionMoveTo") {
+              let l = r[r.length - 1];
+              l !== void 0 && t(l.name).wrappers.push(a);
+            }
+            o(a);
+          }
+      }
+    };
+  return (o(e), n);
+}
+function jC(e, n) {
+  let t = E(e, n);
+  for (; t !== null;) {
+    if (t.kind === "paragraph") return t.id;
+    t = je(e, t.id);
+  }
+  return null;
+}
+function KC(e, n) {
+  let t = E(e, n);
+  for (; t !== null;) {
+    if (t.kind === "tableRow") return t.id;
+    t = je(e, t.id);
+  }
+  return null;
+}
+function Fx(e, n) {
+  let t = E(e, n);
+  return t === null || t.kind === "textValue" ? null : t;
+}
+function Vx(e, n, t) {
+  return n === void 0
+    ? [...e]
+    : e.filter((r) => {
+        let o = Lx(r.node);
+        return o === null || !WC(o, n)
+          ? false
+          : t === void 0 || r.node.localName === t;
+      });
+}
+function Wx(e, n) {
+  let t = new Map();
+  for (let r of n) {
+    let o =
+      r.node.localName === "ins" || r.node.localName === "cellIns"
+        ? "ins"
+        : r.node.localName === "del" || r.node.localName === "cellDel"
+          ? "del"
+          : null;
+    if (
+      !(
+        o !== null &&
+        ((r.parent?.localName === "trPr" &&
+          (r.node.localName === "ins" || r.node.localName === "del")) ||
+          (r.parent?.localName === "tcPr" &&
+            (r.node.localName === "cellIns" || r.node.localName === "cellDel")))
+      ) ||
+      o === null
+    )
+      continue;
+    let a = KC(e, r.node.id);
+    if (a === null) return "unsupported-revision";
+    let l = t.get(a);
+    if (l && l.kind !== o) return "unsupported-revision";
+    let s = l ?? {
+      kind: o,
+      rowMarkerCount: 0,
+      cellMarkerCount: 0,
+      markerIds: [],
+    };
+    (s.markerIds.push(r.node.id),
+      r.parent?.localName === "trPr"
+        ? (s.rowMarkerCount += 1)
+        : (s.cellMarkerCount += 1),
+      t.set(a, s));
+  }
+  for (let [r, o] of t) {
+    let a =
+      Fx(e, r)?.children.filter((l) => l.kind === "tableCell").length ?? 0;
+    if (o.rowMarkerCount !== 1 || a === 0 || o.cellMarkerCount !== a)
+      return "unsupported-revision";
+  }
+  return t;
+}
+function Hx(e, n, t, r) {
+  if (r?.scopeRootId !== void 0 && sr(e, r.scopeRootId) === null) return [];
+  let o = Vx(Ed(e, r?.scopeRootId), t, r?.localName),
+    i = Wx(e, o);
+  if (typeof i == "string") return [];
+  let a = [];
+  for (let [l, s] of i) {
+    if (!(
+      (s.kind === "ins" && n === "reject") ||
+      (s.kind === "del" && n === "accept")
+    ))
+      continue;
+    let c = Fx(e, l);
+    c && a.push(c);
+  }
+  return a;
+}
+function $C(e, n) {
+  switch (e.kind) {
+    case "revisionInsert":
+    case "revisionMoveTo":
+      return n === "accept" ? "unwrap" : "remove";
+    case "revisionDelete":
+    case "revisionMoveFrom":
+      return n === "accept" ? "remove" : "restore";
+    default:
+      return "remove";
+  }
+}
+function GC(e) {
+  return { ...e, kind: "text", localName: "t" };
+}
+function jx(e) {
+  if (e.kind === "textValue") return e;
+  let n = e.children.map(jx),
+    t = n.some((r, o) => r !== e.children[o]) ? { ...e, children: n } : e;
+  return t.kind === "deletedText"
+    ? GC(t)
+    : t.kind === "generic" &&
+        t.namespaceUri === y &&
+        t.localName === "delInstrText"
+      ? { ...t, localName: "instrText" }
+      : t;
+}
+function zC(e) {
+  let n = e.localName === "rPrChange" ? "rPr" : "pPr";
+  for (let t of e.children)
+    if (t.kind !== "textValue" && t.namespaceUri === y && t.localName === n)
+      return t.children;
+  return null;
+}
+function nl(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function XC(e) {
+  return e.kind === "paragraph" || e.kind === "table"
+    ? true
+    : e.kind !== "textValue" && Ke(e);
+}
+function Kx(e, n) {
+  let t = [],
+    r = [];
+  for (let [o, i] of e.entries()) {
+    if (
+      (i.kind !== "textValue" && n.removeRows.has(i.id)) ||
+      (i.kind !== "textValue" && n.dropMarks.has(i.id)) ||
+      (i.kind !== "textValue" && n.restoreProperties.has(i.id))
+    )
+      continue;
+    let a = i.kind === "textValue" ? void 0 : n.actions.get(i.id);
+    if (a === "remove") continue;
+    if (i.kind !== "textValue" && (a === "unwrap" || a === "restore")) {
+      for (let s of Kx(i.children, n)) t.push(a === "restore" ? jx(s) : s);
+      continue;
+    }
+    let l = $x(i, n);
+    if (i.kind === "fldSimple" || i.kind === "hyperlink") {
+      let s = l[0];
+      if (
+        l.length === 1 &&
+        s !== void 0 &&
+        s.kind !== "textValue" &&
+        s.children.length === 0
+      )
+        continue;
+    }
+    if (i.kind === "paragraph") {
+      let s = l[0];
+      if (s !== void 0 && s.kind !== "textValue") {
+        let d = s.children.filter((m) => nl(m, "pPr")),
+          c = [...r, ...s.children.filter((m) => !nl(m, "pPr"))];
+        r = [];
+        let f = e.slice(o + 1).find((m) => XC(m))?.kind === "paragraph";
+        if (n.mergeForward.has(i.id) && f) {
+          r = c;
+          continue;
+        }
+        if (c.length > s.children.length - d.length) {
+          t.push({ ...s, children: [...d, ...c] });
+          continue;
+        }
+      }
+    }
+    t.push(...l);
+  }
+  return (r.length > 0 && t.push(...r), t);
+}
+function $x(e, n) {
+  if (e.kind === "textValue") return [e];
+  let t = e.children.find(
+    (r) => r.kind !== "textValue" && n.restoreProperties.has(r.id),
+  );
+  if (t !== void 0 && t.kind !== "textValue") {
+    let r = zC(t);
+    if (r !== null) {
+      let o =
+        t.localName === "pPrChange"
+          ? e.children.filter((i) => nl(i, "rPr") || nl(i, "sectPr"))
+          : [];
+      return [{ ...e, children: [...r, ...o] }];
+    }
+  }
+  return [{ ...e, children: Kx(e.children, n) }];
+}
+function Gx(e, n, t, r) {
+  let o = r?.scopeRootId === void 0 ? e.root : sr(e, r.scopeRootId);
+  if (o === null) return { ok: false, reason: "invalid-property-value" };
+  let i = Ed(e, r?.scopeRootId),
+    a = Vx(i, t, r?.localName);
+  if (a.length === 0) return { ok: false, reason: "unknown-revision" };
+  if (a.some((k) => k.refused))
+    return { ok: false, reason: "unsupported-revision" };
+  let l = new Map(),
+    s = new Set(),
+    d = new Set(),
+    c = new Set(),
+    u = new Set(),
+    f = Wx(e, a);
+  if (typeof f == "string") return { ok: false, reason: f };
+  for (let [k, O] of f)
+    if (
+      (O.kind === "ins" && n === "reject") ||
+      (O.kind === "del" && n === "accept")
+    )
+      u.add(k);
+    else for (let P of O.markerIds) s.add(P);
+  let m = (k) => {
+    l.set(k.id, $C(k, n));
+  };
+  for (let k of a)
+    if (!(
+      k.node.localName === "cellIns" ||
+      k.node.localName === "cellDel" ||
+      ((k.node.localName === "ins" || k.node.localName === "del") &&
+        k.parent?.localName === "trPr")
+    )) {
+      if (k.propertyChange) {
+        n === "accept" ? s.add(k.node.id) : d.add(k.node.id);
+        continue;
+      }
+      if (k.paragraphMark) {
+        let O =
+          (n === "accept" &&
+            (k.node.localName === "del" || k.node.localName === "moveFrom")) ||
+          (n === "reject" &&
+            (k.node.localName === "ins" || k.node.localName === "moveTo"));
+        if ((s.add(k.node.id), O)) {
+          let b = jC(e, k.node.id);
+          if (b === null) return { ok: false, reason: "unsupported-revision" };
+          c.add(b);
+        }
+        continue;
+      }
+      m(k.node);
+    }
+  if (
+    a.filter(
+      (k) =>
+        k.node.kind === "revisionMoveFrom" || k.node.kind === "revisionMoveTo",
+    ).length > 0
+  ) {
+    for (let [, k] of HC(o))
+      if (k.wrappers.some((O) => l.has(O.id))) {
+        for (let O of k.wrappers) m(O);
+        for (let O of k.markers) s.add(O.id);
+      }
+  }
+  let p = {
+      actions: l,
+      dropMarks: s,
+      restoreProperties: d,
+      mergeForward: c,
+      removeRows: u,
+    },
+    x = $x(e.root, p),
+    h = x[0];
+  if (x.length !== 1 || h === void 0 || h.kind === "textValue")
+    return { ok: false, reason: "tree-invariant" };
+  let N = F(e, e.root.id, h.children, r);
+  return N.ok
+    ? {
+        ok: true,
+        part: N.part,
+        effect: {
+          dirty: [],
+          created: [],
+          deleted: [],
+          dependencyKeys: [qt.story],
+          impact: "flow-structural",
+        },
+      }
+    : { ok: false, reason: "tree-invariant" };
+}
+var Vt = [
+    "rFonts",
+    "sz",
+    "szCs",
+    "color",
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "u",
+    "strike",
+    "dstrike",
+    "highlight",
+    "vertAlign",
+    "position",
+    "caps",
+    "smallCaps",
+    "spacing",
+    "w",
+    "kern",
+  ],
+  Wt = [
+    "pStyle",
+    "jc",
+    "spacing",
+    "ind",
+    "tabs",
+    "numPr",
+    "keepNext",
+    "keepLines",
+    "widowControl",
+    "pageBreakBefore",
+    "shd",
+  ],
+  tl = [
+    "insertText",
+    "deleteText",
+    "setParagraphMarkRevision",
+    "proposeParagraphMerge",
+    "insertCommentMarker",
+    "acceptRevision",
+    "rejectRevision",
+    "acceptAllRevisions",
+    "rejectAllRevisions",
+    "insertTab",
+    "insertHardBreak",
+    "insertPageBreak",
+    "insertPageField",
+    "setListLevel",
+    "setListNumbering",
+    "setParagraphMarkProperties",
+    "splitParagraph",
+    "splitParagraphMany",
+    "joinParagraphs",
+    "setRunProperties",
+    "setParagraphProperties",
+    "setSectionProperties",
+    "setSectionMark",
+    "insertHyperlink",
+    "setHyperlinkTarget",
+    "removeHyperlink",
+    "setContentControlValue",
+    "removeContentControl",
+    "insertInlineContentControl",
+    "addRepeatingSectionItem",
+    "removeRepeatingSectionItem",
+    "deleteBlock",
+    "insertTable",
+    "insertTableRow",
+    "deleteTableRow",
+    "insertTableColumn",
+    "deleteTableColumn",
+    "setTableColumnWidths",
+    "setTableRightEdgeWidth",
+    "setTableRowHeight",
+    "setTableCellBorders",
+    "setTableCellFill",
+    "setTableCellVerticalAlignment",
+    "createHeaderFooter",
+    "deleteHeaderFooter",
+    "linkToPrevious",
+    "unlinkFromPrevious",
+    "setSectionFurnitureOptions",
+    "insertNote",
+    "deleteNote",
+    "convertNote",
+    "convertAllNotes",
+    "setNoteProperties",
+    "setContentControlProperties",
+    "insertContentControl",
+    "insertDrawing",
+    "replaceDrawingResource",
+    "deleteDrawing",
+    "resizeDrawing",
+    "cropDrawing",
+    "positionDrawing",
+    "setDrawingWrap",
+    "setDrawingMetadata",
+    "setDrawingLocks",
+    "transformDrawing",
+    "insertToc",
+    "replaceTocResult",
+    "rewriteTocPageNumbers",
+  ];
+var wn = 1024;
+var Le = Object.freeze({
+  maxRows: 1e4,
+  maxColumns: 1024,
+  maxTraversalNodes: 1e6,
+});
+function Id(e, n, t) {
+  if (typeof e != "number" || !Number.isFinite(e) || e < 1) return n;
+  let r = Math.floor(e);
+  return r < 1 ? n : Math.min(r, t);
+}
+function Be(e) {
+  return Object.freeze({
+    maxRows: Id(e?.maxRows, 1e4, 1e4),
+    maxColumns: Id(e?.maxColumns, 1024, 1024),
+    maxTraversalNodes: Id(e?.maxTraversalNodes, 1e6, 1e6),
+  });
+}
+var zx = ["single", "dashed", "dotted", "double", "triple", "thick"];
+function Cd(e) {
+  return e === void 0
+    ? true
+    : !Number.isFinite(e) || !Number.isInteger(e)
+      ? false
+      : e >= Eo && e <= Io;
+}
+function Td(e) {
+  return e === void 0
+    ? true
+    : !Number.isFinite(e) || !Number.isInteger(e)
+      ? false
+      : e >= Rr && e <= Er;
+}
+function Xx(e) {
+  return (e.mode ?? "frame") === "simple"
+    ? Td(e.horizontalEmu) && Td(e.verticalEmu)
+    : (e.relativeToH !== void 0 && !To.has(e.relativeToH)) ||
+        (e.relativeToV !== void 0 && !vo.has(e.relativeToV))
+      ? false
+      : Cd(e.horizontalEmu) && Cd(e.verticalEmu);
+}
+var _B = Object.freeze([...To]),
+  DB = Object.freeze([...vo]);
+function UB(e) {
+  return (
+    e.horizontalEmu !== void 0 ||
+    e.verticalEmu !== void 0 ||
+    e.relativeToH !== void 0 ||
+    e.relativeToV !== void 0
+  );
+}
+function LB(e, n) {
+  return n?.position?.mode === "simple"
+    ? Object.freeze({
+        mode: "simple",
+        ...(e.horizontalEmu !== void 0
+          ? { horizontalEmu: e.horizontalEmu }
+          : {}),
+        ...(e.verticalEmu !== void 0 ? { verticalEmu: e.verticalEmu } : {}),
+      })
+    : Object.freeze({
+        mode: "frame",
+        ...(e.horizontalEmu !== void 0
+          ? { horizontalEmu: e.horizontalEmu }
+          : {}),
+        ...(e.verticalEmu !== void 0 ? { verticalEmu: e.verticalEmu } : {}),
+        ...(e.relativeToH !== void 0 ? { relativeToH: e.relativeToH } : {}),
+        ...(e.relativeToV !== void 0 ? { relativeToV: e.relativeToV } : {}),
+      });
+}
+function BB(e, n) {
+  if (
+    (e.relativeToH !== void 0 && !To.has(e.relativeToH)) ||
+    (e.relativeToV !== void 0 && !vo.has(e.relativeToV))
+  )
+    return false;
+  let t = n === "simple" ? Td : Cd;
+  return t(e.horizontalEmu) && t(e.verticalEmu);
+}
+function qx(e, n) {
+  return e.id === n
+    ? true
+    : e.kind === "textValue"
+      ? false
+      : e.children.some((t) => qx(t, n));
+}
+function YC(e, n) {
+  let t = (r) => {
+    if (r.kind === "textValue") return null;
+    if (
+      (r.kind === "text" || r.kind === "deletedText") &&
+      r.children.some((o) => o.id === n)
+    )
+      return r;
+    for (let o of r.children) {
+      let i = t(o);
+      if (i) return i;
+    }
+    return null;
+  };
+  return t(e);
+}
+function Yx(e, n, t = "text") {
+  let r = e();
+  return {
+    id: e(),
+    kind: t,
+    namespaceUri: y,
+    localName: t === "deletedText" ? "delText" : "t",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [{ id: r, kind: "textValue", value: n }],
+  };
+}
+function qC(e, n) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: n,
+  };
+}
+function Zx(e, n, t, r, o) {
+  let i = A(e),
+    a = Y(n);
+  for (let c of a) {
+    if (c.node.kind !== "textValue" || t <= c.start || t >= c.end) continue;
+    let u = t - c.start,
+      f = c.node.value,
+      m = YC(n, c.node.id);
+    if (!m)
+      return {
+        ok: false,
+        issues: [
+          {
+            code: "known-node-invariant",
+            path: "orphan-text-value",
+            nodeId: c.node.id,
+          },
+        ],
+      };
+    let g = E(e, c.runId);
+    if (!g || g.kind !== "run")
+      return {
+        ok: false,
+        issues: [
+          {
+            code: "known-node-invariant",
+            path: "missing-run",
+            nodeId: c.runId,
+          },
+        ],
+      };
+    let p = m.kind === "deletedText" ? "deletedText" : "text",
+      x = Yx(i, f.slice(0, u), p),
+      h = Yx(i, f.slice(u), p),
+      N = g.children.flatMap((k) => (k.id === m.id ? [x, ...r, h] : [k]));
+    return F(e, g.id, N, o);
+  }
+  let l = a.find((c) => c.start === t);
+  if (l) {
+    let c = E(e, l.runId);
+    if (!c || c.kind !== "run")
+      return {
+        ok: false,
+        issues: [
+          {
+            code: "known-node-invariant",
+            path: "missing-run",
+            nodeId: l.runId,
+          },
+        ],
+      };
+    let u = c.children.findIndex((f) => qx(f, l.node.id));
+    return _(e, c.id, Math.max(0, u), r, o);
+  }
+  let s = n.children.flatMap((c) =>
+      c.kind === "run"
+        ? [c]
+        : c.kind === "hyperlink" || Ne(c.kind)
+          ? c.children.filter((u) => u.kind === "run")
+          : [],
+    ),
+    d = s[s.length - 1];
+  return d && d.kind === "run"
+    ? _(e, d.id, d.children.length, r, o)
+    : _(e, n.id, n.children.length, [qC(i, r)], o);
+}
+function Qx(e, n) {
+  for (let t of Y(e))
+    if (
+      !(!t.removeNodeIds || t.removeNodeIds.length === 0) &&
+      n > t.start &&
+      n < t.end
+    )
+      return true;
+  return false;
+}
+function to(e) {
+  let n = (t) => {
+    if (t.kind === "textValue") return null;
+    if (t.kind === "body") return t;
+    for (let r of t.children ?? []) {
+      let o = n(r);
+      if (o) return o;
+    }
+    return null;
+  };
+  return n(e.root);
+}
+function vd(e) {
+  let n = to(e);
+  if (!n) return null;
+  for (let t of n.children)
+    if (t.kind !== "textValue" && "localName" in t && t.localName === "sectPr")
+      return t;
+  return null;
+}
+function eh(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind !== "textValue" && r.kind !== "table") {
+        if ("localName" in r && r.localName === "sectPr") {
+          n.push(r);
+          return;
+        }
+        for (let o of r.children ?? []) t(o);
+      }
+    };
+  return (t(e.root), n);
+}
+function Oi(e, n) {
+  let t = false,
+    r = false,
+    o = (i, a) => {
+      if (r || i.kind === "textValue") return;
+      if (i.id === n) {
+        ((t = a), (r = true));
+        return;
+      }
+      let l = a || i.kind === "table";
+      for (let s of i.children ?? []) o(s, l);
+    };
+  return (o(e.root, false), t);
+}
+function Rn(e, n) {
+  if (!(!e || e.kind === "textValue" || !("attributes" in e))) {
+    for (let t of e.attributes ?? []) if (t.localName === n) return t.value;
+  }
+}
+function Nt(e, n) {
+  if (!e || e.kind === "textValue") return null;
+  for (let t of e.children ?? [])
+    if (t.kind !== "textValue" && "localName" in t && t.localName === n)
+      return t;
+  return null;
+}
+var Jx = (e, n, t) => {
+    if (e === void 0 || !/^-?\d{1,7}$/.test(e)) return n;
+    let r = Number(e);
+    return !Number.isFinite(r) || r <= 0 || r > t ? n : r;
+  },
+  dr = (e, n) => {
+    if (e === void 0 || !/^-?\d{1,7}$/.test(e)) return n;
+    let t = Number(e);
+    return !Number.isFinite(t) || Math.abs(t) > 31680 ? n : t;
+  };
+function Ni(e, n) {
+  let t = n.pageWidthTwips ?? e.widthTwips,
+    r = n.pageHeightTwips ?? e.heightTwips;
+  if (
+    n.orientation !== void 0 &&
+    n.pageWidthTwips === void 0 &&
+    n.pageHeightTwips === void 0
+  ) {
+    let o = Math.max(e.widthTwips, e.heightTwips),
+      i = Math.min(e.widthTwips, e.heightTwips);
+    ((t = n.orientation === "landscape" ? o : i),
+      (r = n.orientation === "landscape" ? i : o));
+  }
+  return { widthTwips: t, heightTwips: r };
+}
+function ro(e, n) {
+  if (n === void 0) {
+    let i = eh(e);
+    return vd(e) ? i : [...i, null];
+  }
+  let t = false,
+    r,
+    o = (i, a) => {
+      if (r !== void 0 || i.kind === "textValue") return;
+      if (i.kind === "paragraph") {
+        if ((i.id === n && (t = true), t && !a)) {
+          let s = Oe(i),
+            d = s ? Nt(s, "sectPr") : null;
+          d && (r = d);
+        }
+        return;
+      }
+      let l = a || i.kind === "table";
+      for (let s of i.children ?? []) o(s, l);
+    };
+  return (o(e.root, false), [r ?? vd(e)]);
+}
+function oo(e) {
+  let n = Nt(e, "pgSz"),
+    t = Nt(e, "pgMar");
+  return {
+    widthTwips: Jx(Rn(n, "w"), 12240, 63360),
+    heightTwips: Jx(Rn(n, "h"), 15840, 63360),
+    topTwips: dr(Rn(t, "top"), 1440),
+    rightTwips: dr(Rn(t, "right"), 1440),
+    bottomTwips: dr(Rn(t, "bottom"), 1440),
+    leftTwips: dr(Rn(t, "left"), 1440),
+    headerTwips: dr(Rn(t, "header"), 720),
+    footerTwips: dr(Rn(t, "footer"), 720),
+    gutterTwips: dr(Rn(t, "gutter"), 0),
+  };
+}
+var Sd = 1e5;
+function ki(e) {
+  if (e !== void 0) {
+    if (e === "1" || e === "true") return true;
+    if (e === "0" || e === "false") return false;
+  }
+}
+function ZC(e) {
+  return e ? "1" : "0";
+}
+function ih(e, n) {
+  let t = E(e, n);
+  for (; t;) {
+    if (t.kind === "paragraph") return t;
+    t = ee(e, t.id);
+  }
+  return null;
+}
+function QC(e) {
+  return e.kind === "drawingSimplePos" ||
+    e.kind === "drawingPositionH" ||
+    e.kind === "drawingPositionV" ||
+    e.kind === "drawingWrapNone" ||
+    e.kind === "drawingWrapSquare" ||
+    e.kind === "drawingWrapTight" ||
+    e.kind === "drawingWrapThrough" ||
+    e.kind === "drawingWrapTopBottom"
+    ? true
+    : e.namespaceUri !== M
+      ? false
+      : e.localName === "simplePos" ||
+        e.localName === "positionH" ||
+        e.localName === "positionV" ||
+        e.localName.startsWith("wrap");
+}
+function JC(e) {
+  let n =
+      z(e.children, { kind: "drawingExtent" }) ??
+      z(e.children, { namespaceUri: M, localName: "extent" }),
+    t = Number(we(n?.attributes ?? [], "cx") ?? "914400"),
+    r = Number(we(n?.attributes ?? [], "cy") ?? "914400");
+  return { cx: t, cy: r };
+}
+function eT(e, n, t) {
+  let r = (o, i, a, l) => ({
+    id: t(),
+    kind: o,
+    namespaceUri: M,
+    localName: i,
+    prefix: "wp",
+    namespaceBindings: [],
+    attributes: [
+      ne("x", String(Math.round(a))),
+      ne("y", String(Math.round(l))),
+    ],
+    children: [],
+  });
+  return {
+    id: t(),
+    kind: "drawingWrapPolygon",
+    namespaceUri: M,
+    localName: "wrapPolygon",
+    prefix: "wp",
+    namespaceBindings: [],
+    attributes: [ne("edited", "0")],
+    children: [
+      r("drawingWrapPolygonStart", "start", 0, 0),
+      r("drawingWrapPolygonLineTo", "lineTo", e, 0),
+      r("drawingWrapPolygonLineTo", "lineTo", e, n),
+      r("drawingWrapPolygonLineTo", "lineTo", 0, n),
+      r("drawingWrapPolygonLineTo", "lineTo", 0, 0),
+    ],
+  };
+}
+function Ad(e, n, t) {
+  return q(e, { children: e.children.map((r) => (r.id === n ? t : r)) });
+}
+function pe(e) {
+  return e.kind !== "textValue";
+}
+function we(e, n) {
+  for (let t of e)
+    if (t.localName === n && t.namespaceUri === "") return t.value;
+}
+function ne(e, n) {
+  return { kind: "genericExtension", namespaceUri: "", localName: e, value: n };
+}
+function Ye(e, n, t) {
+  let r = e.filter((o) => !(o.localName === n && o.namespaceUri === ""));
+  return (t !== void 0 && r.push(ne(n, t)), r);
+}
+function q(e, n) {
+  return { ...e, ...n };
+}
+function z(e, n) {
+  for (let t of e)
+    if (
+      pe(t) &&
+      !(n.kind !== void 0 && t.kind !== n.kind) &&
+      !(n.localName !== void 0 && t.localName !== n.localName) &&
+      !(n.namespaceUri !== void 0 && t.namespaceUri !== n.namespaceUri)
+    )
+      return t;
+  return null;
+}
+function ah(e) {
+  return (
+    z(e.children, { kind: "inlineDrawing" }) ??
+    z(e.children, { kind: "anchoredDrawing" }) ??
+    z(e.children, { namespaceUri: M, localName: "inline" }) ??
+    z(e.children, { namespaceUri: M, localName: "anchor" })
+  );
+}
+function nT(e, n) {
+  let t = E(e, n);
+  return t !== null && t.kind === "drawing";
+}
+function lh(e, n) {
+  return Zt(n, { ownerPartName: e.name, supportedMcRequires: Gn, limits: St });
+}
+function sh(e) {
+  return e !== null && e.picture !== null;
+}
+function nh(e) {
+  return Number.isFinite(e) && e > 0 && e <= Co;
+}
+function tT(e) {
+  return [e.left, e.top, e.right, e.bottom].some(
+    (t) => !Number.isFinite(t) || t < 0 || t > Sd,
+  )
+    ? false
+    : e.left + e.right < Sd && e.top + e.bottom < Sd;
+}
+function rl(e) {
+  return String(Math.round(e));
+}
+function rT(e) {
+  let n =
+    z(e.children, { kind: "drawingGraphicFramePr" }) ??
+    z(e.children, { namespaceUri: M, localName: "cNvGraphicFramePr" });
+  if (!n) return {};
+  let t = n.children.find(
+    (o) => pe(o) && o.namespaceUri === B && o.localName === "graphicFrameLocks",
+  );
+  if (!t || !pe(t)) return {};
+  let r = (o) => {
+    let i = we(t.attributes, o);
+    return ki(i);
+  };
+  return {
+    select: r("noSelect"),
+    move: r("noMove"),
+    resize: r("noResize"),
+    changeAspect: r("noChangeAspect"),
+  };
+}
+function dh(e) {
+  if (ki(we(e.attributes, "locked")) === true)
+    return Object.freeze({
+      select: true,
+      move: true,
+      resize: true,
+      changeAspect: true,
+    });
+  let t = rT(e);
+  return Object.freeze({
+    select: t.select ?? false,
+    move: t.move ?? false,
+    resize: t.resize ?? false,
+    changeAspect: t.changeAspect ?? false,
+  });
+}
+function cr(e, n) {
+  let t = dh(e);
+  return (n === "deleteDrawing" && t.select) ||
+    (n === "resizeDrawing" && t.resize) ||
+    (n === "cropDrawing" && (t.resize || t.changeAspect)) ||
+    (n === "positionDrawing" && t.move) ||
+    (n === "setDrawingWrap" && t.move) ||
+    (n === "transformDrawing" && (t.resize || t.changeAspect))
+    ? "drawing-locked"
+    : n === "setDrawingLocks" || n === "setDrawingMetadata"
+      ? null
+      : n === "replaceDrawingResource" && t.resize
+        ? "drawing-locked"
+        : null;
+}
+function Te(e, n) {
+  if (!nT(e, n)) return E(e, n) ? "not-a-drawing" : "unknown-drawing";
+  let t = E(e, n),
+    r = ah(t);
+  if (!r) return "not-a-drawing";
+  let o = lh(e, t);
+  return !o || !sh(o)
+    ? "not-a-picture-drawing"
+    : { drawing: t, anchor: r, projection: o };
+}
+function oT(e) {
+  return e.length > 0 && e.length <= 512 && /^[A-Za-z0-9._-]+$/.test(e);
+}
+function Md(e) {
+  switch (e.op) {
+    case "setDrawingMetadata":
+    case "setDrawingLocks":
+    case "replaceDrawingResource":
+      return "text-local";
+    case "insertDrawing":
+    case "deleteDrawing":
+    case "resizeDrawing":
+    case "cropDrawing":
+    case "positionDrawing":
+    case "setDrawingWrap":
+    case "transformDrawing":
+      return "flow-structural";
+    default: {
+      return "flow-structural";
+    }
+  }
+}
+function Ud(e, n) {
+  switch (n.op) {
+    case "insertDrawing": {
+      let t = E(e, n.paragraphId);
+      if (!t) return "unknown-paragraph";
+      if (!pn(t)) return "not-a-paragraph";
+      let r = Qn(t);
+      if (!Number.isInteger(n.offset) || n.offset < 0 || n.offset > r)
+        return "offset-out-of-range";
+      if (Xe(t, n.offset)) return "splits-surrogate-pair";
+      if (Qx(t, n.offset)) return "invalid-range";
+      let o = Y(t).find((l) => l.start === n.offset);
+      if (
+        o?.removeNodeIds &&
+        o.removeNodeIds.length > 0 &&
+        o.node.kind !== "textValue" &&
+        o.node.kind !== "tab" &&
+        o.node.kind !== "hardBreak"
+      )
+        return "invalid-range";
+      if (n.drawing.kind !== "drawing" || !ah(n.drawing))
+        return "not-a-drawing";
+      let a = lh(e, n.drawing);
+      return sh(a)
+        ? Oi(e, n.paragraphId) &&
+          n.offset !== r &&
+          n.offset !== 0 &&
+          !Y(t).find((s) => s.start === n.offset)
+          ? "cross-cell-drawing"
+          : null
+        : "not-a-picture-drawing";
+    }
+    case "deleteDrawing": {
+      if (n.revision) return "trackedDrawingDeletionUnsupported";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : cr(t.anchor, n.op);
+    }
+    case "replaceDrawingResource": {
+      if (!oT(n.relationshipId)) return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : cr(t.anchor, n.op);
+    }
+    case "resizeDrawing": {
+      if (!nh(n.extentEmu.cx) || !nh(n.extentEmu.cy))
+        return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : cr(t.anchor, n.op);
+    }
+    case "cropDrawing": {
+      if (!tT(n.crop)) return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : cr(t.anchor, n.op);
+    }
+    case "positionDrawing": {
+      if (!Xx(n.position)) return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string"
+        ? t
+        : t.projection.kind !== "anchored"
+          ? "invalid-drawing-value"
+          : cr(t.anchor, n.op);
+    }
+    case "setDrawingWrap": {
+      if (!nm.includes(n.wrap)) return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : cr(t.anchor, n.op);
+    }
+    case "setDrawingMetadata": {
+      if (
+        !th(n.title) ||
+        !th(n.description) ||
+        (n.hyperlink !== void 0 && n.hyperlink !== null && !lt(n.hyperlink).ok)
+      )
+        return "invalid-drawing-value";
+      if (n.hyperlink !== void 0 && n.hyperlink !== null)
+        return "packageTransactionRequired";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : null;
+    }
+    case "setDrawingLocks": {
+      for (let r of [
+        n.locks.select,
+        n.locks.move,
+        n.locks.resize,
+        n.locks.changeAspect,
+      ])
+        if (r !== void 0 && typeof r != "boolean")
+          return "invalid-drawing-value";
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string" ? t : null;
+    }
+    case "transformDrawing": {
+      let t = Te(e, n.drawingNodeId);
+      return typeof t == "string"
+        ? t
+        : t.projection.picture
+          ? cr(t.anchor, n.op)
+          : "not-a-drawing";
+    }
+    default: {
+      return "unknown-op";
+    }
+  }
+}
+function th(e) {
+  if (typeof e != "string" || e.length > 2048) return false;
+  for (let n = 0; n < e.length; n += 1) {
+    let t = e.charCodeAt(n);
+    if (
+      t === 0 ||
+      (t >= 1 && t <= 8) ||
+      t === 11 ||
+      t === 12 ||
+      (t >= 14 && t <= 31)
+    )
+      return false;
+  }
+  return true;
+}
+function ch(e, n, t) {
+  let r = ih(e, n);
+  return {
+    dirty: r ? [r.id, n] : [n],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: Md(t),
+  };
+}
+function iT(e, n, t) {
+  let r =
+    z(e.children, { kind: "drawingExtent" }) ??
+    z(e.children, { namespaceUri: M, localName: "extent" });
+  if (!r) return e;
+  let o = q(r, {
+    attributes: Ye(
+      Ye(r.attributes, "cx", String(Math.round(n))),
+      "cy",
+      String(Math.round(t)),
+    ),
+  });
+  return q(e, { children: e.children.map((i) => (i.id === r.id ? o : i)) });
+}
+function Ld(e) {
+  let n = z(e.children, { kind: "drawingGraphic" });
+  if (!n) return null;
+  let t = z(n.children, { kind: "drawingGraphicData" });
+  return t ? z(t.children, { kind: "picture" }) : null;
+}
+function aT(e) {
+  let n =
+    z(e.children, { kind: "pictureBlipFill" }) ??
+    z(e.children, { namespaceUri: He, localName: "blipFill" });
+  return n
+    ? (z(n.children, { kind: "pictureBlip" }) ??
+        z(n.children, { namespaceUri: B, localName: "blip" }))
+    : null;
+}
+function uh(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: An,
+    localName: e,
+    prefix: "r",
+    value: n,
+  };
+}
+function _d(e, n, t) {
+  let r = e.filter((o) => !(o.localName === n && o.namespaceUri === An));
+  return (t !== void 0 && r.push(uh(n, t)), r);
+}
+function lT(e, n) {
+  let t = Ld(e);
+  if (!t) return e;
+  let r = t.children.find(
+    (f) =>
+      pe(f) && (f.kind === "pictureBlipFill" || f.localName === "blipFill"),
+  );
+  if (!r) return e;
+  let o = aT(t);
+  if (!o) return e;
+  let i = q(o, {
+      attributes: _d(_d(o.attributes, "link", void 0), "embed", n),
+    }),
+    a = q(r, { children: r.children.map((f) => (f.id === o.id ? i : f)) }),
+    l = q(t, { children: t.children.map((f) => (f.id === r.id ? a : f)) }),
+    s = z(e.children, { kind: "drawingGraphic" }),
+    d = z(s.children, { kind: "drawingGraphicData" }),
+    c = q(d, { children: d.children.map((f) => (f.id === t.id ? l : f)) }),
+    u = q(s, { children: s.children.map((f) => (f.id === d.id ? c : f)) });
+  return q(e, { children: e.children.map((f) => (f.id === s.id ? u : f)) });
+}
+function sT(e, n, t) {
+  let r = Ld(e);
+  if (!r) return e;
+  let o = r.children.find(
+    (c) =>
+      pe(c) && (c.kind === "pictureBlipFill" || c.localName === "blipFill"),
+  );
+  if (!o) return e;
+  let i =
+      z(o.children, { kind: "pictureSrcRect" }) ??
+      z(o.children, { namespaceUri: B, localName: "srcRect" }),
+    a = Ye(
+      Ye(
+        Ye(Ye(i?.attributes ?? [], "l", rl(n.left)), "t", rl(n.top)),
+        "r",
+        rl(n.right),
+      ),
+      "b",
+      rl(n.bottom),
+    );
+  if (!i) {
+    i = {
+      id: t(),
+      kind: "pictureSrcRect",
+      namespaceUri: B,
+      localName: "srcRect",
+      prefix: "a",
+      namespaceBindings: [],
+      attributes: a,
+      children: [],
+    };
+    let c = o.children.findIndex(
+        (p) => pe(p) && (p.kind === "pictureBlip" || p.localName === "blip"),
+      ),
+      u = c >= 0 ? c + 1 : 0,
+      f = [...o.children];
+    f.splice(u, 0, i);
+    let m = q(o, { children: f }),
+      g = q(r, { children: r.children.map((p) => (p.id === o.id ? m : p)) });
+    return Dd(e, g);
+  }
+  let l = q(i, { attributes: a }),
+    s = q(o, { children: o.children.map((c) => (c.id === i.id ? l : c)) }),
+    d = q(r, { children: r.children.map((c) => (c.id === o.id ? s : c)) });
+  return Dd(e, d);
+}
+function Dd(e, n) {
+  let t = z(e.children, { kind: "drawingGraphic" }),
+    r = z(t.children, { kind: "drawingGraphicData" }),
+    o = q(r, { children: r.children.map((a) => (a.id === n.id ? n : a)) }),
+    i = q(t, { children: t.children.map((a) => (a.id === r.id ? o : a)) });
+  return q(e, { children: e.children.map((a) => (a.id === t.id ? i : a)) });
+}
+function dT(e) {
+  return (
+    z(e.children, { kind: "pictureShapeProperties" }) ??
+    z(e.children, { namespaceUri: He, localName: "spPr" })
+  );
+}
+function cT(e, n, t) {
+  let r = Ld(e);
+  if (!r || !n.picture) return e;
+  let o = dT(r);
+  if (!o) return e;
+  let i =
+      z(o.children, { kind: "drawingTransform" }) ??
+      z(o.children, { namespaceUri: B, localName: "xfrm" }),
+    a = n.picture.transform.rotationDegrees,
+    l = n.picture.transform.flipHorizontal,
+    s = n.picture.transform.flipVertical;
+  switch (t) {
+    case "rotateCW":
+      a = (a + 90) % 360;
+      break;
+    case "rotateCCW":
+      a = (a + 270) % 360;
+      break;
+    case "flipH":
+      l = !l;
+      break;
+    case "flipV":
+      s = !s;
+      break;
+  }
+  let d = [...(i?.attributes ?? [])],
+    c = Math.round(a * 6e4),
+    u = Ye(
+      Ye(Ye(d, "rot", c === 0 ? void 0 : String(c)), "flipH", l ? "1" : void 0),
+      "flipV",
+      s ? "1" : void 0,
+    );
+  if (!i) return e;
+  let f = q(i, { attributes: u }),
+    m = q(o, { children: o.children.map((p) => (p.id === i.id ? f : p)) }),
+    g = q(r, { children: r.children.map((p) => (p.id === o.id ? m : p)) });
+  return Dd(e, g);
+}
+function uT(e, n, t, r) {
+  let o =
+    z(e.children, { kind: "drawingDocPr" }) ??
+    z(e.children, { namespaceUri: M, localName: "docPr" });
+  if (!o) return e;
+  let i = Ye(
+      Ye(o.attributes, "title", n.length > 0 ? n : void 0),
+      "descr",
+      t.length > 0 ? t : void 0,
+    ),
+    a = [...o.children];
+  r === null &&
+    (a = a.filter(
+      (s) => !(pe(s) && s.namespaceUri === B && s.localName === "hlinkClick"),
+    ));
+  let l = q(o, { attributes: i, children: a });
+  return q(e, { children: e.children.map((s) => (s.id === o.id ? l : s)) });
+}
+function fh(e) {
+  let n =
+    z(e.children, { kind: "drawingDocPr" }) ??
+    z(e.children, { namespaceUri: M, localName: "docPr" });
+  if (!n) return null;
+  let t = n.children.find(
+    (r) => pe(r) && r.namespaceUri === B && r.localName === "hlinkClick",
+  );
+  if (!t || !pe(t)) return null;
+  for (let r of t.attributes)
+    if (r.localName === "id" && r.namespaceUri === An) return r.value;
+  return null;
+}
+function mh(e, n) {
+  let t =
+    z(e.children, { kind: "drawingDocPr" }) ??
+    z(e.children, { namespaceUri: M, localName: "docPr" });
+  if (!t) return e;
+  let r = [...t.children];
+  if (n === null)
+    r = r.filter(
+      (i) => !(pe(i) && i.namespaceUri === B && i.localName === "hlinkClick"),
+    );
+  else {
+    let i = r.find(
+      (a) => pe(a) && a.namespaceUri === B && a.localName === "hlinkClick",
+    );
+    if (i) {
+      let a = q(i, { attributes: _d(i.attributes, "id", n) });
+      r = r.map((l) => (l.id === i.id ? a : l));
+    } else
+      r.push({
+        id: `${t.id}#hlink`,
+        kind: "generic",
+        namespaceUri: B,
+        localName: "hlinkClick",
+        prefix: "a",
+        namespaceBindings: [],
+        attributes: [uh("id", n)],
+        children: [],
+      });
+  }
+  let o = q(t, { children: r });
+  return q(e, { children: e.children.map((i) => (i.id === t.id ? o : i)) });
+}
+function fT(e, n) {
+  return Object.freeze({
+    select: n.select ?? e.select,
+    move: n.move ?? e.move,
+    resize: n.resize ?? e.resize,
+    changeAspect: n.changeAspect ?? e.changeAspect,
+  });
+}
+var mT = new Set(["noSelect", "noMove", "noResize", "noChangeAspect"]),
+  pT = [
+    ["select", "noSelect"],
+    ["move", "noMove"],
+    ["resize", "noResize"],
+    ["changeAspect", "noChangeAspect"],
+  ];
+function gT(e) {
+  return (
+    e.select !== void 0 ||
+    e.move !== void 0 ||
+    e.resize !== void 0 ||
+    e.changeAspect !== void 0
+  );
+}
+function xT(e) {
+  return ki(we(e.attributes, "locked")) === true;
+}
+function hT(e) {
+  return e.namespaceUri === ""
+    ? e.localName
+    : `${e.namespaceUri}:${e.localName}`;
+}
+function yT(e) {
+  return (
+    z(e.children, { kind: "drawingGraphicFramePr" }) ??
+    z(e.children, { namespaceUri: M, localName: "cNvGraphicFramePr" })
+  );
+}
+function OT(e) {
+  return e.children.find(
+    (n) => pe(n) && n.namespaceUri === B && n.localName === "graphicFrameLocks",
+  );
+}
+function NT(e, n) {
+  let t = [...e.children],
+    r = t.findIndex(
+      (o) =>
+        pe(o) && (o.kind === "drawingGraphic" || o.localName === "graphic"),
+    );
+  return (t.splice(r >= 0 ? r : t.length, 0, n), q(e, { children: t }));
+}
+function kT(e, n, t) {
+  return q(e, { children: e.children.map((r) => (r.id === n ? t : r)) });
+}
+function bT(e, n, t, r) {
+  let o = dh(e),
+    i = fT(o, t),
+    a = xT(e) && gT(t),
+    l = i.select && i.move && i.resize && i.changeAspect,
+    s = q(e, { attributes: Ye(e.attributes, "locked", l ? "1" : "0") }),
+    d = yT(s);
+  d ||
+    ((d = {
+      id: r(),
+      kind: "drawingGraphicFramePr",
+      namespaceUri: M,
+      localName: "cNvGraphicFramePr",
+      prefix: "wp",
+      namespaceBindings: [],
+      attributes: [],
+      children: [],
+    }),
+    (s = NT(s, d)));
+  let c = OT(d),
+    u = new Map();
+  for (let h of c?.attributes ?? []) u.set(hT(h), h);
+  let f = (h, N) => {
+    if (N === void 0) return;
+    let k = h;
+    if (N) {
+      let O = u.get(k);
+      O && ki(O.value) === true ? u.set(k, O) : u.set(k, ne(h, ZC(true)));
+    } else u.delete(k);
+  };
+  for (let [h, N] of pT) a ? f(N, i[h]) : t[h] !== void 0 && f(N, t[h]);
+  let m = ["noSelect", "noMove", "noResize", "noChangeAspect"].some((h) => {
+      let N = u.get(h)?.value;
+      return ki(N) === true;
+    }),
+    g = [...u.values()].some(
+      (h) => h.namespaceUri !== "" || !mT.has(h.localName),
+    ),
+    p = d.children.filter(
+      (h) => !(pe(h) && h.localName === "graphicFrameLocks"),
+    );
+  if (m || g) {
+    let h = c
+      ? q(c, { attributes: [...u.values()] })
+      : {
+          id: r(),
+          kind: "generic",
+          namespaceUri: B,
+          localName: "graphicFrameLocks",
+          prefix: "a",
+          namespaceBindings: [],
+          attributes: [...u.values()],
+          children: [],
+        };
+    p = [...p, h];
+  }
+  let x = { ...d, kind: "drawingGraphicFramePr", children: p };
+  return kT(s, d.id, x);
+}
+function rh(e) {
+  switch (e) {
+    case "inline":
+      return { behindDocument: false, wrapLocalName: "wrapNone" };
+    case "behind":
+      return { behindDocument: true, wrapLocalName: "wrapNone" };
+    case "inFront":
+      return { behindDocument: false, wrapLocalName: "wrapNone" };
+    case "square":
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapSquare",
+        wrapText: "bothSides",
+      };
+    case "squareLeft":
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapSquare",
+        wrapText: "left",
+      };
+    case "squareRight":
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapSquare",
+        wrapText: "right",
+      };
+    case "tight":
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapTight",
+        wrapText: "bothSides",
+      };
+    case "through":
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapThrough",
+        wrapText: "bothSides",
+      };
+    case "topAndBottom":
+      return { behindDocument: false, wrapLocalName: "wrapTopAndBottom" };
+    default: {
+      return {
+        behindDocument: false,
+        wrapLocalName: "wrapSquare",
+        wrapText: "bothSides",
+      };
+    }
+  }
+}
+function ph(e) {
+  return e.children.filter((n) => pe(n) && !QC(n));
+}
+function PT(e) {
+  return e
+    ? e.children.filter(
+        (n) =>
+          pe(n) &&
+          n.kind === "generic" &&
+          n.localName !== "wrapPolygon" &&
+          n.localName !== "effectExtent",
+      )
+    : [];
+}
+function wT(e, n, t) {
+  let r = t ? RT(t) : { top: 0, right: 0, bottom: 0, left: 0 },
+    o = (t?.attributes ?? []).filter((i) => i.namespaceUri !== "");
+  switch (e) {
+    case "wrapNone":
+      break;
+    case "wrapSquare":
+      (o.push(
+        ne("distT", String(r.top)),
+        ne("distB", String(r.bottom)),
+        ne("distL", String(r.left)),
+        ne("distR", String(r.right)),
+      ),
+        n.wrapText && o.push(ne("wrapText", n.wrapText)));
+      break;
+    case "wrapTight":
+    case "wrapThrough":
+      (o.push(ne("distL", String(r.left)), ne("distR", String(r.right))),
+        n.wrapText && o.push(ne("wrapText", n.wrapText)));
+      break;
+    case "wrapTopAndBottom":
+      o.push(ne("distT", String(r.top)), ne("distB", String(r.bottom)));
+      break;
+  }
+  return o;
+}
+function gh(e, n, t, r) {
+  let o = wT(e.wrapLocalName, e, t),
+    i = {
+      wrapNone: "drawingWrapNone",
+      wrapSquare: "drawingWrapSquare",
+      wrapTight: "drawingWrapTight",
+      wrapThrough: "drawingWrapThrough",
+      wrapTopAndBottom: "drawingWrapTopBottom",
+    },
+    a = [...PT(t)];
+  if (
+    e.wrapLocalName === "wrapSquare" ||
+    e.wrapLocalName === "wrapTopAndBottom"
+  ) {
+    let l =
+      t?.children.find(
+        (s) =>
+          pe(s) &&
+          (s.kind === "drawingEffectExtent" ||
+            (s.namespaceUri === M && s.localName === "effectExtent")),
+      ) ?? null;
+    l && a.unshift(l);
+  }
+  if (e.wrapLocalName === "wrapTight" || e.wrapLocalName === "wrapThrough") {
+    let { cx: l, cy: s } = JC(r);
+    a.unshift(eT(l, s, n));
+  }
+  return {
+    id: n(),
+    kind: i[e.wrapLocalName],
+    namespaceUri: M,
+    localName: e.wrapLocalName,
+    prefix: "wp",
+    namespaceBindings: [],
+    attributes: o,
+    children: a,
+  };
+}
+function RT(e) {
+  let n = (t) => Number(we(e.attributes, t) ?? "0");
+  return {
+    top: n("distT"),
+    right: n("distR"),
+    bottom: n("distB"),
+    left: n("distL"),
+  };
+}
+function ET(e, n) {
+  let t = n.position,
+    r = t?.horizontal.relativeFrom ?? "column",
+    o = t?.vertical.relativeFrom ?? "paragraph";
+  return [
+    {
+      id: e(),
+      kind: "drawingSimplePos",
+      namespaceUri: M,
+      localName: "simplePos",
+      prefix: "wp",
+      namespaceBindings: [],
+      attributes: [ne("x", "0"), ne("y", "0")],
+      children: [],
+    },
+    {
+      id: e(),
+      kind: "drawingPositionH",
+      namespaceUri: M,
+      localName: "positionH",
+      prefix: "wp",
+      namespaceBindings: [],
+      attributes: [ne("relativeFrom", r)],
+      children: [
+        {
+          id: e(),
+          kind: "drawingPositionOffset",
+          namespaceUri: M,
+          localName: "posOffset",
+          prefix: "wp",
+          namespaceBindings: [],
+          attributes: [],
+          children: [
+            {
+              id: e(),
+              kind: "textValue",
+              value: String(t?.horizontal.offsetEmu ?? 0),
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: e(),
+      kind: "drawingPositionV",
+      namespaceUri: M,
+      localName: "positionV",
+      prefix: "wp",
+      namespaceBindings: [],
+      attributes: [ne("relativeFrom", o)],
+      children: [
+        {
+          id: e(),
+          kind: "drawingPositionOffset",
+          namespaceUri: M,
+          localName: "posOffset",
+          prefix: "wp",
+          namespaceBindings: [],
+          attributes: [],
+          children: [
+            {
+              id: e(),
+              kind: "textValue",
+              value: String(t?.vertical.offsetEmu ?? 0),
+            },
+          ],
+        },
+      ],
+    },
+  ];
+}
+function IT(e, n, t) {
+  let r = (...c) =>
+      n.find((u) => pe(u) && c.includes(u.kind)) ??
+      n.find((u) => pe(u) && c.includes(u.localName)),
+    o = r("drawingExtent", "extent"),
+    i = r("drawingEffectExtent", "effectExtent"),
+    a = r("drawingDocPr", "docPr"),
+    l = r("drawingGraphicFramePr", "cNvGraphicFramePr"),
+    s = r("drawingGraphic", "graphic"),
+    d = [...e];
+  (o && d.push(o),
+    i && d.push(i),
+    d.push(t),
+    a && d.push(a),
+    l && d.push(l),
+    s && d.push(s));
+  for (let c of n) d.includes(c) || d.push(c);
+  return d;
+}
+function CT(e, n, t, r) {
+  let o = xh(e),
+    i = gh(n, r, o, e),
+    a = ph(e),
+    l = ET(r, t),
+    s =
+      e.kind === "inlineDrawing" || e.localName === "inline"
+        ? {
+            top: Number(we(e.attributes, "distT") ?? "0"),
+            right: Number(we(e.attributes, "distR") ?? "0"),
+            bottom: Number(we(e.attributes, "distB") ?? "0"),
+            left: Number(we(e.attributes, "distL") ?? "0"),
+          }
+        : { top: 0, right: 0, bottom: 0, left: 0 },
+    d = e.attributes.filter((c) => c.namespaceUri !== "");
+  return {
+    id: r(),
+    kind: "anchoredDrawing",
+    namespaceUri: M,
+    localName: "anchor",
+    prefix: "wp",
+    namespaceBindings: [],
+    attributes: [
+      ne("distT", String(s.top)),
+      ne("distB", String(s.bottom)),
+      ne("distL", String(s.left)),
+      ne("distR", String(s.right)),
+      ne("simplePos", we(e.attributes, "simplePos") ?? "0"),
+      ne("relativeHeight", String(t.anchor?.relativeHeight ?? 251658240)),
+      ne("behindDoc", n.behindDocument ? "1" : "0"),
+      ne("locked", we(e.attributes, "locked") ?? "0"),
+      ne("layoutInCell", we(e.attributes, "layoutInCell") ?? "1"),
+      ne("allowOverlap", we(e.attributes, "allowOverlap") ?? "1"),
+      ...d,
+    ],
+    children: IT(l, a, i),
+  };
+}
+function TT(e, n) {
+  let t = ph(e),
+    r = {
+      top: Number(we(e.attributes, "distT") ?? "0"),
+      right: Number(we(e.attributes, "distR") ?? "0"),
+      bottom: Number(we(e.attributes, "distB") ?? "0"),
+      left: Number(we(e.attributes, "distL") ?? "0"),
+    };
+  return {
+    id: n(),
+    kind: "inlineDrawing",
+    namespaceUri: M,
+    localName: "inline",
+    prefix: "wp",
+    namespaceBindings: [],
+    attributes: [
+      ne("distT", String(r.top)),
+      ne("distR", String(r.right)),
+      ne("distB", String(r.bottom)),
+      ne("distL", String(r.left)),
+    ],
+    children: t,
+  };
+}
+function vT(e, n, t, r, o) {
+  if (r === "inline") {
+    if (t.kind === "inline") return e;
+    let f = TT(n, o);
+    return Ad(e, n.id, f);
+  }
+  if (t.kind === "inline") {
+    let f = rh(r),
+      m = CT(n, f, t, o);
+    return Ad(e, n.id, m);
+  }
+  let i = rh(r),
+    a = xh(n),
+    l = gh(i, o, a, n),
+    s = q(n, {
+      attributes: Ye(n.attributes, "behindDoc", i.behindDocument ? "1" : "0"),
+    }),
+    d = s.children.filter((f) =>
+      pe(f)
+        ? f.id === a?.id
+          ? false
+          : !(
+              f.kind === "drawingWrapNone" ||
+              f.kind === "drawingWrapSquare" ||
+              f.kind === "drawingWrapTight" ||
+              f.kind === "drawingWrapThrough" ||
+              f.kind === "drawingWrapTopBottom" ||
+              (f.namespaceUri === M && f.localName.startsWith("wrap"))
+            )
+        : true,
+    ),
+    c = d.findIndex(
+      (f) => pe(f) && (f.kind === "drawingDocPr" || f.localName === "docPr"),
+    ),
+    u = [...d];
+  return (
+    u.splice(c >= 0 ? c : u.length, 0, l),
+    (s = q(s, { children: u })),
+    Ad(e, n.id, s)
+  );
+}
+function xh(e) {
+  for (let n of e.children)
+    if (
+      pe(n) &&
+      (n.kind === "drawingWrapNone" ||
+        n.kind === "drawingWrapSquare" ||
+        n.kind === "drawingWrapTight" ||
+        n.kind === "drawingWrapThrough" ||
+        n.kind === "drawingWrapTopBottom" ||
+        (n.namespaceUri === M && n.localName.startsWith("wrap")))
+    )
+      return n;
+  return null;
+}
+function oh(e, n, t, r, o, i) {
+  let a =
+    z(e.children, { kind: n }) ??
+    z(e.children, { namespaceUri: M, localName: t });
+  if (!a) return e;
+  let l = a.attributes;
+  r && (l = Ye(l, "relativeFrom", r));
+  let s = [...a.children];
+  o !== void 0 &&
+    ((s = s.filter(
+      (c) =>
+        !(
+          pe(c) &&
+          (c.localName === "posOffset" ||
+            c.localName === "align" ||
+            c.kind === "drawingPositionOffset" ||
+            c.kind === "drawingPositionAlign")
+        ),
+    )),
+    s.push({
+      id: i(),
+      kind: "drawingPositionOffset",
+      namespaceUri: M,
+      localName: "posOffset",
+      prefix: "wp",
+      namespaceBindings: [],
+      attributes: [],
+      children: [{ id: i(), kind: "textValue", value: String(Math.round(o)) }],
+    }));
+  let d = q(a, { attributes: l, children: s });
+  return q(e, { children: e.children.map((c) => (c.id === a.id ? d : c)) });
+}
+function ST(e, n, t) {
+  if (we(e.attributes, "simplePos") === "1") {
+    let i = z(e.children, { kind: "drawingSimplePos" });
+    if (!i) return e;
+    let a = i.attributes;
+    (n.horizontalEmu !== void 0 &&
+      (a = Ye(a, "x", String(Math.round(n.horizontalEmu)))),
+      n.verticalEmu !== void 0 &&
+        (a = Ye(a, "y", String(Math.round(n.verticalEmu)))));
+    let l = q(i, { attributes: a });
+    return q(e, { children: e.children.map((s) => (s.id === i.id ? l : s)) });
+  }
+  let o = e;
+  return (
+    (n.horizontalEmu !== void 0 || n.relativeToH) &&
+      (o = oh(
+        o,
+        "drawingPositionH",
+        "positionH",
+        n.relativeToH,
+        n.horizontalEmu,
+        t,
+      )),
+    (n.verticalEmu !== void 0 || n.relativeToV) &&
+      (o = oh(
+        o,
+        "drawingPositionV",
+        "positionV",
+        n.relativeToV,
+        n.verticalEmu,
+        t,
+      )),
+    o
+  );
+}
+function AT(e) {
+  let n = [
+      { prefix: "wp", namespaceUri: M },
+      { prefix: "a", namespaceUri: B },
+      { prefix: "pic", namespaceUri: He },
+      { prefix: "r", namespaceUri: An },
+    ],
+    t = [...e.namespaceBindings];
+  for (let r of n) t.some((o) => o.prefix === r.prefix) || t.push(r);
+  return q(e, { namespaceBindings: t });
+}
+function ur(e, n, t, r, o) {
+  let i = q(n, { children: n.children.map((l) => (l.id === t.id ? t : l)) }),
+    a = j(e, n.id, i, o);
+  return C(a, ch(e, n.id, r));
+}
+function hh(e, n, t) {
+  let r = Ud(e, n);
+  if (r) return { ok: false, reason: r };
+  let o = A(e);
+  switch (n.op) {
+    case "insertDrawing": {
+      let i = E(e, n.paragraphId),
+        a = AT(ze(n.drawing, o)),
+        l = Zx(e, i, n.offset, [a], t),
+        s = {
+          dirty: [i.id, a.id],
+          created: [a.id],
+          deleted: [],
+          dependencyKeys: H,
+          impact: Md(n),
+        };
+      return C(l, s);
+    }
+    case "deleteDrawing": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = ih(e, i.drawing.id),
+        l = {
+          dirty: a ? [a.id, i.drawing.id] : [i.drawing.id],
+          created: [],
+          deleted: [i.drawing.id],
+          dependencyKeys: H,
+          impact: Md(n),
+        };
+      return C(ie(e, i.drawing.id, t), l);
+    }
+    case "replaceDrawingResource": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = lT(i.anchor, n.relationshipId);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "resizeDrawing": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = iT(i.anchor, n.extentEmu.cx, n.extentEmu.cy);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "cropDrawing": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = sT(i.anchor, n.crop, o);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "positionDrawing": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = ST(i.anchor, n.position, o);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "setDrawingWrap": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = vT(i.drawing, i.anchor, i.projection, n.wrap, o),
+        l = j(e, i.drawing.id, a, t);
+      return C(l, ch(e, i.drawing.id, n));
+    }
+    case "setDrawingMetadata": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = uT(i.anchor, n.title, n.description, n.hyperlink);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "setDrawingLocks": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = bT(i.anchor, i.projection, n.locks, o);
+      return ur(e, i.drawing, a, n, t);
+    }
+    case "transformDrawing": {
+      let i = Te(e, n.drawingNodeId);
+      if (typeof i == "string") return { ok: false, reason: i };
+      let a = cT(i.anchor, i.projection, n.action);
+      return ur(e, i.drawing, a, n, t);
+    }
+    default: {
+      return { ok: false, reason: "unknown-op" };
+    }
+  }
+}
+function ol(e) {
+  return (
+    e.op === "insertDrawing" ||
+    e.op === "replaceDrawingResource" ||
+    e.op === "deleteDrawing" ||
+    e.op === "resizeDrawing" ||
+    e.op === "cropDrawing" ||
+    e.op === "positionDrawing" ||
+    e.op === "setDrawingWrap" ||
+    e.op === "setDrawingMetadata" ||
+    e.op === "setDrawingLocks" ||
+    e.op === "transformDrawing"
+  );
+}
+function MT(e, n) {
+  let t = [],
+    r = n;
+  for (; r && (t.push(r), r.id !== e.root.id);) r = je(e, r.id);
+  return t.reverse();
+}
+function bi(e, n) {
+  let t = new Map([
+    ["xml", J],
+    ["xmlns", Se],
+  ]);
+  for (let r of MT(e, n))
+    for (let o of r.namespaceBindings) t.set(o.prefix, o.namespaceUri);
+  return t;
+}
+function _T(e) {
+  if (!e.has("w")) return "w";
+  for (let n = 97; n <= 122; n += 1) {
+    let t = `w${String.fromCharCode(n)}`;
+    if (!e.has(t)) return t;
+  }
+  for (let n = 2; ; n += 1) {
+    let t = `wx${n}`;
+    if (!e.has(t)) return t;
+  }
+}
+function ve(e, n) {
+  let t = bi(e, n),
+    r = t.get("") === y,
+    o = [];
+  for (let [s, d] of t) s !== "" && d === y && o.push(s);
+  let i,
+    a = null;
+  return (
+    o.length > 0
+      ? (i = o.includes("w") ? "w" : o[0])
+      : ((i = _T(new Set(t.keys()))),
+        (a = Object.freeze({ prefix: i, namespaceUri: y }))),
+    Object.freeze({
+      elementPrefix: r ? void 0 : i,
+      attributePrefix: i,
+      rowBinding: a,
+    })
+  );
+}
+function yh(e, n, t, r) {
+  let o = _e(e),
+    i = n.id === e.id ? { start: 0, end: o.length } : o.spanOf(n);
+  if (!i) return null;
+  let a = new Set(),
+    l = new Set();
+  for (let d of o.segments)
+    if (!((d.removeNodeIds?.length ?? 0) < 2))
+      for (let c of d.removeNodeIds ?? []) l.add(c);
+  if (l.size > 0) {
+    let d = (u, f) =>
+        l.has(u.id)
+          ? true
+          : u.kind === "textValue" || f > 8
+            ? false
+            : u.children.some((m) => d(m, f + 1)),
+      c = false;
+    for (let u of n.children) {
+      if (u.kind === "textValue" || !d(u, 0)) {
+        c = false;
+        continue;
+      }
+      (c && a.add(u.id), (c = true));
+    }
+  }
+  let s = i.start;
+  for (let d = 0; d < n.children.length; d += 1) {
+    let c = n.children[d],
+      u = c.kind === "paragraphProperties" || c.kind === "runProperties";
+    if (s === t && !u && !a.has(c.id)) return { containerId: n.id, index: d };
+    if (c.kind === "textValue") continue;
+    let f = o.lengthOf(c);
+    if (t > s && t < s + f && r < DT) {
+      let m = UT(c);
+      if (m) {
+        let g = yh(e, m, t, r + 1);
+        if (g) return g;
+      }
+    }
+    s += f;
+  }
+  return s === t ? { containerId: n.id, index: n.children.length } : null;
+}
+var DT = 32;
+function UT(e) {
+  return e.kind === "textValue"
+    ? null
+    : Ne(e.kind) || e.kind === "hyperlink"
+      ? e
+      : ye(e)
+        ? (Dn(e) ?? null)
+        : null;
+}
+function Oh(e, n, t, r) {
+  return {
+    id: e,
+    kind: n,
+    namespaceUri: y,
+    localName: t,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [
+      {
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "id",
+        prefix: "w",
+        value: r,
+      },
+    ],
+    children: [],
+  };
+}
+function LT(e, n) {
+  return {
+    id: e,
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [Oh(`${e}.0`, "commentReference", "commentReference", n)],
+  };
+}
+function BT(e) {
+  if (e.kind !== "run") return false;
+  let n = false;
+  for (let t of e.children) {
+    if (t.kind === "commentReference") {
+      n = true;
+      continue;
+    }
+    if (t.kind !== "runProperties") return false;
+  }
+  return n;
+}
+function FT(e) {
+  return (
+    e.kind === "commentRangeStart" || e.kind === "commentRangeEnd" || BT(e)
+  );
+}
+function VT(e, n, t) {
+  let r = n;
+  if (t === "start" || t === "end") {
+    for (; r < e.children.length && e.children[r].kind === "commentRangeStart";)
+      r += 1;
+    return r;
+  }
+  for (; r < e.children.length && FT(e.children[r]);) r += 1;
+  return r;
+}
+function Nh(e, n, t, r) {
+  let o = Pi(e, n, t.offset, r);
+  if (!o.ok) return { ok: false, reason: o.reason };
+  let i = E(o.part, n.id);
+  if (!i || i.kind !== "paragraph")
+    return { ok: false, reason: "tree-invariant" };
+  let a = yh(i, i, t.offset, 0);
+  if (!a) return { ok: false, reason: "offset-out-of-range" };
+  let l = a.index,
+    s = E(o.part, a.containerId);
+  s && s.kind !== "textValue" && (l = VT(s, a.index, t.marker));
+  let d = `${e.name}#comment-${t.marker}-${t.commentId}-${t.offset}`,
+    c =
+      t.marker === "reference"
+        ? LT(d, t.commentId)
+        : Oh(
+            d,
+            t.marker === "start" ? "commentRangeStart" : "commentRangeEnd",
+            t.marker === "start" ? "commentRangeStart" : "commentRangeEnd",
+            t.commentId,
+          ),
+    u = _(o.part, a.containerId, l, [c], r);
+  return u.ok
+    ? {
+        ok: true,
+        part: u.part,
+        effect: {
+          dirty: [n.id],
+          created: [],
+          deleted: [],
+          dependencyKeys: [qt.story],
+          impact: "text-local",
+        },
+      }
+    : { ok: false, reason: "tree-invariant", detail: JSON.stringify(u.issues) };
+}
+function Bd(e, n) {
+  return e.length !== n.length ? false : e.every((t, r) => WT(t, n[r]));
+}
+function WT(e, n) {
+  if (e.kind !== n.kind) return false;
+  if (e.kind === "textValue" || n.kind === "textValue")
+    return (
+      e.kind === "textValue" && n.kind === "textValue" && e.value === n.value
+    );
+  if (
+    e.namespaceUri !== n.namespaceUri ||
+    e.localName !== n.localName ||
+    e.attributes.length !== n.attributes.length
+  )
+    return false;
+  for (let t = 0; t < e.attributes.length; t += 1) {
+    let r = e.attributes[t],
+      o = n.attributes[t];
+    if (
+      r.namespaceUri !== o.namespaceUri ||
+      r.localName !== o.localName ||
+      r.prefix !== o.prefix ||
+      r.value !== o.value
+    )
+      return false;
+  }
+  return Bd(e.children, n.children);
+}
+function Fd(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: "w",
+    value: n,
+  };
+}
+function En(e, n, t, r, o) {
+  return {
+    id: e,
+    kind: n,
+    namespaceUri: y,
+    localName: t,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: r,
+    children: o,
+  };
+}
+function ao(e) {
+  let n = -1,
+    t = (o) => {
+      if (o.kind !== "textValue") {
+        if (Rh.has(o.localName) && o.namespaceUri === y)
+          for (let i of o.attributes) {
+            if (
+              i.namespaceUri !== y ||
+              i.localName !== "id" ||
+              !/^\d{1,10}$/.test(i.value)
+            )
+              continue;
+            let a = Number(i.value);
+            a <= Vd && a > n && (n = a);
+          }
+        for (let i of o.children) t(i);
+      }
+    };
+  t(e.root);
+  let r = n + 1;
+  return () => {
+    if (r > Vd) {
+      let o = HT(e);
+      for (let i = 0; i <= Vd; i += 1) if (!o.has(String(i))) return String(i);
+      throw new TypeError("no free revision id");
+    }
+    return String(r++);
+  };
+}
+function HT(e) {
+  let n = new Set(),
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        if (Rh.has(r.localName) && r.namespaceUri === y)
+          for (let o of r.attributes)
+            o.namespaceUri === y && o.localName === "id" && n.add(o.value);
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e.root), n);
+}
+var Rh = new Set([
+    "ins",
+    "del",
+    "moveFrom",
+    "moveTo",
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+    "rPrChange",
+    "pPrChange",
+    "tblPrChange",
+    "tblPrExChange",
+    "tcPrChange",
+    "trPrChange",
+    "sectPrChange",
+    "tblGridChange",
+    "numberingChange",
+  ]),
+  Vd = 2147483647;
+function Kd(e, n) {
+  return [
+    Fd("id", e),
+    Fd("author", n.author),
+    ...(n.date === void 0 ? [] : [Fd("date", n.date)]),
+  ];
+}
+function kt(e, n, t) {
+  let r = e();
+  return En(
+    e(),
+    t ? "deletedText" : "text",
+    t ? "delText" : "t",
+    [],
+    [{ id: r, kind: "textValue", value: n }],
+  );
+}
+function jT(e, n, t, r) {
+  return En(e(), "run", "r", [], [...n, kt(e, t, r)]);
+}
+function un(e) {
+  return e.kind !== "textValue" && e.kind === "runProperties";
+}
+function io(e, n) {
+  return n.kind === "textValue"
+    ? { id: e(), kind: "textValue", value: n.value }
+    : { ...n, id: e(), children: n.children.map((t) => io(e, t)) };
+}
+function $d(e, n) {
+  if (e === void 0 || n === void 0) return e === n;
+  let t = Date.parse(e),
+    r = Date.parse(n);
+  return Number.isNaN(t) || Number.isNaN(r) ? e === n : Math.abs(r - t) <= KT;
+}
+var KT = 6e4;
+function $T(e) {
+  if (e.kind !== "textValue")
+    return e.attributes.find(
+      (n) => n.namespaceUri === y && n.localName === "date",
+    )?.value;
+}
+function GT(e) {
+  return e.kind !== "revisionDelete"
+    ? null
+    : (e.attributes.find((n) => n.namespaceUri === y && n.localName === "id")
+        ?.value ?? null);
+}
+function Wd(e) {
+  for (let n = e.length - 1; n >= 0; n -= 1) {
+    let t = e[n];
+    if (t.kind === "textValue" || t.kind !== "revisionInsert") continue;
+    return (
+      t.attributes.find((o) => o.namespaceUri === y && o.localName === "author")
+        ?.value ?? ""
+    );
+  }
+  return null;
+}
+function kh(e) {
+  return e.some((n) => n.kind !== "textValue" && n.kind === "revisionDelete");
+}
+function zT(e) {
+  let n = new Set(),
+    t = new Set();
+  for (let r of e.segments)
+    if (!(!r.removeNodeIds || r.removeNodeIds.length === 0)) {
+      n.add(r.node.id);
+      for (let o of r.removeNodeIds) o !== r.node.id && t.add(o);
+    }
+  return { begin: n, tail: t };
+}
+function Gd(e) {
+  return le(e).filter((n) => !un(n));
+}
+function XT(e, n) {
+  if (e.kind !== "run") return false;
+  let t = Gd(e);
+  return t.length > 0 && t.every((r) => n.tail.has(r.id));
+}
+function YT(e, n) {
+  return e.kind !== "run" ? false : Gd(e).some((t) => n.begin.has(t.id));
+}
+function Eh(e, n, t, r, o, i) {
+  let a = A(e),
+    l = ao(e),
+    s = _e(n),
+    d = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "text-local",
+    },
+    c = { offset: 0 },
+    u = zT(s),
+    f = false,
+    m = vh(n, s, t, t, o.author, o.date),
+    g = m
+      ? { author: o.author, ...(m.date === void 0 ? {} : { date: m.date }) }
+      : o,
+    p = m?.id ?? l(),
+    x = (k) => En(a(), "revisionInsert", "ins", Kd(p, g), [jT(a, k, r, false)]),
+    h = (k, O) => {
+      let b = [];
+      for (let P of k) {
+        if (f) {
+          b.push(P);
+          continue;
+        }
+        if (P.kind !== "textValue" && P.kind === "paragraphProperties") {
+          b.push(P);
+          continue;
+        }
+        let R = s.lengthOf(P),
+          w = c.offset,
+          I = w + R;
+        if (XT(P, u)) {
+          b.push(P);
+          continue;
+        }
+        let S =
+            P.kind !== "textValue" &&
+            (P.kind === "hyperlink" ||
+              P.kind === "revisionInsert" ||
+              P.kind === "revisionMoveTo"),
+          U = S && Wd([P]) === o.author && $d($T(P), o.date);
+        if (S && ((t > w && t < I) || (U && t >= w && t <= I))) {
+          b.push({ ...P, children: h(P.children, [...O, P]) });
+          continue;
+        }
+        if (
+          !f &&
+          t > w &&
+          t < I &&
+          P.kind !== "textValue" &&
+          (P.kind === "revisionDelete" || P.kind === "revisionMoveFrom")
+        ) {
+          ((c.offset = I), b.push(P, x([])), (f = true));
+          continue;
+        }
+        if (!f && t === w && P.kind !== "run") {
+          if (m !== null && P.kind === "revisionDelete" && GT(P) === m.id) {
+            ((c.offset = I), b.push(P, x([])), (f = true));
+            continue;
+          }
+          (b.push(x([])), (f = true), (c.offset = I), b.push(P));
+          continue;
+        }
+        if (YT(P, u) && t === I && t !== w) {
+          ((c.offset = I), b.push(P));
+          continue;
+        }
+        if (P.kind === "run" && t >= w && t <= I) {
+          if (Wd([...O, P]) === o.author) {
+            (b.push(qT(a, s, P, t - w, r, false)),
+              (f = true),
+              (c.offset = I + r.length));
+            continue;
+          }
+          let T = le(P)
+            .filter(un)
+            .map((Qe) => io(a, Qe));
+          if (t === w) b.push(x(T), P);
+          else if (t === I) b.push(P, x(T));
+          else {
+            let [Qe, an] = Ih(a, s, P, t - w);
+            b.push(Qe, x(T), an);
+          }
+          ((f = true), (c.offset = I));
+          continue;
+        }
+        ((c.offset = I), b.push(P));
+      }
+      return b;
+    },
+    N = Hd(a, h(n.children, []));
+  if (!f) {
+    if (t !== c.offset)
+      return {
+        ok: false,
+        reason: "offset-out-of-range",
+        detail: "offset past the paragraph",
+      };
+    N = [...N, x([])];
+  }
+  return C(F(e, n.id, N, i), d);
+}
+function Ih(e, n, t, r) {
+  let o = le(t).filter(un),
+    i = [],
+    a = [],
+    l = 0;
+  for (let s of le(t)) {
+    if (un(s)) continue;
+    let d = n.lengthOf(s);
+    if (l + d <= r) i.push(s);
+    else if (l >= r) a.push(s);
+    else if (s.kind === "text" || s.kind === "deletedText") {
+      let c = le(s).find((m) => m.kind === "textValue"),
+        u = c && c.kind === "textValue" ? c.value : "",
+        f = r - l;
+      (i.push(kt(e, u.slice(0, f), s.kind === "deletedText")),
+        a.push(kt(e, u.slice(f), s.kind === "deletedText")));
+    } else a.push(s);
+    l += d;
+  }
+  return [
+    En(e(), "run", "r", [], [...o.map((s) => io(e, s)), ...i]),
+    En(e(), "run", "r", [], [...o.map((s) => io(e, s)), ...a]),
+  ];
+}
+function qT(e, n, t, r, o, i) {
+  let [a, l] = Ih(e, n, t, r),
+    s = [
+      ...le(a).filter((c) => !un(c)),
+      kt(e, o, i),
+      ...le(l).filter((c) => !un(c)),
+    ],
+    d = le(t)
+      .filter(un)
+      .map((c) => io(e, c));
+  return En(e(), "run", "r", [], [...d, ...Ch(e, s)]);
+}
+function Ch(e, n) {
+  let t = [];
+  for (let r of n) {
+    let o = t[t.length - 1];
+    if (!(
+      o !== void 0 &&
+      o.kind === r.kind &&
+      (r.kind === "text" || r.kind === "deletedText")
+    )) {
+      t.push(r);
+      continue;
+    }
+    let a = le(o).find((d) => d.kind === "textValue"),
+      l = le(r).find((d) => d.kind === "textValue"),
+      s =
+        (a && a.kind === "textValue" ? a.value : "") +
+        (l && l.kind === "textValue" ? l.value : "");
+    t[t.length - 1] = kt(e, s, r.kind === "deletedText");
+  }
+  return t;
+}
+function le(e) {
+  return e.kind === "textValue" ? [] : e.children;
+}
+function Th(e, n, t, r, o, i) {
+  let a = A(e),
+    l = ao(e),
+    s = _e(n),
+    d = vh(n, s, t, r, o.author, o.date),
+    c = d?.id ?? l(),
+    u = d
+      ? { author: o.author, ...(d.date === void 0 ? {} : { date: d.date }) }
+      : o,
+    f = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "text-local",
+    },
+    m = { offset: 0 },
+    g = new Set();
+  for (let k of s.segments)
+    if (
+      !(!k.removeNodeIds || k.removeNodeIds.length === 0) &&
+      !(k.start < t || k.end > r)
+    )
+      for (let O of k.removeNodeIds) g.add(O);
+  let p = (k) => k.kind !== "textValue" && Gd(k).some((O) => g.has(O.id)),
+    x = (k) => En(a(), "revisionDelete", "del", Kd(c, u), k),
+    h = (k, O) => {
+      let b = [];
+      for (let P of k) {
+        let R = s.lengthOf(P),
+          w = m.offset,
+          I = w + R;
+        if (g.has(P.id) && P.kind !== "textValue" && bt(P, "fldSimple")) {
+          ((m.offset = I),
+            b.push({
+              ...P,
+              children: Hd(
+                a,
+                P.children.map((T) =>
+                  T.kind === "run" && !kh(O) ? x([Ph(a, T)]) : T,
+                ),
+              ),
+            }));
+          continue;
+        }
+        if ((I <= t || w >= r || R === 0) && !p(P)) {
+          ((m.offset = I), b.push(P));
+          continue;
+        }
+        if (
+          P.kind !== "textValue" &&
+          (P.kind === "hyperlink" ||
+            P.kind === "revisionInsert" ||
+            P.kind === "revisionDelete" ||
+            P.kind === "revisionMoveFrom" ||
+            P.kind === "revisionMoveTo")
+        ) {
+          let T = h(P.children, [...O, P]);
+          T.length > 0 && b.push({ ...P, children: T });
+          continue;
+        }
+        if (P.kind !== "run") {
+          ((m.offset = I), b.push(P));
+          continue;
+        }
+        if (((m.offset = I), kh(O))) {
+          b.push(P);
+          continue;
+        }
+        let S = Wd(O) === o.author,
+          U = { from: Math.max(t, w) - w, to: Math.min(r, I) - w },
+          L = JT(a, s, P, U.from, U.to, g);
+        (L.before && b.push(L.before),
+          L.covered && (S || b.push(x([Ph(a, L.covered)]))),
+          L.after && b.push(L.after));
+      }
+      return b;
+    },
+    N = Hd(a, h(n.children, []));
+  return C(F(e, n.id, N, i), f);
+}
+function Hd(e, n) {
+  let t = [];
+  for (let r of n) {
+    let o = t[t.length - 1];
+    if (
+      o !== void 0 &&
+      o.kind !== "textValue" &&
+      r.kind !== "textValue" &&
+      o.kind === r.kind &&
+      (r.kind === "revisionInsert" || r.kind === "revisionDelete") &&
+      QT(o, r)
+    ) {
+      t[t.length - 1] = { ...o, children: ZT(e, o.children, r.children) };
+      continue;
+    }
+    t.push(r);
+  }
+  return t;
+}
+function ZT(e, n, t) {
+  let r = n[n.length - 1],
+    o = t[0];
+  if (r?.kind !== "run" || o?.kind !== "run" || !bh(r) || !bh(o))
+    return [...n, ...t];
+  let i = r.children.filter(un),
+    a = o.children.filter(un);
+  if (!Bd(i, a)) return [...n, ...t];
+  let l = Ch(e, [
+      ...r.children.filter((d) => !un(d)),
+      ...o.children.filter((d) => !un(d)),
+    ]),
+    s = { ...r, children: [...i, ...l] };
+  return [...n.slice(0, -1), s, ...t.slice(1)];
+}
+function bh(e) {
+  let n = e.children.filter((t) => !un(t));
+  return (
+    n.length > 0 &&
+    n.every((t) => t.kind === "text" || t.kind === "deletedText")
+  );
+}
+function QT(e, n) {
+  let t = (r, o) =>
+    r.attributes.find((i) => i.namespaceUri === y && i.localName === o)?.value;
+  return (
+    t(e, "id") !== void 0 &&
+    t(e, "id") === t(n, "id") &&
+    t(e, "author") === t(n, "author") &&
+    t(e, "date") === t(n, "date")
+  );
+}
+function vh(e, n, t, r, o, i) {
+  let a = null,
+    l = (s) => {
+      if (!(a !== null || s.kind === "textValue")) {
+        if (s.kind === "revisionDelete") {
+          let d = s.attributes,
+            c = d.find((m) => m.namespaceUri === y && m.localName === "author"),
+            u = d.find((m) => m.namespaceUri === y && m.localName === "id"),
+            f = n.spanOf(s);
+          if (c?.value === o && u && f && (f.end === t || f.start === r)) {
+            let m = d.find(
+              (g) => g.namespaceUri === y && g.localName === "date",
+            );
+            if (!$d(m?.value, i)) return;
+            a = { id: u.value, date: m?.value };
+            return;
+          }
+        }
+        for (let d of s.children) l(d);
+      }
+    };
+  for (let s of e.children) l(s);
+  return a;
+}
+function JT(e, n, t, r, o, i = new Set()) {
+  let a = le(t).filter(un),
+    l = (f) =>
+      f.length === 0
+        ? null
+        : En(e(), "run", "r", [], [...a.map((m) => io(e, m)), ...f]),
+    s = [],
+    d = [],
+    c = [],
+    u = 0;
+  for (let f of le(t)) {
+    if (un(f)) continue;
+    let m = n.lengthOf(f),
+      g = u,
+      p = u + m;
+    if (((u = p), i.has(f.id))) {
+      d.push(f);
+      continue;
+    }
+    if (p <= r) {
+      s.push(f);
+      continue;
+    }
+    if (g >= o) {
+      c.push(f);
+      continue;
+    }
+    if (f.kind !== "text" && f.kind !== "deletedText") {
+      d.push(f);
+      continue;
+    }
+    let x = le(f).find((P) => P.kind === "textValue"),
+      h = x && x.kind === "textValue" ? x.value : "",
+      N = f.kind === "deletedText",
+      k = h.slice(0, Math.max(0, r - g)),
+      O = h.slice(Math.max(0, r - g), Math.min(h.length, o - g)),
+      b = h.slice(Math.min(h.length, o - g));
+    (k && s.push(kt(e, k, N)),
+      O && d.push(kt(e, O, N)),
+      b && c.push(kt(e, b, N)));
+  }
+  return { before: l(s), covered: l(d), after: l(c) };
+}
+function Ph(e, n) {
+  let t = le(n).map((r) => {
+    if (r.kind !== "textValue" && bt(r, "instrText")) {
+      let a = le(r).find((d) => d.kind === "textValue"),
+        l = a && a.kind === "textValue" ? a.value : "",
+        s = e();
+      return En(e(), "generic", "delInstrText", r.attributes, [
+        { id: s, kind: "textValue", value: l },
+      ]);
+    }
+    if (r.kind !== "text") return r;
+    let o = le(r).find((a) => a.kind === "textValue"),
+      i = o && o.kind === "textValue" ? o.value : "";
+    return kt(e, i, true);
+  });
+  return { ...n, id: e(), children: t };
+}
+function zd(e, n, t, r, o) {
+  let i = A(e),
+    a = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    l = Mh(n, t);
+  if (l && l.author === r.author) return C({ ok: true, part: e }, a);
+  let s = ev(e, n, t, r) ?? ao(e)(),
+    d = En(i(), "generic", t, Kd(s, r), []),
+    c = le(n).find((P) => P.kind === "paragraphProperties"),
+    u = le(n).filter((P) => P.kind !== "paragraphProperties"),
+    f = c ? le(c).find((P) => bt(P, "rPr")) : void 0,
+    m = f ? le(f).filter((P) => !_h(P, t)) : [],
+    g = m.filter(jd),
+    p = m.filter((P) => !jd(P)),
+    x = t === "ins" ? [d, ...g] : [...g, d],
+    h = En(i(), "runProperties", "rPr", [], [...x, ...p]),
+    N = c ? le(c).filter((P) => !bt(P, "rPr")) : [],
+    k = N.filter(wh),
+    O = N.filter((P) => !wh(P)),
+    b = En(i(), "paragraphProperties", "pPr", c ? c.attributes : [], [
+      ...O,
+      h,
+      ...k,
+    ]);
+  return C(F(e, n.id, [b, ...u], o), a);
+}
+function Sh(e, n, t, r) {
+  let o = je(e, n.id);
+  if (!o) return { ok: false, reason: "tree-invariant" };
+  let i = o.children,
+    a = i.findIndex((s) => s.id === n.id),
+    l = a > 0 ? i[a - 1] : void 0;
+  return !l || l.kind !== "paragraph"
+    ? { ok: false, reason: "not-adjacent-siblings" }
+    : zd(e, l, "del", t, r);
+}
+function Ah(e, n) {
+  let t = Mh(e, "ins");
+  return t !== void 0 && t.author === n;
+}
+function Mh(e, n) {
+  let t = le(e).find((a) => a.kind === "paragraphProperties"),
+    r = t ? le(t).find((a) => bt(a, "rPr")) : void 0,
+    o = r ? le(r).find((a) => _h(a, n)) : void 0;
+  if (!o || o.kind === "textValue") return;
+  let i = o.attributes.find(
+    (a) => a.namespaceUri === y && a.localName === "author",
+  );
+  return { localName: o.localName, author: i?.value ?? "" };
+}
+function wh(e) {
+  return bt(e, "sectPr") || bt(e, "pPrChange");
+}
+function _h(e, n) {
+  return e.kind !== "textValue" && bt(e, n);
+}
+function jd(e) {
+  return (
+    e.kind !== "textValue" &&
+    e.namespaceUri === y &&
+    (e.localName === "ins" || e.localName === "del")
+  );
+}
+function bt(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function ev(e, n, t, r) {
+  let o = je(e, n.id);
+  if (!o) return null;
+  let i = o.children,
+    a = i.findIndex((l) => l.id === n.id);
+  for (let l of [i[a - 1], i[a + 1]]) {
+    if (!l || l.kind !== "paragraph") continue;
+    let s = le(l).find((m) => m.kind === "paragraphProperties"),
+      d = s ? le(s).find((m) => bt(m, "rPr")) : void 0,
+      c = d ? le(d).find(jd) : void 0;
+    if (!c || c.kind === "textValue" || c.localName !== t) continue;
+    let u = (m) =>
+      c.attributes.find((g) => g.namespaceUri === y && g.localName === m)
+        ?.value;
+    if (u("author") !== r.author || !$d(u("date"), r.date)) continue;
+    let f = u("id");
+    if (f !== void 0) return f;
+  }
+  return null;
+}
+var nv = new Set(["paragraph", "table", "tableRow"]);
+function fr(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        r.kind === "paragraph" && n.push(r.id);
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e), n);
+}
+function tv(e) {
+  let n = [],
+    t = (o) => {
+      for (let i of si(o))
+        if (i.kind === "paragraph") n.push(i.id);
+        else if (i.kind === "table") {
+          for (let a of i.children)
+            if (a.kind === "tableRow")
+              for (let l of a.children) l.kind === "tableCell" && t(l.children);
+        }
+    },
+    r =
+      e.root.kind === "body"
+        ? e.root
+        : e.root.children.find((o) => o.kind === "body");
+  return (!r || r.kind === "textValue" || t(r.children), n);
+}
+function Uh(e, n) {
+  let t = E(e, n);
+  if (!t) return null;
+  let r = new Set(fr(t)),
+    o = tv(e),
+    i = o.findIndex((a) => r.has(a));
+  if (i === -1) return o.find((a) => !r.has(a)) ?? null;
+  for (let a = i - 1; a >= 0; a -= 1) {
+    let l = o[a];
+    if (!r.has(l)) return l;
+  }
+  for (let a = i; a < o.length; a += 1) {
+    let l = o[a];
+    if (!r.has(l)) return l;
+  }
+  return null;
+}
+function Dh(e, n) {
+  let t = false,
+    r = (o) => {
+      if (!(t || o.kind === "textValue" || o.id === n)) {
+        if (o.kind === "paragraph") {
+          t = true;
+          return;
+        }
+        for (let i of o.children) r(i);
+      }
+    };
+  return (r(e.root), t);
+}
+function Xd(e, n, t) {
+  return e.kind === "textValue"
+    ? 0
+    : e.children.filter((r) => r.kind === n && r.id !== t).length;
+}
+function Lh(e, n) {
+  if (typeof n != "string" || n.length === 0) return "unknown-block";
+  let t = E(e, n);
+  if (!t) return "unknown-block";
+  if (t.kind === "textValue" || !nv.has(t.kind)) return "not-a-block";
+  let r = je(e, n);
+  if (!r) return "not-a-block";
+  if (t.kind === "paragraph") {
+    if (Bn(Oe(t), "sectPr")) return "carries-section-mark";
+    if (r.kind === "tableCell" && Xd(r, "paragraph", n) === 0)
+      return "block-required";
+  }
+  return t.kind === "tableRow" && Xd(r, "tableRow", n) === 0
+    ? "block-required"
+    : (t.kind === "table" &&
+        r.kind === "tableCell" &&
+        Xd(r, "paragraph", n) === 0,
+      Dh(e, n) ? null : "block-required");
+}
+var rv = [
+    "pStyle",
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "framePr",
+    "widowControl",
+    "numPr",
+    "suppressLineNumbers",
+    "pBdr",
+    "shd",
+    "tabs",
+    "suppressAutoHyphens",
+    "kinsoku",
+    "wordWrap",
+    "overflowPunct",
+    "topLinePunct",
+    "autoSpaceDE",
+    "autoSpaceDN",
+    "bidi",
+    "adjustRightInd",
+    "snapToGrid",
+    "spacing",
+    "ind",
+    "contextualSpacing",
+    "mirrorIndents",
+    "suppressOverlap",
+    "jc",
+    "textDirection",
+    "textAlignment",
+    "textboxTightWrap",
+    "outlineLvl",
+    "divId",
+    "cnfStyle",
+    "rPr",
+    "sectPr",
+    "pPrChange",
+  ],
+  ov = [
+    "ins",
+    "del",
+    "moveFrom",
+    "moveTo",
+    "rStyle",
+    "rFonts",
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "caps",
+    "smallCaps",
+    "strike",
+    "dstrike",
+    "outline",
+    "shadow",
+    "emboss",
+    "imprint",
+    "noProof",
+    "snapToGrid",
+    "vanish",
+    "webHidden",
+    "color",
+    "spacing",
+    "w",
+    "kern",
+    "position",
+    "sz",
+    "szCs",
+    "highlight",
+    "u",
+    "effect",
+    "bdr",
+    "shd",
+    "fitText",
+    "vertAlign",
+    "rtl",
+    "cs",
+    "em",
+    "lang",
+    "eastAsianLayout",
+    "specVanish",
+    "oMath",
+    "rPrChange",
+  ],
+  Fh = { authorable: new Set(Wt), sequence: rv },
+  il = { authorable: new Set(Vt), sequence: ov };
+function Bh(e, n, t) {
+  let r = Object.entries(e.attributes ?? {}).map(([i, a]) => ({
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: i,
+      prefix: "w",
+      value: a,
+    })),
+    o = t && t.kind !== "textValue" ? t : void 0;
+  return o && iv(o, r)
+    ? t
+    : {
+        id: n,
+        kind: "generic",
+        namespaceUri: y,
+        localName: e.localName,
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: r,
+        children: o?.children ?? [],
+      };
+}
+function iv(e, n) {
+  let t = e.attributes ?? [];
+  if (t.length !== n.length) return false;
+  for (let r of n) {
+    let o = t.find((i) => i.localName === r.localName);
+    if (!o || o.value !== r.value) return false;
+  }
+  return true;
+}
+function wi(e, n) {
+  if (n.kind === "textValue") return e.length;
+  let t = e.indexOf(n.localName);
+  return t === -1 ? e.length : t;
+}
+function Ri(e, n, t, r) {
+  let o = new Map();
+  for (let l of n) {
+    let s = o.get(l.localName);
+    s ? s.push(l) : o.set(l.localName, [l]);
+  }
+  let i = new Map(),
+    a = [];
+  for (let l of e) {
+    if (l.kind === "textValue" || !t.authorable.has(l.localName)) {
+      a.push(l);
+      continue;
+    }
+    let s = i.get(l.localName) ?? 0;
+    i.set(l.localName, s + 1);
+    let d = o.get(l.localName)?.[s];
+    d && a.push(Bh(d, r(), l));
+  }
+  for (let [l, s] of o)
+    if (t.authorable.has(l))
+      for (let d = i.get(l) ?? 0; d < s.length; d += 1) {
+        let c = Bh(s[d], r()),
+          u = wi(t.sequence, c),
+          f = a.findIndex((m) => wi(t.sequence, m) > u);
+        f === -1 ? a.push(c) : a.splice(f, 0, c);
+      }
+  return av(a, t.sequence);
+}
+function av(e, n) {
+  let t = [],
+    r = [];
+  e.forEach((a, l) => {
+    wi(n, a) !== n.length && (t.push(l), r.push(a));
+  });
+  let o = [...e];
+  if (r.length < 2) return o;
+  let i = [...r].sort((a, l) => wi(n, a) - wi(n, l));
+  return (
+    t.forEach((a, l) => {
+      o[a] = i[l];
+    }),
+    o
+  );
+}
+function qd(e) {
+  if (e.kind === "textValue") return;
+  let n = e.children.filter(
+    (t) => !("localName" in t) || t.localName !== "sectPr",
+  );
+  if (n.length === e.children.length) return e;
+  if (n.length !== 0) return { ...e, children: n };
+}
+function ke(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: "w",
+    value: n,
+  };
+}
+function In(e, n, t, r) {
+  return {
+    id: e,
+    kind: "generic",
+    namespaceUri: y,
+    localName: n,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: t,
+    children: r,
+  };
+}
+var Vh = (e) =>
+    e && e.kind !== "textValue" && "attributes" in e ? e.attributes : [],
+  Yd = (e) => (e && e.kind !== "textValue" ? (e.children ?? []) : []);
+function jh(e, n, t) {
+  if (!to(e))
+    return { ok: false, reason: "tree-invariant", detail: "part has no body" };
+  let o =
+      n.pageWidthTwips !== void 0 ||
+      n.pageHeightTwips !== void 0 ||
+      n.orientation !== void 0,
+    i =
+      n.marginTopTwips !== void 0 ||
+      n.marginRightTwips !== void 0 ||
+      n.marginBottomTwips !== void 0 ||
+      n.marginLeftTwips !== void 0,
+    a = {
+      dirty: [],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    l = A(e),
+    s = ro(e, n.anchorParagraphId),
+    d = new Map(),
+    c = null;
+  for (let m of s) {
+    let g = lv(m, n, o, i, l);
+    m ? d.set(m.id, g) : (c = In(l(), "sectPr", [], g));
+  }
+  let u = (m) => {
+      if (m.kind === "textValue") return m;
+      let g = d.get(m.id);
+      if (g) return { ...m, children: g };
+      let p = false,
+        x = m.children.map((h) => {
+          let N = u(h);
+          return (N !== h && (p = true), N);
+        });
+      return m.kind === "body" && c
+        ? { ...m, children: [...x, c] }
+        : p
+          ? { ...m, children: x }
+          : m;
+    },
+    f = e.root.children.map(u);
+  return C(F(e, e.root.id, f, t), a);
+}
+function Kh(e, n, t, r, o) {
+  let i = Oe(n),
+    a = Bn(i, "numPr");
+  if (!a) return { ok: false, reason: "not-a-list-paragraph" };
+  let l = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    s = a.children.find(
+      (c) => c.kind !== "textValue" && c.localName === "ilvl",
+    ),
+    d = In(o(), "ilvl", [ke("val", String(t))], []);
+  return s ? C(j(e, s.id, d, r), l) : C(_(e, a.id, 0, [d], r), l);
+}
+function $h(e, n, t, r, o, i) {
+  let a = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    l = Oe(n),
+    s = Bn(l, "numPr");
+  if (t === null) return s ? C(ie(e, s.id, o), a) : Me(e, a);
+  let d = In(
+    i(),
+    "numPr",
+    [],
+    [
+      In(i(), "ilvl", [ke("val", String(r))], []),
+      In(i(), "numId", [ke("val", t)], []),
+    ],
+  );
+  if (s) return C(j(e, s.id, d, o), a);
+  if (l) {
+    let u =
+      l.children.findIndex(
+        (f) => f.kind !== "textValue" && f.localName === "pStyle",
+      ) + 1;
+    return C(_(e, l.id, u, [d], o), a);
+  }
+  let c = {
+    id: i(),
+    kind: "paragraphProperties",
+    namespaceUri: y,
+    localName: "pPr",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [d],
+  };
+  return C(_(e, n.id, 0, [c], o), a);
+}
+function Gh(e, n, t) {
+  let r = E(e, n),
+    o = A(e),
+    i = ro(e, n)[0] ?? null,
+    a = oo(i),
+    l = {
+      dirty: [n],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    s = i
+      ? ze(i, o)
+      : In(
+          o(),
+          "sectPr",
+          [],
+          [
+            In(
+              o(),
+              "pgSz",
+              [
+                ke("w", String(a.widthTwips)),
+                ke("h", String(a.heightTwips)),
+                ...(a.widthTwips > a.heightTwips
+                  ? [ke("orient", "landscape")]
+                  : []),
+              ],
+              [],
+            ),
+            In(
+              o(),
+              "pgMar",
+              [
+                ke("top", String(a.topTwips)),
+                ke("right", String(a.rightTwips)),
+                ke("bottom", String(a.bottomTwips)),
+                ke("left", String(a.leftTwips)),
+                ke("header", String(a.headerTwips)),
+                ke("footer", String(a.footerTwips)),
+                ke("gutter", String(a.gutterTwips)),
+              ],
+              [],
+            ),
+          ],
+        ),
+    d = Oe(r);
+  if (!d) {
+    let u = {
+      id: o(),
+      kind: "paragraphProperties",
+      namespaceUri: y,
+      localName: "pPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [s],
+    };
+    return C(_(e, r.id, 0, [u], t), l);
+  }
+  let c = d.children.findIndex(
+    (u) => "localName" in u && u.localName === "pPrChange",
+  );
+  return C(_(e, d.id, c === -1 ? d.children.length : c, [s], t), l);
+}
+function lv(e, n, t, r, o) {
+  let i = oo(e),
+    a = Nt(e, "pgSz"),
+    l = null;
+  if (t) {
+    let { widthTwips: u, heightTwips: f } = Ni(i, n),
+      m = u !== i.widthTwips || f !== i.heightTwips,
+      g =
+        n.orientation !== void 0
+          ? n.orientation === "landscape"
+            ? "landscape"
+            : void 0
+          : Rn(a, "orient"),
+      p = new Set(["w", "h", "orient", ...(m ? ["code"] : [])]),
+      x = Vh(a).filter((h) => !p.has(h.localName));
+    l = In(
+      a?.id ?? o(),
+      "pgSz",
+      [
+        ke("w", String(u)),
+        ke("h", String(f)),
+        ...(g ? [ke("orient", g)] : []),
+        ...x,
+      ],
+      Yd(a),
+    );
+  }
+  let s = Nt(e, "pgMar"),
+    d = null;
+  if (r) {
+    let u = [
+      ["top", n.marginTopTwips, i.topTwips],
+      ["right", n.marginRightTwips, i.rightTwips],
+      ["bottom", n.marginBottomTwips, i.bottomTwips],
+      ["left", n.marginLeftTwips, i.leftTwips],
+    ];
+    if (s) {
+      let f = new Set(u.filter(([, g]) => g !== void 0).map(([g]) => g)),
+        m = Vh(s).filter((g) => !f.has(g.localName));
+      d = In(
+        s.id,
+        "pgMar",
+        [
+          ...u
+            .filter(([, g]) => g !== void 0)
+            .map(([g, p]) => ke(g, String(p))),
+          ...m,
+        ],
+        Yd(s),
+      );
+    } else
+      d = In(
+        o(),
+        "pgMar",
+        [
+          ...u.map(([f, m, g]) => ke(f, String(m ?? g))),
+          ke("header", String(i.headerTwips)),
+          ke("footer", String(i.footerTwips)),
+          ke("gutter", String(i.gutterTwips)),
+        ],
+        [],
+      );
+  }
+  let c = [...Yd(e)];
+  return (
+    l &&
+      (a
+        ? (c = c.map((u) => (u.id === a.id ? l : u)))
+        : c.splice(Hh(c, "pgSz"), 0, l)),
+    d &&
+      (s
+        ? (c = c.map((u) => (u.id === s.id ? d : u)))
+        : c.splice(Hh(c, "pgMar"), 0, d)),
+    c
+  );
+}
+var Wh = [
+  "pgSz",
+  "pgMar",
+  "paperSrc",
+  "pgBorders",
+  "lnNumType",
+  "pgNumType",
+  "cols",
+  "formProt",
+  "vAlign",
+  "noEndnote",
+  "titlePg",
+  "textDirection",
+  "bidi",
+  "rtlGutter",
+  "docGrid",
+  "printerSettings",
+  "sectPrChange",
+];
+function Hh(e, n) {
+  let t = new Set(Wh.slice(Wh.indexOf(n) + 1)),
+    r = e.findIndex(
+      (o) => o.kind !== "textValue" && "localName" in o && t.has(o.localName),
+    );
+  return r === -1 ? e.length : r;
+}
+var sv = new Set(["sectPr", "pPrChange"]);
+function zh(e, n, t, r, o) {
+  let i = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "paragraph-local",
+    },
+    a = Oe(n),
+    l = Bn(a, "rPr"),
+    s = Ri(l?.children ?? [], t, il, o);
+  if (s.length === 0) return l ? C(ie(e, l.id, r), i) : Me(e, i);
+  let d = In(l?.id ?? o(), "rPr", [], s);
+  if (l) return C(j(e, l.id, d, r), i);
+  if (a) {
+    let u = a.children.findIndex(
+        (m) => m.kind !== "textValue" && sv.has(m.localName),
+      ),
+      f = u === -1 ? a.children.length : u;
+    return C(_(e, a.id, f, [d], r), i);
+  }
+  let c = {
+    id: o(),
+    kind: "paragraphProperties",
+    namespaceUri: y,
+    localName: "pPr",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [d],
+  };
+  return C(_(e, n.id, 0, [c], r), i);
+}
+function Zd(e, n) {
+  return {
+    id: e(),
+    kind: "fldChar",
+    namespaceUri: y,
+    localName: "fldChar",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [
+      {
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "fldCharType",
+        prefix: "w",
+        value: n,
+      },
+    ],
+    children: [],
+  };
+}
+function dv(e, n) {
+  let t = e();
+  return {
+    id: e(),
+    kind: "instrText",
+    namespaceUri: y,
+    localName: "instrText",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [
+      {
+        kind: "xmlSpace",
+        namespaceUri: J,
+        localName: "space",
+        prefix: "xml",
+        value: "preserve",
+      },
+    ],
+    children: [{ id: t, kind: "textValue", value: ` ${n} ` }],
+  };
+}
+function cv(e, n) {
+  let t = e();
+  return {
+    id: e(),
+    kind: "text",
+    namespaceUri: y,
+    localName: "t",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [{ id: t, kind: "textValue", value: n }],
+  };
+}
+function Xh(e) {
+  let n = (t) => [
+    (r) => Zd(r, "begin"),
+    (r) => dv(r, t),
+    (r) => Zd(r, "separate"),
+    (r) => Zd(r, "end"),
+  ];
+  return e === "PAGE_X_OF_Y"
+    ? [...n("PAGE"), (t) => cv(t, " of "), ...n("NUMPAGES")]
+    : [...n(e)];
+}
+var Jh = ["richText", "plainText", "dropDownList", "comboBox", "date"],
+  uv = 4096,
+  fv = {
+    date: "Click here to enter a date.",
+    dropDownList: "Choose an item.",
+    comboBox: "Choose an item.",
+  },
+  mv = "Click here to enter text.";
+function pv(e) {
+  return fv[e] ?? mv;
+}
+function Ei(e, n) {
+  for (let o of Pe(e.root))
+    if (o.node.id === n) return [...o.ancestors, o.node];
+  let t = [],
+    r = (o, i) => {
+      if (o.kind === "textValue") return o.id === n;
+      if (o.id === n) return (t.push(...i), true);
+      for (let a of o.children) {
+        let l = a.kind === "contentControl" ? [...i, a] : i;
+        if (r(a, l)) return true;
+      }
+      return false;
+    };
+  return (r(e.root, []), t);
+}
+function ey(e, n) {
+  return sd(Ei(e, n).map((t) => Fn(t).lock));
+}
+var Ht = (e, n) => ({
+    kind: "nodes",
+    targets: [{ nodeId: e, range: { start: n, end: n }, writes: true }],
+  }),
+  Yh = (e, n) => ({
+    kind: "nodes",
+    targets: [{ nodeId: e, range: { start: n, end: n } }],
+  }),
+  al = (e, n, t) => ({
+    kind: "nodes",
+    targets: [{ nodeId: e, range: { start: n, end: t } }],
+  }),
+  Re = (e) => ({ kind: "nodes", targets: [{ nodeId: e }] }),
+  qh = (e) => ({ kind: "nodes", targets: [{ nodeId: e, structural: true }] }),
+  Qd = (e) => ({ kind: "nodes", targets: ny(e).map((n) => ({ nodeId: n })) });
+function ny(e) {
+  return Array.isArray(e) ? e : [];
+}
+var Jd = (e) => ny(e).map((n) => ({ nodeId: n.paragraphId, structural: true })),
+  ty = {
+    insertText: (e) =>
+      e.inside === void 0
+        ? Ht(e.paragraphId, e.offset)
+        : {
+            kind: "control",
+            controlId: e.inside,
+            intent: "value",
+            at: { paragraphId: e.paragraphId, offset: e.offset },
+          },
+    deleteText: (e) => al(e.paragraphId, e.start, e.end),
+    insertTab: (e) => Ht(e.paragraphId, e.offset),
+    insertHardBreak: (e) => Ht(e.paragraphId, e.offset),
+    insertPageBreak: (e) => Ht(e.paragraphId, e.offset),
+    insertPageField: (e) => Ht(e.paragraphId, e.offset),
+    insertCommentMarker: (e) => Yh(e.paragraphId, e.offset),
+    insertNote: (e) => Ht(e.paragraphId, e.offset),
+    setRunProperties: (e) => al(e.paragraphId, e.start, e.end),
+    insertHyperlink: (e) => al(e.paragraphId, e.start, e.end),
+    insertContentControl: (e) => al(e.paragraphId, e.start, e.end),
+    insertInlineContentControl: (e) => Ht(e.paragraphId, e.offset),
+    splitParagraph: (e) => Yh(e.paragraphId, e.offset),
+    splitParagraphMany: (e) => ({
+      kind: "nodes",
+      targets: e.offsets.map((n) => ({
+        nodeId: e.paragraphId,
+        range: { start: n, end: n },
+      })),
+    }),
+    joinParagraphs: (e) => ({
+      kind: "nodes",
+      targets: [
+        { nodeId: e.firstId, structural: true },
+        { nodeId: e.secondId, structural: true },
+      ],
+    }),
+    setParagraphProperties: (e) => Re(e.paragraphId),
+    setParagraphMarkProperties: (e) => Re(e.paragraphId),
+    setParagraphMarkRevision: (e) => Re(e.paragraphId),
+    proposeParagraphMerge: (e) => Re(e.paragraphId),
+    setListLevel: (e) => Re(e.paragraphId),
+    setListNumbering: (e) => Re(e.paragraphId),
+    setSectionMark: (e) => Re(e.paragraphId),
+    deleteBlock: (e) => ({
+      kind: "nodes",
+      targets: [{ nodeId: e.blockId, removes: true }],
+    }),
+    setHyperlinkTarget: (e) => Re(e.linkId),
+    removeHyperlink: (e) => ({
+      kind: "nodes",
+      targets: [{ nodeId: e.linkId, structural: true }],
+    }),
+    acceptRevision: (e) => ({
+      kind: "revisions",
+      action: "accept",
+      revision: e.revision,
+      ...(e.localName === void 0 ? {} : { localName: e.localName }),
+    }),
+    rejectRevision: (e) => ({
+      kind: "revisions",
+      action: "reject",
+      revision: e.revision,
+      ...(e.localName === void 0 ? {} : { localName: e.localName }),
+    }),
+    acceptAllRevisions: (e) => ({
+      kind: "revisions",
+      action: "accept",
+      ...(e.scopeRootId === void 0 ? {} : { scopeRootId: e.scopeRootId }),
+    }),
+    rejectAllRevisions: (e) => ({
+      kind: "revisions",
+      action: "reject",
+      ...(e.scopeRootId === void 0 ? {} : { scopeRootId: e.scopeRootId }),
+    }),
+    setContentControlValue: (e) => ({
+      kind: "control",
+      controlId: e.controlId,
+      intent: "value",
+      replacesContent: true,
+    }),
+    setContentControlProperties: (e) => ({
+      kind: "control",
+      controlId: e.controlId,
+      intent: "metadata",
+    }),
+    removeContentControl: (e) => ({
+      kind: "control",
+      controlId: e.controlId,
+      intent: "removal",
+      replacesContent: e.keepContent !== true,
+    }),
+    addRepeatingSectionItem: (e) => ({
+      kind: "control",
+      controlId: e.controlId,
+      intent: "value",
+    }),
+    removeRepeatingSectionItem: (e) => ({
+      kind: "control",
+      controlId: e.controlId,
+      intent: "value",
+      replacesContent: true,
+    }),
+    insertTable: (e) => ({
+      kind: "nodes",
+      targets: [{ nodeId: e.beforeParagraphId }],
+    }),
+    insertTableRow: (e) => qh(e.tableId),
+    deleteTableRow: (e) => ({
+      kind: "nodes",
+      targets: [
+        { nodeId: e.tableId, structural: true },
+        { nodeId: e.rowId, removes: true },
+      ],
+    }),
+    insertTableColumn: (e) => qh(e.tableId),
+    deleteTableColumn: (e) => ({
+      kind: "nodes",
+      targets: [
+        { nodeId: e.tableId, structural: true },
+        { nodeId: e.tableId, removes: true },
+      ],
+    }),
+    setTableColumnWidths: (e) => Re(e.tableId),
+    setTableRightEdgeWidth: (e) => Re(e.tableId),
+    setTableRowHeight: (e) => Re(e.rowId),
+    setTableCellBorders: (e) => Qd(e.cellIds),
+    setTableCellFill: (e) => Qd(e.cellIds),
+    setTableCellVerticalAlignment: (e) => Qd(e.cellIds),
+    insertDrawing: (e) => Ht(e.paragraphId, e.offset),
+    replaceDrawingResource: (e) => Re(e.drawingNodeId),
+    deleteDrawing: (e) => ({
+      kind: "nodes",
+      targets: [{ nodeId: e.drawingNodeId, removes: true }],
+    }),
+    resizeDrawing: (e) => Re(e.drawingNodeId),
+    cropDrawing: (e) => Re(e.drawingNodeId),
+    positionDrawing: (e) => Re(e.drawingNodeId),
+    setDrawingWrap: (e) => Re(e.drawingNodeId),
+    setDrawingMetadata: (e) => Re(e.drawingNodeId),
+    setDrawingLocks: (e) => Re(e.drawingNodeId),
+    transformDrawing: (e) => Re(e.drawingNodeId),
+    insertToc: (e) => ({
+      kind: "nodes",
+      targets: [{ nodeId: e.beforeParagraphId }, ...Jd(e.bookmarksToCreate)],
+    }),
+    replaceTocResult: (e) => ({
+      kind: "nodes",
+      targets: [
+        { nodeId: e.tocId, structural: true },
+        ...Jd(e.bookmarksToCreate),
+      ],
+    }),
+    rewriteTocPageNumbers: (e) => ({ kind: "nodes", targets: Jd(e.updates) }),
+    setSectionProperties: () => ({ kind: "documentProperties" }),
+    setSectionFurnitureOptions: () => ({ kind: "documentProperties" }),
+    setNoteProperties: () => ({ kind: "documentProperties" }),
+    deleteNote: () => ({ kind: "part" }),
+    convertNote: () => ({ kind: "part" }),
+    convertAllNotes: () => ({ kind: "part" }),
+    createHeaderFooter: () => ({ kind: "none" }),
+    deleteHeaderFooter: () => ({ kind: "none" }),
+    linkToPrevious: () => ({ kind: "none" }),
+    unlinkFromPrevious: () => ({ kind: "none" }),
+  };
+new Set(Object.keys(ty));
+function ec(e) {
+  let n = ty[e.op];
+  return n ? n(e) : { kind: "part" };
+}
+var gv = { touches: [], unprotected: [] };
+function Vn(e) {
+  return e.map((n) => Fn(n).lock);
+}
+function nc(e, n) {
+  if (n.kind === "none") return gv;
+  if (n.kind === "documentProperties")
+    return { touches: [], unprotected: [e.root.id] };
+  if (n.kind === "part")
+    return {
+      touches: Pe(e.root).map((i) => ({
+        control: i.node,
+        locks: Vn([...i.ancestors, i.node]),
+        removed: false,
+        discarded: false,
+      })),
+      unprotected: [e.root.id],
+    };
+  if (n.kind === "control") {
+    let o = Ei(e, n.controlId),
+      i = o[o.length - 1];
+    if (!i || i.id !== n.controlId || i.kind !== "contentControl")
+      return { touches: [], unprotected: [e.root.id] };
+    let a = n.intent === "value" && n.at !== void 0 ? yv(o, hv(e, n.at, i)) : o;
+    return {
+      touches: [
+        ...a.map((l, s) => ({
+          control: l,
+          locks: Vn(a.slice(0, s + 1)),
+          removed: n.intent === "removal" && l.id === i.id,
+          discarded: false,
+        })),
+        ...xv(i, n.replacesContent === true),
+      ],
+      unprotected: n.intent === "value" || o.length > 1 ? [] : [n.controlId],
+    };
+  }
+  if (n.kind === "revisions")
+    return Nv(e, n.action, n.revision, n.localName, n.scopeRootId);
+  let t = [],
+    r = [];
+  for (let o of n.targets) {
+    let a = Ei(e, o.nodeId).filter((m) => m.id !== o.nodeId);
+    for (let m = 0; m < a.length; m += 1)
+      t.push({
+        control: a[m],
+        locks: Vn(a.slice(0, m + 1)),
+        removed: false,
+        discarded: false,
+      });
+    let l = E(e, o.nodeId);
+    if (!l || l.kind === "textValue") {
+      a.length === 0 && r.push(o.nodeId);
+      continue;
+    }
+    let s = Vn(a),
+      d = Pe(l),
+      c = null,
+      u = (m) => (l.kind !== "paragraph" ? null : ((c ??= _e(l)), c.spanOf(m))),
+      f = false;
+    for (let m of d) {
+      let g = u(m.node);
+      (o.range !== void 0 && Ov(g, o.range, o.writes === true) && (f = true),
+        (o.removes === true ||
+          o.structural === true ||
+          (o.range !== void 0 && ry(g, o.range, o.writes === true))) &&
+          t.push({
+            control: m.node,
+            locks: [...s, ...Vn([...m.ancestors, m.node])],
+            removed: o.removes === true,
+            discarded: false,
+          }));
+    }
+    a.length === 0 && !f && r.push(o.nodeId);
+  }
+  return { touches: t, unprotected: r };
+}
+function xv(e, n) {
+  return n
+    ? Pe(e).map((t) => ({
+        control: t.node,
+        locks: Vn([...t.ancestors, t.node]),
+        removed: false,
+        discarded: true,
+      }))
+    : [];
+}
+function hv(e, n, t) {
+  let r = E(e, n.paragraphId);
+  return !r || r.kind !== "paragraph" ? [] : Ei(e, dg(r, n.offset, t));
+}
+function yv(e, n) {
+  if (n.length === 0) return e;
+  let t = [...n],
+    r = new Set(n.map((o) => o.id));
+  for (let o of e) r.has(o.id) || (r.add(o.id), t.push(o));
+  return t;
+}
+function ry(e, n, t) {
+  return e === null
+    ? false
+    : n.end <= n.start
+      ? t
+        ? n.start >= e.start && n.start < e.end
+        : n.start > e.start && n.start < e.end
+      : n.start < e.end && n.end > e.start;
+}
+function Ov(e, n, t) {
+  return e === null
+    ? false
+    : n.end <= n.start
+      ? ry(e, n, t)
+      : n.start >= e.start && n.end <= e.end;
+}
+function Nv(e, n, t, r, o) {
+  let i = [],
+    a = [],
+    l = o === void 0 ? e.root : sr(e, o);
+  if (l === null) return { touches: i, unprotected: [e.root.id] };
+  let s = 0,
+    d = (f, m) => {
+      if (!(f.kind === "textValue" || s > kv)) {
+        if (Pv(f, t, r)) {
+          ((s += 1), m.length === 0 && a.push(f.id));
+          for (let g = 0; g < m.length; g += 1)
+            i.push({
+              control: m[g],
+              locks: Vn(m.slice(0, g + 1)),
+              removed: false,
+              discarded: false,
+            });
+          if (wv(f, n)) {
+            for (let g of Pe(f))
+              i.push({
+                control: g.node,
+                locks: [...Vn(m), ...Vn([...g.ancestors, g.node])],
+                removed: true,
+                discarded: false,
+              });
+            return;
+          }
+        }
+        for (let g of f.children)
+          d(g, g.kind === "contentControl" ? [...m, g] : m);
+      }
+    };
+  d(l, []);
+  let c = new Set(
+      Hx(e, n, t, {
+        ...(r === void 0 ? {} : { localName: r }),
+        ...(o === void 0 ? {} : { scopeRootId: o }),
+      }).map((f) => f.id),
+    ),
+    u = (f, m) => {
+      if (!(f.kind === "textValue" || c.size === 0)) {
+        if (c.delete(f.id)) {
+          for (let g of Pe(f))
+            i.push({
+              control: g.node,
+              locks: [...Vn(m), ...Vn([...g.ancestors, g.node])],
+              removed: true,
+              discarded: false,
+            });
+          return;
+        }
+        for (let g of f.children)
+          u(g, g.kind === "contentControl" ? [...m, g] : m);
+      }
+    };
+  return (u(l, []), { touches: i, unprotected: a });
+}
+var kv = 5e4,
+  bv = new Set([
+    "ins",
+    "del",
+    "moveFrom",
+    "moveTo",
+    "rPrChange",
+    "pPrChange",
+    "tblPrChange",
+    "trPrChange",
+    "tcPrChange",
+    "sectPrChange",
+    "tblGridChange",
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+  ]);
+function Pv(e, n, t) {
+  if (
+    e.kind === "textValue" ||
+    e.namespaceUri !== y ||
+    !bv.has(e.localName) ||
+    (t !== void 0 && e.localName !== t)
+  )
+    return false;
+  if (!n) return true;
+  let r = (o) =>
+    e.attributes.find((i) => i.localName === o && i.namespaceUri === y)?.value;
+  return !(
+    r("id") !== n.id ||
+    r("author") !== n.author ||
+    (n.date !== void 0 && r("date") !== n.date)
+  );
+}
+function wv(e, n) {
+  return e.kind === "textValue"
+    ? false
+    : e.localName === "ins" || e.localName === "moveTo"
+      ? n === "reject"
+      : e.localName === "del" || e.localName === "moveFrom"
+        ? n === "accept"
+        : false;
+}
+function oy(e, n) {
+  let t = ec(n),
+    r = t.kind === "control" && t.intent !== "value";
+  for (let o of nc(e, t).touches) {
+    if (r && !o.discarded) continue;
+    let i = sd(o.locks);
+    if (di(i) || ((o.removed || o.discarded) && $a(i))) return "locked";
+  }
+  return null;
+}
+function iy(e, n) {
+  let t = ec(n),
+    r = t.kind === "control" && t.intent !== "value";
+  if (t.kind === "part" || t.kind === "documentProperties") return null;
+  for (let o of nc(e, t).touches)
+    if (!(r && !o.discarded) && !o.removed && Fn(o.control).dataBinding)
+      return "bound";
+  return null;
+}
+function Rv(e) {
+  if (!e) return false;
+  for (let n of e.root.children) {
+    if (
+      n.kind === "textValue" ||
+      n.namespaceUri !== y ||
+      n.localName !== "documentProtection"
+    )
+      continue;
+    let t = (r) =>
+      n.attributes.find((o) => o.localName === r && o.namespaceUri === y)
+        ?.value;
+    return t("edit") !== "forms" ? false : ay(t("enforcement"));
+  }
+  return false;
+}
+function ay(e) {
+  return e === void 0 ? true : e !== "0" && e !== "false" && e !== "off";
+}
+function ly(e, n, t) {
+  if (!Rv(n)) return null;
+  let r = ec(t);
+  if (r.kind === "none") return null;
+  for (let o of nc(e, r).unprotected)
+    if (!(o !== e.root.id && !Ev(e, o))) return "locked";
+  return null;
+}
+function Ev(e, n) {
+  let t = false,
+    r = true,
+    o = (i) => {
+      if (i.kind === "textValue") return false;
+      if (
+        (i.id === n && (t = true),
+        t && i.namespaceUri === y && i.localName === "sectPr" && i.id !== n)
+      ) {
+        let a = i.children.find(
+          (l) =>
+            l.kind !== "textValue" &&
+            l.namespaceUri === y &&
+            l.localName === "formProt",
+        );
+        return (
+          a &&
+            a.kind !== "textValue" &&
+            (r = ay(
+              a.attributes.find(
+                (l) => l.localName === "val" && l.namespaceUri === y,
+              )?.value,
+            )),
+          true
+        );
+      }
+      for (let a of i.children) if (o(a)) return true;
+      return false;
+    };
+  return (o(e.root), r);
+}
+function jt(e, n, t = {}) {
+  return {
+    id: e(),
+    kind: t.kind ?? "generic",
+    namespaceUri: y,
+    localName: n,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: (t.attributes ?? []).map(([r, o]) => ({
+      kind: "generic",
+      namespaceUri: y,
+      localName: r,
+      prefix: "w",
+      value: o,
+    })),
+    children: t.children ?? [],
+  };
+}
+function Iv(e, n, t) {
+  let r = { id: e(), kind: "textValue", value: n },
+    o = {
+      id: e(),
+      kind: "text",
+      namespaceUri: y,
+      localName: "t",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [r],
+    };
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: t ? [t, o] : [o],
+  };
+}
+function Cv(e, n) {
+  if (!e || e.kind === "textValue") return;
+  let t = (r, o) => {
+    if (!(r.kind === "textValue" || o > 8)) {
+      if (r.kind === "run") {
+        let i = yt(r);
+        return i ? sy(i, n) : void 0;
+      }
+      for (let i of r.children) {
+        let a = t(i, o + 1);
+        if (a) return a;
+      }
+    }
+  };
+  return t(e, 0);
+}
+function sy(e, n) {
+  return e.kind === "textValue"
+    ? { id: n(), kind: "textValue", value: e.value }
+    : { ...e, id: n(), children: e.children.map((t) => sy(t, n)) };
+}
+function Zh(e, n, t) {
+  let r = e.attributes.findIndex(
+      (a) => a.localName === n && a.namespaceUri !== "",
+    ),
+    o = {
+      ...(r >= 0
+        ? e.attributes[r]
+        : {
+            kind: "generic",
+            namespaceUri: e.namespaceUri,
+            localName: n,
+            prefix: e.prefix,
+          }),
+      value: t,
+    },
+    i =
+      r >= 0
+        ? e.attributes.map((a, l) => (l === r ? o : a))
+        : [...e.attributes, o];
+  return { ...e, attributes: i };
+}
+var Tv = /^(\d{4})-(\d{2})-(\d{2})(?:T[\d:.]{1,15}Z?)?$/;
+function vv(e) {
+  let n = Tv.exec(e);
+  if (!n) return null;
+  let t = Number(n[1]),
+    r = Number(n[2]),
+    o = Number(n[3]);
+  if (r < 1 || r > 12 || o < 1 || o > 31) return null;
+  let i = new Date(Date.UTC(t, r - 1, o));
+  return i.getUTCFullYear() !== t ||
+    i.getUTCMonth() !== r - 1 ||
+    i.getUTCDate() !== o
+    ? null
+    : { year: t, month: r, day: o };
+}
+var Qh = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+function Sv(e, n) {
+  let t = `${String(e.year).padStart(4, "0")}-${String(e.month).padStart(2, "0")}-${String(e.day).padStart(2, "0")}`;
+  if (!n || n.length === 0 || n.length > 64) return t;
+  let r = "",
+    o = 0;
+  for (; o < n.length;) {
+    let i = n[o];
+    if (i !== "y" && i !== "M" && i !== "d") {
+      ((r += i), (o += 1));
+      continue;
+    }
+    let a = 0;
+    for (; o + a < n.length && n[o + a] === i;) a += 1;
+    (i === "y"
+      ? (r += a <= 2 ? String(e.year % 100).padStart(2, "0") : String(e.year))
+      : i === "M"
+        ? (r +=
+            a >= 4
+              ? Qh[e.month - 1]
+              : a === 3
+                ? Qh[e.month - 1].slice(0, 3)
+                : String(e.month).padStart(Math.min(a, 2), "0"))
+        : (r += String(e.day).padStart(Math.min(a, 2), "0")),
+      (o += a));
+  }
+  return r;
+}
+function Av(e, n) {
+  if (typeof n != "string") return n;
+  switch (e.type) {
+    case "dropDownList":
+      return { kind: "listItem", value: n };
+    case "checkbox": {
+      let t = Zr(n);
+      return t === null ? "typeMismatch" : { kind: "checkbox", checked: t };
+    }
+    case "date":
+      return { kind: "date", iso: n };
+    default:
+      return { kind: "text", text: n };
+  }
+}
+function Mv(e, n) {
+  switch (n.kind) {
+    case "text":
+      return e.type !== "richText" &&
+        e.type !== "plainText" &&
+        e.type !== "comboBox" &&
+        e.type !== "untyped"
+        ? "typeMismatch"
+        : typeof n.text != "string" || !Z(n.text)
+          ? "invalidArgs"
+          : n.text.length === 0
+            ? { text: pv(e.type), showingPlaceholder: true }
+            : {
+                text: n.text,
+                showingPlaceholder: false,
+                ...(e.type === "comboBox" ? { lastValue: n.text } : {}),
+              };
+    case "listItem": {
+      if (e.type !== "dropDownList" && e.type !== "comboBox")
+        return "typeMismatch";
+      let t = e.listItems.find((r) => r.value === n.value);
+      return t
+        ? { text: t.displayText, showingPlaceholder: false, lastValue: t.value }
+        : "invalidArgs";
+    }
+    case "checkbox": {
+      if (e.type !== "checkbox" || !e.checkbox) return "typeMismatch";
+      if (typeof n.checked != "boolean") return "invalidArgs";
+      let t = n.checked ? e.checkbox.checkedState : e.checkbox.uncheckedState,
+        r = _v(t?.value, n.checked);
+      return r === null
+        ? "invalidArgs"
+        : { text: r, showingPlaceholder: false, checked: n.checked };
+    }
+    case "date": {
+      if (e.type !== "date") return "typeMismatch";
+      let t = typeof n.iso == "string" ? vv(n.iso) : null;
+      if (!t) return "invalidArgs";
+      let r = `${String(t.year).padStart(4, "0")}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
+      return {
+        text: Sv(t, e.date?.dateFormat),
+        showingPlaceholder: false,
+        fullDate: `${r}T00:00:00Z`,
+      };
+    }
+    default:
+      return "invalidArgs";
+  }
+}
+function _v(e, n) {
+  let t = e ?? (n ? "2612" : "2610");
+  if (!/^[0-9A-Fa-f]{1,6}$/.test(t)) return null;
+  let r = Number.parseInt(t, 16);
+  return !Number.isInteger(r) ||
+    r < 0 ||
+    r > 1114111 ||
+    (r >= 55296 && r <= 57343)
+    ? null
+    : String.fromCodePoint(r);
+}
+function ll(e, n, t) {
+  let r = e ?? jt(t, "sdtPr", { kind: "contentControlProperties" }),
+    o = [...r.children],
+    i = (l, s) => {
+      let d = o.findIndex(
+        (u) =>
+          u.kind !== "textValue" && u.namespaceUri === y && u.localName === l,
+      );
+      if (s === null) {
+        d >= 0 && o.splice(d, 1);
+        return;
+      }
+      let c = jt(t, l, { attributes: [["val", s]] });
+      d >= 0 ? (o[d] = c) : o.push(c);
+    },
+    a = (l, s) => {
+      let d = o.findIndex(
+        (c) =>
+          c.kind !== "textValue" && c.namespaceUri === y && c.localName === l,
+      );
+      if (!s) {
+        d >= 0 && o.splice(d, 1);
+        return;
+      }
+      d < 0 && o.push(jt(t, l));
+    };
+  return (
+    n.tag !== void 0 && i("tag", n.tag),
+    n.alias !== void 0 && i("alias", n.alias),
+    n.lock !== void 0 && i("lock", n.lock === "unlocked" ? null : n.lock),
+    n.id !== void 0 && i("id", String(n.id)),
+    n.showingPlaceholder !== void 0 && a("showingPlcHdr", n.showingPlaceholder),
+    n.temporary === false && a("temporary", false),
+    n.lastValue !== void 0 &&
+      (o = o.map((l) =>
+        l.kind === "textValue" ||
+        l.namespaceUri !== y ||
+        (l.localName !== "dropDownList" && l.localName !== "comboBox")
+          ? l
+          : Zh(l, "lastValue", n.lastValue),
+      )),
+    n.fullDate !== void 0 &&
+      (o = o.map((l) =>
+        l.kind !== "textValue" && l.namespaceUri === y && l.localName === "date"
+          ? Zh(l, "fullDate", n.fullDate)
+          : l,
+      )),
+    n.checked !== void 0 &&
+      (o = o.map((l) => {
+        if (
+          l.kind === "textValue" ||
+          l.namespaceUri !== W ||
+          l.localName !== "checkbox"
+        )
+          return l;
+        let s = l.children.map((d) =>
+          d.kind === "textValue" ||
+          d.namespaceUri !== W ||
+          d.localName !== "checked"
+            ? d
+            : {
+                ...d,
+                attributes: d.attributes.map((c) =>
+                  c.localName === "val" && c.namespaceUri === W
+                    ? { ...c, value: n.checked ? "1" : "0" }
+                    : c,
+                ),
+              },
+        );
+        return { ...l, children: s };
+      })),
+    { ...r, children: dd(o) }
+  );
+}
+function dy(e, n, t) {
+  let r = Cv(e, t),
+    o = Iv(t, n, r),
+    i = e?.children.find((s) => s.kind === "paragraph");
+  if (!i || i.kind === "textValue") return [o];
+  let a = i.children.find(
+    (s) => s.kind !== "textValue" && s.localName === "pPr",
+  );
+  return [{ ...i, children: a ? [a, o] : [o] }];
+}
+function sl(e, n) {
+  return { dirty: [e], created: [], deleted: [], dependencyKeys: H, impact: n };
+}
+function tc(e, n) {
+  let t = E(e, n);
+  return t
+    ? t.kind !== "contentControl"
+      ? "not-a-content-control"
+      : { control: t, lock: ey(e, n) }
+    : "unknown-content-control";
+}
+function cy(e, n, t) {
+  let r = tc(e, n.controlId);
+  if (typeof r == "string") return { ok: false, reason: r };
+  let { control: o, lock: i } = r,
+    a = Fn(o);
+  if (a.dataBinding) return { ok: false, reason: "bound" };
+  if (di(i)) return { ok: false, reason: "locked" };
+  let l = Av(a, n.value);
+  if (typeof l == "string") return { ok: false, reason: l };
+  let s = Mv(a, l);
+  if (typeof s == "string") return { ok: false, reason: s };
+  let d = A(e),
+    c = Ka(o),
+    u = Qr(o),
+    f = ll(
+      c,
+      {
+        showingPlaceholder: s.showingPlaceholder,
+        ...(s.lastValue === void 0 ? {} : { lastValue: s.lastValue }),
+        ...(s.fullDate === void 0 ? {} : { fullDate: s.fullDate }),
+        ...(s.checked === void 0 ? {} : { checked: s.checked }),
+      },
+      d,
+    ),
+    m = {
+      ...(u ?? jt(d, "sdtContent", { kind: "contentControlContent" })),
+      children: dy(u, s.text, d),
+    },
+    g = {
+      ...o,
+      children: [
+        f,
+        ...o.children.filter(
+          (x) =>
+            x.kind !== "contentControlProperties" &&
+            x.kind !== "contentControlContent",
+        ),
+        m,
+      ],
+    },
+    p = j(e, o.id, g, t);
+  return p.ok
+    ? a.temporary
+      ? rc(p.part, { controlId: o.id, keepContent: true }, t)
+      : { ok: true, part: p.part, effect: sl(o.id, "flow-structural") }
+    : { ok: false, reason: "tree-invariant", detail: JSON.stringify(p.issues) };
+}
+function uy(e, n, t) {
+  let r = tc(e, n.controlId);
+  if (typeof r == "string") return { ok: false, reason: r };
+  let { control: o, lock: i } = r;
+  if (di(i) || $a(i)) return { ok: false, reason: "locked" };
+  let a = A(e),
+    s = [
+      ll(
+        Ka(o),
+        {
+          ...(n.tag === void 0 ? {} : { tag: n.tag }),
+          ...(n.alias === void 0 ? {} : { alias: n.alias }),
+          ...(n.lock === void 0 ? {} : { lock: n.lock }),
+        },
+        a,
+      ),
+      ...o.children.filter((d) => d.kind !== "contentControlProperties"),
+    ];
+  return C(j(e, o.id, { ...o, children: s }, t), sl(o.id, "paragraph-local"));
+}
+function rc(e, n, t) {
+  let r = tc(e, n.controlId);
+  if (typeof r == "string") return { ok: false, reason: r };
+  let { control: o, lock: i } = r;
+  if ($a(i)) return { ok: false, reason: "locked" };
+  let a = ee(e, o.id);
+  if (!a) return { ok: false, reason: "tree-invariant" };
+  let l = Qr(o),
+    s = n.keepContent && l ? [...l.children] : [],
+    d = a.children.flatMap((c) => (c.id === o.id ? s : [c]));
+  return C(F(e, a.id, d, t), sl(a.id, "flow-structural"));
+}
+function fy(e, n, t) {
+  let r = E(e, n.paragraphId);
+  if (!r) return { ok: false, reason: "unknown-paragraph" };
+  if (r.kind !== "paragraph") return { ok: false, reason: "not-a-paragraph" };
+  if (di(ey(e, n.paragraphId))) return { ok: false, reason: "locked" };
+  if (n.start < 0 || n.end > Qn(r) || n.start >= n.end)
+    return { ok: false, reason: "invalid-range" };
+  if (Xe(r, n.start) || Xe(r, n.end))
+    return { ok: false, reason: "splits-surrogate-pair" };
+  let o = e;
+  for (let k of [n.end, n.start]) {
+    let O = E(o, n.paragraphId);
+    if (!O || O.kind !== "paragraph")
+      return { ok: false, reason: "tree-invariant" };
+    let b = Pi(o, O, k, t);
+    if (!b.ok) return { ok: false, reason: b.reason };
+    o = b.part;
+  }
+  let i = E(o, n.paragraphId);
+  if (!i || i.kind !== "paragraph")
+    return { ok: false, reason: "tree-invariant" };
+  let a = _e(i),
+    l = [],
+    s = false;
+  for (let k of i.children) {
+    let O = a.spanOf(k);
+    if (!(!O || O.start === O.end)) {
+      if (O.start >= n.start && O.end <= n.end) {
+        (l.push(k), (s = true));
+        continue;
+      }
+      if (O.start < n.end && O.end > n.start)
+        return { ok: false, reason: "invalid-range" };
+    }
+  }
+  if (!s) return { ok: false, reason: "invalid-range" };
+  let d = A(o),
+    c = Uv(o),
+    u = ll(
+      void 0,
+      {
+        ...(n.tag === void 0 ? {} : { tag: n.tag }),
+        ...(n.alias === void 0 ? {} : { alias: n.alias }),
+        ...(c === null ? {} : { id: c }),
+        ...(n.lock === void 0 ? {} : { lock: n.lock }),
+      },
+      d,
+    ),
+    f = jt(d, Dv[n.type]),
+    m = { ...u, children: dd([...u.children, f]) },
+    g = jt(d, "sdtContent", { kind: "contentControlContent", children: l }),
+    p = jt(d, "sdt", { kind: "contentControl", children: [m, g] }),
+    x = new Set(l.map((k) => k.id)),
+    h = false,
+    N = [];
+  for (let k of i.children) {
+    if (!x.has(k.id)) {
+      N.push(k);
+      continue;
+    }
+    h || (N.push(p), (h = true));
+  }
+  return C(F(o, i.id, N, t), sl(i.id, "flow-structural"));
+}
+var Dv = {
+  richText: "richText",
+  plainText: "text",
+  dropDownList: "dropDownList",
+  comboBox: "comboBox",
+  date: "date",
+};
+function Uv(e) {
+  let n = 0;
+  for (let t of Pe(e.root)) {
+    let r = Fn(t.node).id;
+    r !== void 0 && r > n && (n = r);
+  }
+  return n >= 2147483647 ? null : n + 1;
+}
+function my(e, n, t) {
+  let r = Ei(e, n);
+  for (let a = r.length - 1; a >= 0; a -= 1) {
+    let l = r[a];
+    if (Fn(l).showingPlaceholder) return { control: l, offset: 0 };
+  }
+  let o = E(e, n);
+  if (!o || o.kind !== "paragraph") return null;
+  let i = _e(o);
+  for (let a of Pe(o)) {
+    if (!Fn(a.node).showingPlaceholder) continue;
+    let l = i.spanOf(a.node);
+    if (l && t >= l.start && t <= l.end)
+      return { control: a.node, offset: l.start };
+  }
+  return null;
+}
+function py(e, n, t) {
+  let r = E(e, n);
+  if (!r || r.kind !== "contentControl") return null;
+  let o = A(e),
+    i = Qr(r),
+    a = ll(Ka(r), { showingPlaceholder: false }, o),
+    l = {
+      ...(i ?? jt(o, "sdtContent", { kind: "contentControlContent" })),
+      children: dy(i, "", o),
+    },
+    s = {
+      ...r,
+      children: [
+        a,
+        ...r.children.filter(
+          (c) =>
+            c.kind !== "contentControlProperties" &&
+            c.kind !== "contentControlContent",
+        ),
+        l,
+      ],
+    },
+    d = j(e, r.id, s, t);
+  return d.ok ? d.part : null;
+}
+function oc(e) {
+  return e == null
+    ? true
+    : typeof e != "string" || e.length > uv
+      ? false
+      : Z(e);
+}
+function gy(e, n) {
+  if (
+    !Array.isArray(n.entries) ||
+    n.entries.length > 512 ||
+    !Array.isArray(n.bookmarksToCreate) ||
+    n.bookmarksToCreate.length > 512
+  )
+    return "invalidArgs";
+  for (let t of n.entries)
+    if (
+      !Number.isInteger(t.level) ||
+      t.level < 0 ||
+      t.level > 8 ||
+      typeof t.text != "string" ||
+      t.text.length > 200 ||
+      !Z(t.text) ||
+      typeof t.headingParagraphId != "string" ||
+      t.headingParagraphId.length === 0 ||
+      typeof t.bookmarkName != "string" ||
+      t.bookmarkName.length === 0 ||
+      t.bookmarkName.length > 40 ||
+      !Z(t.bookmarkName) ||
+      typeof t.pageNumberText != "string" ||
+      t.pageNumberText.length > 32 ||
+      !Z(t.pageNumberText)
+    )
+      return "invalidArgs";
+  for (let t of n.bookmarksToCreate) {
+    if (
+      typeof t.paragraphId != "string" ||
+      t.paragraphId.length === 0 ||
+      typeof t.name != "string" ||
+      t.name.length === 0 ||
+      t.name.length > 40 ||
+      !Z(t.name)
+    )
+      return "invalidArgs";
+    let r = E(e, t.paragraphId);
+    if (!r || r.kind !== "paragraph") return "unknown-paragraph";
+    if (Ce(e, t.paragraphId)) return "bound";
+    if (Ae(e, t.paragraphId).content) return "locked";
+  }
+  return null;
+}
+function xy(e, n) {
+  if (
+    typeof n.beforeParagraphId != "string" ||
+    n.beforeParagraphId.length === 0 ||
+    typeof n.alias != "string" ||
+    n.alias.length === 0 ||
+    n.alias.length > 128 ||
+    !Z(n.alias) ||
+    !Go(n.instruction)
+  )
+    return "invalidArgs";
+  let t = E(e, n.beforeParagraphId);
+  if (!t || t.kind !== "paragraph") return "unknown-paragraph";
+  let r = ee(e, t.id);
+  return !r || r.localName !== "body"
+    ? "not-a-block"
+    : Ce(e, t.id)
+      ? "bound"
+      : Ae(e, t.id).content
+        ? "locked"
+        : gy(e, n);
+}
+function hy(e, n) {
+  for (let t of [
+    n.beginParagraphId,
+    ...n.resultParagraphIds,
+    n.endParagraphId,
+  ]) {
+    if (Ce(e, t)) return "bound";
+    if (Ae(e, t).content) return "locked";
+  }
+  if (n.contentControlId) {
+    let t = E(e, n.contentControlId);
+    if (t && ye(t)) {
+      if (Un(e, t).content) return "locked";
+      if (Ce(e, n.contentControlId)) return "bound";
+    }
+  }
+  return null;
+}
+function yy(e, n) {
+  if (typeof n.tocId != "string" || n.tocId.length === 0) return "invalidArgs";
+  let t = gy(e, n);
+  if (t) return t;
+  let r = Kr(jr(e), n.tocId);
+  return r ? hy(e, r) : "unknown-block";
+}
+function Oy(e, n) {
+  if (
+    typeof n.tocId != "string" ||
+    n.tocId.length === 0 ||
+    !Array.isArray(n.updates) ||
+    n.updates.length > 512
+  )
+    return "invalidArgs";
+  for (let r of n.updates)
+    if (
+      typeof r.paragraphId != "string" ||
+      r.paragraphId.length === 0 ||
+      typeof r.pageNumberText != "string" ||
+      r.pageNumberText.length > 32 ||
+      !Z(r.pageNumberText)
+    )
+      return "invalidArgs";
+  let t = Kr(jr(e), n.tocId);
+  return t
+    ? n.updates.some((r) => !t.resultParagraphIds.includes(r.paragraphId))
+      ? "invalidArgs"
+      : hy(e, t)
+    : "unknown-block";
+}
+function Ny(e, n, t) {
+  let r = e,
+    o = A(r),
+    i = [],
+    a = new Set(),
+    l = (d) => {
+      if (d.kind !== "textValue") {
+        if (d.localName === "bookmarkStart" || d.localName === "bookmarkEnd") {
+          let c = d.attributes.find((u) => u.localName === "id")?.value;
+          c && a.add(c);
+        }
+        for (let c of d.children) l(c);
+      }
+    };
+  l(r.root);
+  let s = 1;
+  for (let d of n) {
+    let c = E(r, d.paragraphId);
+    if (!c || c.kind === "textValue")
+      return { ok: false, reason: "unknown-paragraph" };
+    for (; a.has(String(s));) s += 1;
+    let u = String(s++);
+    a.add(u);
+    let f = Pp(o, d.name, u),
+      m = [...c.children],
+      g = 0;
+    (m[0] && m[0].kind !== "textValue" && m[0].localName === "pPr" && (g = 1),
+      m.splice(g, 0, f.start),
+      m.push(f.end));
+    let p = F(r, c.id, m, t);
+    if (!p.ok)
+      return { ok: false, reason: "tree-invariant", detail: "bookmark-insert" };
+    ((r = p.part), i.push(c.id));
+  }
+  return Me(r, {
+    dirty: i,
+    created: [],
+    deleted: [],
+    dependencyKeys: i,
+    impact: "flow-structural",
+  });
+}
+function Lv(e, n, t, r) {
+  let o = E(e, n.containerId);
+  if (!o || o.kind === "textValue")
+    return { ok: false, reason: "unknown-block" };
+  let i = o.children.findIndex((p) => p.id === n.beginParagraphId),
+    a = o.children.findIndex((p) => p.id === n.endParagraphId);
+  if (i < 0 || a < 0 || a <= i) return { ok: false, reason: "invalidArgs" };
+  let l = new Map();
+  for (let p of n.resultParagraphIds) {
+    let x = E(e, p);
+    if (!x || x.kind === "textValue") continue;
+    let h = x.children.find(
+      (O) => O.kind !== "textValue" && O.localName === "pPr",
+    );
+    if (!h || h.kind === "textValue") continue;
+    let N = h.children.find(
+      (O) => O.kind !== "textValue" && O.localName === "pStyle",
+    );
+    if (N?.kind === "textValue") continue;
+    let k = N?.attributes.find((O) => O.localName === "val")?.value;
+    k?.startsWith("TOC") && !l.has(k) && l.set(k, h);
+  }
+  let s = A(e),
+    d = t.map((p) => {
+      let x = `TOC${Math.min(p.level + 1, 9)}`;
+      return Ws(s, p, n.instruction, l.get(x));
+    }),
+    c = [...o.children.slice(0, i + 1), ...d, ...o.children.slice(a)],
+    u = n.resultParagraphIds,
+    f = d.map((p) => p.id),
+    m = F(e, o.id, c, r);
+  if (!m.ok) return { ok: false, reason: "tree-invariant" };
+  let g = {
+    dirty: [n.beginParagraphId, n.endParagraphId, ...f],
+    created: f,
+    deleted: u,
+    dependencyKeys: [n.containerId],
+    impact: "flow-structural",
+  };
+  return C(m, g);
+}
+function ky(e, n, t) {
+  let r = e;
+  if (n.bookmarksToCreate.length > 0) {
+    let u = Ny(r, n.bookmarksToCreate, t);
+    if (!u.ok || !u.part) return u;
+    r = u.part;
+  }
+  let o = Go(n.instruction),
+    i = E(r, n.beforeParagraphId);
+  if (!o || !i || i.kind !== "paragraph")
+    return { ok: false, reason: "invalidArgs" };
+  let a = ee(r, i.id);
+  if (!a || a.localName !== "body") return { ok: false, reason: "not-a-block" };
+  let l = a.children.findIndex((u) => u.id === i.id);
+  if (l < 0) return { ok: false, reason: "tree-invariant" };
+  let s = A(r),
+    d = bp(s, n.entries, o, n.alias),
+    c = _(r, a.id, l, [d], t);
+  return C(c, {
+    dirty: [a.id, ...n.entries.map((u) => u.headingParagraphId)],
+    created: [d.id],
+    deleted: [],
+    dependencyKeys: [a.id],
+    impact: "flow-structural",
+  });
+}
+function by(e, n, t) {
+  if (!Kr(jr(e), n.tocId)) return { ok: false, reason: "unknown-block" };
+  let o = e;
+  if (n.bookmarksToCreate.length > 0) {
+    let l = Ny(o, n.bookmarksToCreate, t);
+    if (!l.ok || !l.part) return l;
+    o = l.part;
+  }
+  let i = Kr(jr(o), n.tocId);
+  if (!i) return { ok: false, reason: "unknown-block" };
+  let a = n.entries.map((l) => ({
+    level: l.level,
+    text: l.text,
+    headingParagraphId: l.headingParagraphId,
+    bookmarkName: l.bookmarkName,
+    pageNumberText: l.pageNumberText,
+  }));
+  return Lv(o, i, a, t);
+}
+function Bv(e, n, t) {
+  let r = [],
+    o = false,
+    i = (c) => {
+      if (
+        ((c.kind === "tab" ||
+          (c.kind !== "textValue" && c.localName === "ptab")) &&
+          (o = true),
+        c.kind === "text" || (c.kind !== "textValue" && c.localName === "t"))
+      ) {
+        r.push(c);
+        return;
+      }
+      c.kind !== "textValue" && c.children.forEach(i);
+    };
+  if ((i(e), !o || r.length < 2)) return null;
+  let a = r[r.length - 1];
+  if (a.kind === "textValue") return null;
+  let l = a.id,
+    s = "";
+  for (let c of a.children) c.kind === "textValue" && (s += c.value);
+  if (s === n) return null;
+  let d = (c) => {
+    if (c.kind === "textValue") return c;
+    if (c.id === l)
+      return { ...c, children: [{ id: t(), kind: "textValue", value: n }] };
+    let u = c.children.map(d);
+    return u.some((f, m) => f !== c.children[m]) ? { ...c, children: u } : c;
+  };
+  return d(e);
+}
+function Py(e, n, t) {
+  let r = Kr(jr(e), n.tocId);
+  if (!r) return { ok: false, reason: "unknown-block" };
+  let o = e,
+    i = A(o),
+    a = [];
+  for (let l of n.updates) {
+    if (!r.resultParagraphIds.includes(l.paragraphId)) continue;
+    let s = E(o, l.paragraphId);
+    if (!s || s.kind === "textValue") continue;
+    let d = Bv(s, l.pageNumberText, i);
+    if (!d) continue;
+    let c = ee(o, s.id);
+    if (!c) return { ok: false, reason: "unknown-block" };
+    let u = c.children.map((m) => (m.id === s.id ? d : m)),
+      f = F(o, c.id, u, t);
+    if (!f.ok) return { ok: false, reason: "tree-invariant" };
+    ((o = f.part), a.push(l.paragraphId));
+  }
+  return a.length === 0
+    ? Me(o, {
+        dirty: [],
+        created: [],
+        deleted: [],
+        dependencyKeys: [],
+        impact: "text-local",
+      })
+    : Me(o, {
+        dirty: a,
+        created: [],
+        deleted: [],
+        dependencyKeys: a,
+        impact: "text-local",
+      });
+}
+var Hv = new Set([
+  "body",
+  "hdr",
+  "ftr",
+  "tc",
+  "sdtContent",
+  "footnote",
+  "endnote",
+]);
+function mr(e, n, t, r = [], o = []) {
+  return {
+    id: n(),
+    kind: "generic",
+    namespaceUri: y,
+    localName: e,
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: [],
+    attributes: r,
+    children: o,
+  };
+}
+function qe(e, n, t) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: t.attributePrefix,
+    value: n,
+  };
+}
+function jv(e, n, t) {
+  return mr(e, n, t, [
+    qe("val", "single", t),
+    qe("sz", "4", t),
+    qe("space", "0", t),
+    qe("color", "auto", t),
+  ]);
+}
+function Kv(e, n) {
+  let t = mr(
+      "tblBorders",
+      e,
+      n,
+      [],
+      ["top", "left", "bottom", "right", "insideH", "insideV"].map((i) =>
+        jv(i, e, n),
+      ),
+    ),
+    r = mr("tblW", e, n, [qe("w", "0", n), qe("type", "auto", n)]),
+    o = mr("tblLook", e, n, [
+      qe("val", "04A0", n),
+      qe("firstRow", "1", n),
+      qe("lastRow", "0", n),
+      qe("firstColumn", "1", n),
+      qe("lastColumn", "0", n),
+      qe("noHBand", "0", n),
+      qe("noVBand", "1", n),
+    ]);
+  return {
+    id: e(),
+    kind: "tableProperties",
+    namespaceUri: y,
+    localName: "tblPr",
+    ...(n.elementPrefix === void 0 ? {} : { prefix: n.elementPrefix }),
+    namespaceBindings: [],
+    attributes: [],
+    children: [r, t, o],
+  };
+}
+function $v(e, n, t, r) {
+  let o = [];
+  for (let i = 0; i < e; i += 1)
+    o.push(mr("gridCol", t, r, [qe("w", String(n), r)]));
+  return {
+    id: t(),
+    kind: "tableGrid",
+    namespaceUri: y,
+    localName: "tblGrid",
+    ...(r.elementPrefix === void 0 ? {} : { prefix: r.elementPrefix }),
+    namespaceBindings: [],
+    attributes: [],
+    children: o,
+  };
+}
+function wy(e, n, t, r, o) {
+  let i = [];
+  if (e !== null) {
+    let a = mn(n, t);
+    (t.add(a), i.push(...gt(e, a)));
+  }
+  return {
+    id: r(),
+    kind: "paragraph",
+    namespaceUri: y,
+    localName: "p",
+    ...(o.elementPrefix === void 0 ? {} : { prefix: o.elementPrefix }),
+    namespaceBindings: [],
+    attributes: i,
+    children: [],
+  };
+}
+function Gv(e, n, t, r, o) {
+  let i = [],
+    a = [],
+    l = [];
+  for (let d = 0; d < e.rows; d += 1) {
+    let c = [];
+    for (let u = 0; u < e.cols; u += 1) {
+      let f = mr("tcW", r, o, [
+          qe("w", String(e.columnWidthTwips), o),
+          qe("type", "dxa", o),
+        ]),
+        m = mr("tcPr", r, o, [], [f]),
+        g = wy(n, `${e.beforeParagraphId}:r${d}c${u}`, t, r, o);
+      a.push(g.id);
+      let p = {
+        id: r(),
+        kind: "tableCell",
+        namespaceUri: y,
+        localName: "tc",
+        ...(o.elementPrefix === void 0 ? {} : { prefix: o.elementPrefix }),
+        namespaceBindings: [],
+        attributes: [],
+        children: [m, g],
+      };
+      (i.push(p.id), c.push(p));
+    }
+    l.push({
+      id: r(),
+      kind: "tableRow",
+      namespaceUri: y,
+      localName: "tr",
+      ...(o.elementPrefix === void 0 ? {} : { prefix: o.elementPrefix }),
+      namespaceBindings: [],
+      attributes: [],
+      children: c,
+    });
+  }
+  return {
+    table: {
+      id: r(),
+      kind: "table",
+      namespaceUri: y,
+      localName: "tbl",
+      ...(o.elementPrefix === void 0 ? {} : { prefix: o.elementPrefix }),
+      namespaceBindings: o.rowBinding ? [o.rowBinding] : [],
+      attributes: [],
+      children: [Kv(r, o), $v(e.cols, e.columnWidthTwips, r, o), ...l],
+    },
+    cellIds: i,
+    paragraphIds: a,
+  };
+}
+function ic(e, n, t) {
+  return typeof e == "number" && Number.isInteger(e) && e >= n && e <= t;
+}
+function sc(e, n) {
+  if (
+    typeof n.beforeParagraphId != "string" ||
+    n.beforeParagraphId.length === 0 ||
+    !ic(n.rows, 1, 32767) ||
+    !ic(n.cols, 1, 63)
+  )
+    return "invalidArgs";
+  if (n.rows * n.cols > 2e4) return "resource-limit";
+  if (
+    !ic(n.columnWidthTwips, 300, 31680) ||
+    n.columnWidthTwips * n.cols > 31680
+  )
+    return "invalid-property-value";
+  let t = E(e, n.beforeParagraphId);
+  if (!t) return "unknown-paragraph";
+  if (t.kind !== "paragraph") return "not-a-paragraph";
+  let r = ee(e, t.id);
+  return !r || !Hv.has(r.localName)
+    ? "not-a-block"
+    : Ce(e, t.id)
+      ? "bound"
+      : Ae(e, t.id).content
+        ? "locked"
+        : null;
+}
+function Ry(e, n, t) {
+  let r = sc(e, n);
+  if (r) return { ok: false, reason: r };
+  let o = E(e, n.beforeParagraphId),
+    i = o ? ee(e, o.id) : null;
+  if (!o || !i) return { ok: false, reason: "unknown-paragraph" };
+  let a = i.children.findIndex((x) => x.id === o.id);
+  if (a < 0) return { ok: false, reason: "tree-invariant" };
+  let l = A(e),
+    s = ve(e, i),
+    d = rr(e, i),
+    c = new Set(Mn(e.root)),
+    u = Gv(n, d, c, l, s),
+    f = a > 0 ? i.children[a - 1] : void 0,
+    m =
+      f && f.kind !== "textValue" && f.localName === "tbl"
+        ? wy(d, `${n.beforeParagraphId}:sep`, c, l, s)
+        : null,
+    g = m ? [m, u.table] : [u.table],
+    p = {
+      dirty: [i.id, u.table.id],
+      created: [
+        ...(m ? [m.id] : []),
+        u.table.id,
+        ...u.cellIds,
+        ...u.paragraphIds,
+      ],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+      caret: { paragraphId: u.paragraphIds[0] },
+    };
+  return C(_(e, i.id, a, g, t), p);
+}
+function tn(e, n) {
+  return e.kind !== "textValue" && e.namespaceUri === y && e.localName === n;
+}
+function Kt(e) {
+  return tn(e, "gridCol");
+}
+function K(e, n) {
+  for (let t of e.children) if (tn(t, n)) return t;
+}
+function rn(e, n) {
+  for (let t of e.attributes)
+    if (t.namespaceUri === y && t.localName === n) return t.value;
+}
+function Ey(e, n, t = y) {
+  return e.localName === n && e.namespaceUri === t;
+}
+var zv = [
+    "tblStyle",
+    "tblpPr",
+    "tblOverlap",
+    "bidiVisual",
+    "tblStyleRowBandSize",
+    "tblStyleColBandSize",
+    "tblW",
+    "jc",
+    "tblCellSpacing",
+    "tblInd",
+    "tblBorders",
+    "shd",
+    "tblLayout",
+    "tblCellMar",
+    "tblLook",
+    "tblCaption",
+    "tblDescription",
+    "tblPrChange",
+  ],
+  dc = [
+    "cnfStyle",
+    "divId",
+    "gridBefore",
+    "gridAfter",
+    "wBefore",
+    "wAfter",
+    "cantSplit",
+    "trHeight",
+    "tblHeader",
+    "tblCellSpacing",
+    "jc",
+    "hidden",
+    "ins",
+    "del",
+    "trPrChange",
+  ],
+  cl = [
+    "cnfStyle",
+    "tcW",
+    "gridSpan",
+    "hMerge",
+    "vMerge",
+    "tcBorders",
+    "shd",
+    "noWrap",
+    "tcMar",
+    "textDirection",
+    "tcFitText",
+    "vAlign",
+    "hideMark",
+    "headers",
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+    "tcPrChange",
+  ];
+function Ii(e, n) {
+  if (n.kind === "textValue" || n.namespaceUri !== y) return e.length;
+  let t = e.indexOf(n.localName);
+  return t === -1 ? e.length : t;
+}
+function Xv(e, n) {
+  return Ii(e, n) !== e.length;
+}
+function Yv(e, n) {
+  let t = [],
+    r = [];
+  e.forEach((a, l) => {
+    Xv(n, a) && (t.push(l), r.push(a));
+  });
+  let o = [...e];
+  if (r.length < 2) return o;
+  let i = [...r].sort((a, l) => Ii(n, a) - Ii(n, l));
+  return (
+    t.forEach((a, l) => {
+      o[a] = i[l];
+    }),
+    o
+  );
+}
+function qv(e, n) {
+  if (e.length !== n.length) return false;
+  for (let t = 0; t < e.length; t += 1) if (e[t] !== n[t]) return false;
+  return true;
+}
+function Zv(e) {
+  return { ok: false, reason: e };
+}
+function lo(e) {
+  return { ok: false, reason: e };
+}
+function cc(e, n, t, r, o = y) {
+  if (n !== null && !Ey(n, r, o)) return Zv("wrong-expanded-name");
+  let i = false,
+    a = [];
+  for (let s of e.children) {
+    if (tn(s, r) && s.namespaceUri === o) {
+      if (n === null) continue;
+      i ? a.push(s) : (a.push(n), (i = true));
+      continue;
+    }
+    a.push(s);
+  }
+  if (n !== null && !i) {
+    let s = Ii(t, n),
+      d = a.length;
+    for (let c = 0; c < a.length; c += 1) {
+      let u = Ii(t, a[c]);
+      if (u !== t.length && u > s) {
+        d = c;
+        break;
+      }
+    }
+    a.splice(d, 0, n);
+  }
+  let l = Yv(a, t);
+  return qv(e.children, l)
+    ? { ok: true, container: e }
+    : { ok: true, container: Object.freeze({ ...e, children: l }) };
+}
+function uc(e, n) {
+  return cc(e, n, zv, n.localName);
+}
+function fc(e, n) {
+  return cc(e, n, dc, n.localName);
+}
+function pr(e, n) {
+  return cc(e, n, cl, n.localName);
+}
+function Qv(e, n) {
+  let t = [];
+  for (let r of e.children)
+    r.kind !== "textValue" && r.id === n && Kt(r) && t.push(r);
+  return t;
+}
+function Ci(e, n, t) {
+  if (t !== null && !Kt(t)) return lo("wrong-expanded-name");
+  let r = Qv(e, n);
+  if (e.children.some((s) => s.kind !== "textValue" && s.id === n && !Kt(s)))
+    return lo("extension-collision");
+  if (r.length > 1) return lo("duplicate-grid-column");
+  if (r.length === 0) return lo("unknown-grid-column");
+  let i = r[0];
+  if (t === null) {
+    let s = e.children.filter((d) => d !== i);
+    return s.length === e.children.length
+      ? { ok: true, grid: e }
+      : { ok: true, grid: Object.freeze({ ...e, children: s }) };
+  }
+  if (t === i)
+    return e.children.some((d) => d !== i && d.id === t.id)
+      ? lo("duplicate-grid-column")
+      : { ok: true, grid: e };
+  if (e.children.some((s) => s !== i && s.id === t.id))
+    return lo("duplicate-grid-column");
+  let l = e.children.map((s) => (s === i ? t : s));
+  return { ok: true, grid: Object.freeze({ ...e, children: l }) };
+}
+function ul(e, n) {
+  let t = false;
+  for (let r of e.children)
+    if (tn(r, n)) {
+      if (t) return true;
+      t = true;
+    }
+  return false;
+}
+function Jv(e) {
+  let n = e && K(e, "gridSpan"),
+    t = n && rn(n, "val");
+  if (!t || !/^\d{1,7}$/.test(t)) return 1;
+  let r = Number(t);
+  return Number.isInteger(r) && r > 1 ? Math.min(r, 1024) : 1;
+}
+function eS(e) {
+  return e !== void 0 && K(e, "vMerge") !== void 0;
+}
+function nS(e) {
+  return e !== void 0 && K(e, "hMerge") !== void 0;
+}
+function tS(e) {
+  let n = K(e, "tcPr");
+  return Jv(n) > 1 || eS(n) || nS(n);
+}
+function rS(e) {
+  let n = 0;
+  for (let t of e.children) Kt(t) && (n += 1);
+  return n;
+}
+function oS(e, n) {
+  let t = [];
+  for (let r of e.children) if (Kt(r) && (t.push(r), t.length >= n)) break;
+  return t;
+}
+function iS(e) {
+  let n = new Set();
+  for (let t of e.children)
+    if (Kt(t)) {
+      if (n.has(t.id)) return true;
+      n.add(t.id);
+    }
+  return false;
+}
+function aS(e) {
+  let n = 0;
+  for (let t of e.children) t.kind === "tableRow" && (n += 1);
+  return n;
+}
+function lS(e) {
+  let n = 0;
+  for (let t of e.children) t.kind === "tableCell" && (n += 1);
+  return n;
+}
+function nt(e, n) {
+  return n === void 0
+    ? { ok: false, reason: e }
+    : { ok: false, reason: e, detail: n };
+}
+function sS(e, n, t) {
+  let r = [e],
+    o = 0,
+    i;
+  for (; r.length > 0;) {
+    if (o >= t)
+      return { ok: false, reason: "resource-limit", detail: "traversal" };
+    let a = r.pop();
+    if (((o += 1), a.id === n)) {
+      if (i !== void 0)
+        return { ok: false, reason: "duplicate-node-id", detail: n };
+      i = a;
+    }
+    if (a.kind === "textValue") continue;
+    let l = a.children.length,
+      s = t - o - r.length;
+    if (l > s)
+      return { ok: false, reason: "resource-limit", detail: "traversal" };
+    for (let d = l - 1; d >= 0; d -= 1) r.push(a.children[d]);
+  }
+  return i === void 0
+    ? { ok: false, reason: "unknown-table", detail: n }
+    : { ok: true, node: i };
+}
+function Ze(e, n, t = Le) {
+  let r = Be(t),
+    o = sS(e, n, r.maxTraversalNodes);
+  if (!o.ok) return nt(o.reason, o.detail);
+  let i = o.node;
+  if (i.kind !== "table") return nt("unknown-table", n);
+  let a = i;
+  if (ul(a, "tblPr")) return nt("duplicate-property-container", "tblPr");
+  if (ul(a, "tblGrid")) return nt("duplicate-property-container", "tblGrid");
+  let l = K(a, "tblGrid"),
+    s = l?.kind === "tableGrid" ? l : void 0;
+  if (l !== void 0 && s === void 0)
+    return nt("duplicate-property-container", "tblGrid");
+  if (s && iS(s)) return nt("duplicate-node-id", "gridCol");
+  if (aS(a) > r.maxRows) return nt("resource-limit", "maxRows");
+  let c = 0;
+  for (let p of a.children) {
+    if (p.kind !== "tableRow") continue;
+    if (ul(p, "trPr")) return nt("duplicate-property-container", "trPr");
+    let x = lS(p);
+    x > c && (c = x);
+    for (let h of p.children)
+      if (h.kind === "tableCell" && ul(h, "tcPr"))
+        return nt("duplicate-property-container", "tcPr");
+  }
+  let u = s ? rS(s) : 0;
+  if (u > r.maxColumns || c > r.maxColumns)
+    return nt("resource-limit", "maxColumns");
+  let f = s ? oS(s, u) : [],
+    m = [],
+    g = false;
+  for (let p of a.children) {
+    if (p.kind !== "tableRow") continue;
+    let x = [];
+    for (let h of p.children)
+      h.kind === "tableCell" && (tS(h) && (g = true), x.push(h));
+    m.push({ row: p, cells: x });
+  }
+  return {
+    ok: true,
+    topology: { table: a, grid: s, gridColumns: f, rows: m, hasMerge: g },
+  };
+}
+var mc = /^[0-9A-Fa-f]{6}$/,
+  xc = ["top", "left", "bottom", "right", "insideH", "insideV"],
+  Iy = new Set(["val", "sz", "color", "themeColor", "themeTint", "themeShade"]),
+  Cy = new Set(["fill", "themeFill", "themeFillTint", "themeFillShade"]),
+  fS = ["all", "outside", "inside", "top", "bottom", "left", "right"],
+  mS = new Set([
+    "dark1",
+    "light1",
+    "dark2",
+    "light2",
+    "accent1",
+    "accent2",
+    "accent3",
+    "accent4",
+    "accent5",
+    "accent6",
+    "hyperlink",
+    "followedHyperlink",
+    "none",
+    "background1",
+    "text1",
+    "background2",
+    "text2",
+  ]),
+  pS = {
+    lt1: "light1",
+    dk1: "dark1",
+    lt2: "light2",
+    dk2: "dark2",
+    bg1: "background1",
+    tx1: "text1",
+    bg2: "background2",
+    tx2: "text2",
+    hlink: "hyperlink",
+    folhlink: "followedHyperlink",
+  },
+  gS = {
+    dirty: [],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  },
+  Dy = {
+    dirty: [],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "paragraph-local",
+  };
+function pl(e) {
+  return e === "duplicate-node-id" ? "unknown-table" : e;
+}
+function yc(e, n) {
+  return Object.prototype.hasOwnProperty.call(e, n);
+}
+function Oc(e, n) {
+  if (!yc(e, n)) return null;
+  let t = e[n];
+  return typeof t != "string" || t.length === 0 ? null : t;
+}
+function $t(e, n) {
+  if (Object.keys(e).length !== n.length) return false;
+  for (let r of n) if (!yc(e, r)) return false;
+  return true;
+}
+function pc(e, n) {
+  let t = 0;
+  for (let r of e.children) tn(r, n) && (t += 1);
+  return t;
+}
+function xS(e) {
+  let n = e && K(e, "gridSpan"),
+    t = n && rn(n, "val");
+  if (!t || !/^\d{1,7}$/.test(t)) return 1;
+  let r = Number(t);
+  return Number.isInteger(r) && r > 1 ? Math.min(r, 1024) : 1;
+}
+function hS(e, n) {
+  let t = e && K(e, n),
+    r = t && rn(t, "val");
+  if (!r || !/^\d{1,7}$/.test(r)) return 0;
+  let o = Number(r);
+  return Number.isInteger(o) && o > 0 ? Math.min(o, 1024) : 0;
+}
+function yS(e) {
+  let n = e && K(e, "vMerge");
+  return n ? (rn(n, "val") === "restart" ? "restart" : "continue") : "none";
+}
+function OS(e) {
+  let n = K(e, "trPr"),
+    r = hS(n, "gridBefore"),
+    o = [];
+  for (let i of e.children) {
+    if (i.kind !== "tableCell") continue;
+    let a = K(i, "tcPr"),
+      l = Math.min(r, 1024),
+      s = Math.min(xS(a), Math.max(0, 1024 - l));
+    (o.push({ startCol: l, span: s, vMergeKind: yS(a) }), (r = l + s));
+  }
+  return o;
+}
+function By(e, n) {
+  return `${e}\0${n}`;
+}
+function gc(e, n) {
+  if (n) return { ...e, visualOwner: n };
+  let t = { ...e, visualOwner: void 0 };
+  return ((t.visualOwner = t), t);
+}
+function bS(e, n) {
+  let t = [],
+    r = new Map(),
+    o = new Map(),
+    i = new Map(),
+    a = new Map(),
+    l = new Map();
+  for (let d = 0; d < e.rows.length; d += 1) {
+    if (d >= n.maxRows) return { ok: false, reason: "resource-limit" };
+    let c = e.rows[d],
+      u = OS(c.row),
+      f = o.get(d);
+    f || ((f = []), o.set(d, f));
+    let m = i.get(d);
+    m || ((m = new Map()), i.set(d, m));
+    for (let g = 0; g < c.cells.length; g += 1) {
+      let p = c.cells[g],
+        x = u[g],
+        h = By(x.startCol, x.span);
+      if (x.vMergeKind === "restart") {
+        (a.set(h, p.id), l.set(p.id, [p.id]));
+        let N = gc({
+          rowIndex: d,
+          startCol: x.startCol,
+          span: x.span,
+          endCol: x.startCol + x.span - 1,
+          cell: p,
+          vMergeKind: x.vMergeKind,
+        });
+        (t.push(N), r.set(p.id, N), f.push(N), m.set(h, N));
+      } else if (x.vMergeKind === "continue") {
+        let N = a.get(h);
+        if (!N) return { ok: false, reason: "tree-invariant" };
+        let k = r.get(N);
+        (l.get(N).push(p.id), a.set(h, N));
+        let O = gc(
+          {
+            rowIndex: d,
+            startCol: x.startCol,
+            span: x.span,
+            endCol: x.startCol + x.span - 1,
+            cell: p,
+            vMergeKind: x.vMergeKind,
+          },
+          k,
+        );
+        (t.push(O), r.set(p.id, O), f.push(O), m.set(h, O));
+      } else {
+        a.delete(h);
+        let N = gc({
+          rowIndex: d,
+          startCol: x.startCol,
+          span: x.span,
+          endCol: x.startCol + x.span - 1,
+          cell: p,
+          vMergeKind: x.vMergeKind,
+        });
+        (t.push(N), r.set(p.id, N), f.push(N), m.set(h, N));
+      }
+      if (t.length > n.maxTraversalNodes)
+        return { ok: false, reason: "resource-limit" };
+    }
+  }
+  let s = new Map();
+  for (let [d, c] of l) s.set(d, Object.freeze([...c]));
+  return {
+    ok: true,
+    index: {
+      placed: t,
+      byId: r,
+      byRow: o,
+      intervalAtRow: i,
+      visualMembersByOwnerId: s,
+    },
+  };
+}
+function PS(e) {
+  let n = new Map();
+  for (let t of e.placed) {
+    let r = By(t.startCol, t.span);
+    if (t.vMergeKind === "restart") {
+      n.set(r, t.rowIndex);
+      continue;
+    }
+    if (t.vMergeKind === "continue") {
+      let o = n.get(r);
+      if (o === void 0 || t.rowIndex !== o + 1) return false;
+      n.set(r, t.rowIndex);
+      continue;
+    }
+    n.delete(r);
+  }
+  return true;
+}
+function wS(e, n, t, r, o, i, a) {
+  let l = r - t + 1,
+    s = i - o + 1;
+  if (l <= 0 || s <= 0) return "invalidArgs";
+  let d = l * s;
+  if (d > a.maxTraversalNodes) return "resource-limit";
+  let c = 0;
+  for (let p = t; p <= r; p += 1) c += e.byRow.get(p)?.length ?? 0;
+  let u = new Set(),
+    f = 0;
+  for (let p of n) {
+    let h = e.byId.get(p).visualOwner.cell.id;
+    if (u.has(h)) continue;
+    u.add(h);
+    let N = e.visualMembersByOwnerId.get(h);
+    f += N ? N.length : 1;
+  }
+  let m = e.placed.length;
+  return m + d + c + l + m + f + u.size + d > a.maxTraversalNodes
+    ? "resource-limit"
+    : null;
+}
+function RS(e, n, t) {
+  let r = [];
+  if (
+    (e.forEach((d, c) => {
+      if (d.span <= 0) return;
+      let u = d.startCol,
+        f = d.endCol + 1;
+      u >= f ||
+        f <= n ||
+        u > t ||
+        (r.push({ x: u, kind: 1, entry: d, cellIndex: c }),
+        r.push({ x: f, kind: 0, entry: d, cellIndex: c }));
+    }),
+    r.length === 0)
+  )
+    return [];
+  r.sort((d, c) =>
+    d.x !== c.x
+      ? d.x - c.x
+      : d.kind !== c.kind
+        ? d.kind - c.kind
+        : d.cellIndex - c.cellIndex,
+  );
+  let o = new Map(),
+    i,
+    a = r[0].x,
+    l = [],
+    s = () => {
+      i = void 0;
+      let d = Number.POSITIVE_INFINITY;
+      for (let [c, u] of o) c < d && ((d = c), (i = u));
+    };
+  for (let d of r) {
+    if (d.x > a && i) {
+      let c = l[l.length - 1];
+      c && c.end === a && c.entry.cell.id === i.cell.id
+        ? (l[l.length - 1] = { start: c.start, end: d.x, entry: i })
+        : l.push({ start: a, end: d.x, entry: i });
+    }
+    (d.kind === 1 ? o.set(d.cellIndex, d.entry) : o.delete(d.cellIndex),
+      s(),
+      (a = d.x));
+  }
+  return l;
+}
+function Nc(e, n) {
+  for (let t of e) if (n >= t.start && n < t.end) return t.entry;
+}
+function ES(e, n, t, r, o) {
+  let i = [];
+  for (let a = n; a <= t; a += 1) {
+    let l = e.byRow.get(a) ?? [];
+    for (let d of l) if (d.span <= 0) return { ok: false };
+    let s = RS(l, r, o);
+    if (s === null) return { ok: false };
+    for (let d = r; d <= o; d += 1) if (!Nc(s, d)) return { ok: false };
+    i.push(s);
+  }
+  return {
+    ok: true,
+    grid: { rowFrom: n, rowTo: t, colFrom: r, colTo: o, rows: i },
+  };
+}
+function yn(e, n, t) {
+  let r = e.rows[n - e.rowFrom];
+  return Nc(r, t).visualOwner;
+}
+function IS(e) {
+  let n = K(e, "tcPr");
+  if (!n) return null;
+  if (pc(n, "tcBorders") > 1 || pc(n, "shd") > 1)
+    return "duplicate-property-container";
+  let t = K(n, "tcBorders");
+  if (t) {
+    for (let r of xc) if (pc(t, r) > 1) return "duplicate-property-container";
+  }
+  return null;
+}
+function gl(e, n, t) {
+  if (!Array.isArray(n) || n.length === 0)
+    return { ok: false, reason: "invalidArgs" };
+  if (n.length > 65536 || n.length > t.maxRows * t.maxColumns)
+    return { ok: false, reason: "resource-limit" };
+  let r = new Set();
+  for (let g of n) {
+    if (typeof g != "string" || g.length === 0)
+      return { ok: false, reason: "invalidArgs" };
+    if (r.has(g)) return { ok: false, reason: "invalidArgs" };
+    r.add(g);
+  }
+  let o = bS(e, t);
+  if (!o.ok) return { ok: false, reason: o.reason };
+  let { index: i } = o,
+    { byId: a } = i;
+  for (let g of n) {
+    if (!a.has(g)) return { ok: false, reason: "invalidArgs" };
+    let p = IS(a.get(g).cell);
+    if (p) return { ok: false, reason: p };
+  }
+  let l = Number.POSITIVE_INFINITY,
+    s = Number.NEGATIVE_INFINITY,
+    d = Number.POSITIVE_INFINITY,
+    c = Number.NEGATIVE_INFINITY;
+  for (let g of n) {
+    let p = a.get(g);
+    ((l = Math.min(l, p.rowIndex)),
+      (s = Math.max(s, p.rowIndex)),
+      (d = Math.min(d, p.startCol)),
+      (c = Math.max(c, p.endCol)));
+  }
+  let u = wS(i, n, l, s, d, c, t);
+  if (u) return { ok: false, reason: u };
+  if (!PS(i)) return { ok: false, reason: "tree-invariant" };
+  let f = ES(i, l, s, d, c);
+  if (!f.ok) return { ok: false, reason: "invalidArgs" };
+  for (let g = l; g <= s; g += 1)
+    for (let p = d; p <= c; p += 1) {
+      let x = f.grid.rows[g - l],
+        h = Nc(x, p);
+      if (!h || !r.has(h.cell.id)) return { ok: false, reason: "invalidArgs" };
+    }
+  let m = new Set();
+  for (let g of n) {
+    let x = a.get(g).visualOwner.cell.id;
+    if (m.has(x)) continue;
+    m.add(x);
+    let h = i.visualMembersByOwnerId.get(x);
+    if (h) {
+      for (let N of h)
+        if (!r.has(N)) return { ok: false, reason: "invalidArgs" };
+      continue;
+    }
+    if (!r.has(x)) return { ok: false, reason: "invalidArgs" };
+  }
+  return { ok: true, selection: { index: i, selectedIds: r, grid: f.grid } };
+}
+function Fy(e) {
+  let n = e.toLowerCase();
+  return mS.has(n) ? n : (pS[n] ?? null);
+}
+function Ty(e) {
+  return typeof e == "number" && Number.isFinite(e) && e > 0 && e <= 1;
+}
+function kc(e) {
+  if (!e || typeof e != "object") return false;
+  let n = e.kind;
+  if (n === "hex") {
+    if (!$t(e, ["kind", "value"])) return false;
+    let t = e.value;
+    return typeof t == "string" && mc.test(t);
+  }
+  if (n === "auto") {
+    if (!$t(e, ["kind", "resolvedHex"])) return false;
+    let t = e.resolvedHex;
+    return typeof t == "string" && mc.test(t);
+  }
+  if (n === "theme") {
+    let t = e,
+      r = ["kind", "slot", "resolvedHex"];
+    return (
+      t.tint !== void 0 && r.push("tint"),
+      t.shade !== void 0 && r.push("shade"),
+      !(
+        !$t(e, r) ||
+        typeof t.slot != "string" ||
+        Fy(t.slot) === null ||
+        typeof t.resolvedHex != "string" ||
+        !mc.test(t.resolvedHex) ||
+        (t.tint !== void 0 && !Ty(t.tint)) ||
+        (t.shade !== void 0 && !Ty(t.shade))
+      )
+    );
+  }
+  return false;
+}
+function CS(e) {
+  if (!e || typeof e != "object" || !$t(e, ["style", "size", "color"]))
+    return false;
+  let n = e.style;
+  if (typeof n != "string" || !zx.includes(n)) return false;
+  let t = e.size;
+  return typeof t != "number" || !Number.isInteger(t) || t < 1 || t > 96
+    ? false
+    : kc(e.color);
+}
+function vy(e) {
+  return Math.round(e * 255)
+    .toString(16)
+    .toUpperCase()
+    .padStart(2, "0");
+}
+function TS(e, n) {
+  return e.kind === "hex"
+    ? e.value.toUpperCase()
+    : e.kind === "auto" && n === "themeColor"
+      ? "auto"
+      : e.resolvedHex.toUpperCase();
+}
+function bc(e, n, t) {
+  let r = [
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: t === "themeFill" ? "fill" : "color",
+      prefix: n.attributePrefix,
+      value: TS(e, t),
+    },
+  ];
+  if (e.kind === "theme") {
+    let o = Fy(e.slot);
+    r.push({
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: t,
+      prefix: n.attributePrefix,
+      value: o,
+    });
+    let i = t === "themeFill" ? "themeFillTint" : "themeTint",
+      a = t === "themeFill" ? "themeFillShade" : "themeShade";
+    (e.tint !== void 0 &&
+      r.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: i,
+        prefix: n.attributePrefix,
+        value: vy(e.tint),
+      }),
+      e.shade !== void 0 &&
+        r.push({
+          kind: "genericExtension",
+          namespaceUri: y,
+          localName: a,
+          prefix: n.attributePrefix,
+          value: vy(e.shade),
+        }));
+  }
+  return r;
+}
+function Gt(e, n, t, r, o = []) {
+  return {
+    id: n(),
+    kind: "generic",
+    namespaceUri: y,
+    localName: e,
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: [],
+    attributes: r,
+    children: o,
+  };
+}
+function vS(e, n, t, r) {
+  if (r.kind === "clear")
+    return Gt(e, n, t, [
+      {
+        kind: "wmlVal",
+        namespaceUri: y,
+        localName: "val",
+        prefix: t.attributePrefix,
+        value: "none",
+      },
+    ]);
+  let o = r.spec;
+  return Gt(e, n, t, [
+    {
+      kind: "wmlVal",
+      namespaceUri: y,
+      localName: "val",
+      prefix: t.attributePrefix,
+      value: o.style,
+    },
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "sz",
+      prefix: t.attributePrefix,
+      value: String(o.size),
+    },
+    ...bc(o.color, t, "themeColor"),
+  ]);
+}
+function fl(e, n) {
+  if (e.length !== n.length) return false;
+  for (let t = 0; t < e.length; t += 1) {
+    let r = e[t],
+      o = n[t];
+    if (
+      r.namespaceUri !== o.namespaceUri ||
+      r.localName !== o.localName ||
+      r.value !== o.value
+    )
+      return false;
+  }
+  return true;
+}
+function so(e, n, t, r, o = false) {
+  let i = [],
+    a = false;
+  for (let l of e) {
+    if (l.namespaceUri === y && l.localName === n) {
+      a ||
+        (i.push(
+          o
+            ? {
+                kind: "wmlVal",
+                namespaceUri: y,
+                localName: "val",
+                prefix: r.attributePrefix,
+                value: t,
+              }
+            : {
+                kind: "genericExtension",
+                namespaceUri: y,
+                localName: n,
+                prefix: r.attributePrefix,
+                value: t,
+              },
+        ),
+        (a = true));
+      continue;
+    }
+    i.push(l);
+  }
+  return (
+    a ||
+      i.push(
+        o
+          ? {
+              kind: "wmlVal",
+              namespaceUri: y,
+              localName: "val",
+              prefix: r.attributePrefix,
+              value: t,
+            }
+          : {
+              kind: "genericExtension",
+              namespaceUri: y,
+              localName: n,
+              prefix: r.attributePrefix,
+              value: t,
+            },
+      ),
+    i
+  );
+}
+function ml(e, n) {
+  return e.filter((t) => t.namespaceUri !== y || !n.has(t.localName));
+}
+function SS(e, n, t) {
+  if (n.kind === "clear") {
+    let i = ml(e.attributes, Iy);
+    return (
+      (i = so(i, "val", "none", t, true)),
+      fl(e.attributes, i) ? null : Object.freeze({ ...e, attributes: i })
+    );
+  }
+  let r = n.spec,
+    o = ml(e.attributes, Iy);
+  ((o = so(o, "val", r.style, t, true)), (o = so(o, "sz", String(r.size), t)));
+  for (let i of bc(r.color, t, "themeColor"))
+    o = so(o, i.localName, i.value, t);
+  return fl(e.attributes, o) ? null : Object.freeze({ ...e, attributes: o });
+}
+function Sy(e) {
+  let n = xc.indexOf(e);
+  return n === -1 ? xc.length : n;
+}
+function AS(e, n) {
+  let t = Sy(n.localName),
+    r = e.length;
+  for (let i = 0; i < e.length; i += 1) {
+    let a = e[i];
+    if (a.kind !== "textValue" && a.namespaceUri === y && Sy(a.localName) > t) {
+      r = i;
+      break;
+    }
+  }
+  let o = [...e];
+  return (o.splice(r, 0, n), o);
+}
+function MS(e, n, t, r) {
+  if (n.size === 0) return { container: e ?? null, changed: false };
+  let o = false,
+    i = e ? [...e.children] : [];
+  for (let a of ["top", "left", "bottom", "right"]) {
+    let l = n.get(a);
+    if (!l) continue;
+    let s = i.findIndex((d) => tn(d, a));
+    if (s >= 0) {
+      let d = SS(i[s], l, r);
+      d && ((i[s] = d), (o = true));
+      continue;
+    }
+    ((i = AS(i, vS(a, t, r, l))), (o = true));
+  }
+  return o
+    ? e
+      ? { container: Object.freeze({ ...e, children: i }), changed: true }
+      : { container: Gt("tcBorders", t, r, [], i), changed: true }
+    : { container: e ?? null, changed: false };
+}
+function _S(e, n, t, r) {
+  if (n === null) {
+    if (!e) return { container: null, changed: false };
+    let l = ml(e.attributes, Cy);
+    return fl(e.attributes, l)
+      ? { container: e, changed: false }
+      : { container: Object.freeze({ ...e, attributes: l }), changed: true };
+  }
+  let o = bc(n, r, "themeFill");
+  if (!e) {
+    let l = [
+      {
+        kind: "wmlVal",
+        namespaceUri: y,
+        localName: "val",
+        prefix: r.attributePrefix,
+        value: "clear",
+      },
+      ...o,
+    ];
+    return { container: Gt("shd", t, r, l), changed: true };
+  }
+  let i = ml(e.attributes, Cy);
+  e.attributes.find((l) => l.namespaceUri === y && l.localName === "val")
+    ?.value === "nil" && (i = so(i, "val", "clear", r, true));
+  for (let l of o) i = so(i, l.localName, l.value, r, l.localName === "val");
+  return fl(e.attributes, i)
+    ? { container: e, changed: false }
+    : { container: Object.freeze({ ...e, attributes: i }), changed: true };
+}
+function DS(e, n, t, r) {
+  let o = e.get(n);
+  (o || ((o = new Map()), e.set(n, o)), o.set(t, r));
+}
+function Ay(e, n, t, r, o) {
+  let { grid: i } = e,
+    a = (g, p) => {
+      DS(o, g, p, t === "clear" ? { kind: "clear" } : { kind: "set", spec: r });
+    },
+    { rowFrom: l, rowTo: s, colFrom: d, colTo: c } = i,
+    u = n,
+    f = (g, p) => {
+      (a(g, "bottom"), a(p, "top"));
+    },
+    m = (g, p) => {
+      (a(g, "right"), a(p, "left"));
+    };
+  if (u === "all") {
+    let g = new Set();
+    for (let p = l; p <= s; p += 1)
+      for (let x = d; x <= c; x += 1) g.add(yn(i, p, x).cell.id);
+    for (let p of g) for (let x of ["top", "left", "bottom", "right"]) a(p, x);
+    return;
+  }
+  if (u === "outside") {
+    for (let g = d; g <= c; g += 1)
+      (a(yn(i, l, g).cell.id, "top"), a(yn(i, s, g).cell.id, "bottom"));
+    for (let g = l; g <= s; g += 1)
+      (a(yn(i, g, d).cell.id, "left"), a(yn(i, g, c).cell.id, "right"));
+    return;
+  }
+  if (u === "inside") {
+    for (let g = l; g < s; g += 1)
+      for (let p = d; p <= c; p += 1) {
+        let x = yn(i, g, p),
+          h = yn(i, g + 1, p);
+        x.cell.id !== h.cell.id && f(x.cell.id, h.cell.id);
+      }
+    for (let g = d; g < c; g += 1)
+      for (let p = l; p <= s; p += 1) {
+        let x = yn(i, p, g),
+          h = yn(i, p, g + 1);
+        x.cell.id !== h.cell.id && m(x.cell.id, h.cell.id);
+      }
+    return;
+  }
+  if (u === "top") {
+    for (let g = d; g <= c; g += 1) a(yn(i, l, g).cell.id, "top");
+    return;
+  }
+  if (u === "bottom") {
+    for (let g = d; g <= c; g += 1) a(yn(i, s, g).cell.id, "bottom");
+    return;
+  }
+  if (u === "left") {
+    for (let g = l; g <= s; g += 1) a(yn(i, g, d).cell.id, "left");
+    return;
+  }
+  for (let g = l; g <= s; g += 1) a(yn(i, g, c).cell.id, "right");
+}
+function My(e, n, t) {
+  let r = new Map();
+  return n === "none"
+    ? (Ay(e, t, "clear", void 0, r), r)
+    : (Ay(e, n, "set", t, r), r);
+}
+function US(e, n, t, r) {
+  let o = K(e, "tcPr"),
+    i = o && K(o, "tcBorders"),
+    a = MS(i, n, t, r);
+  if (!a.changed) return null;
+  let l = o;
+  if (a.container === null) return null;
+  if (l) {
+    let c = pr(l, a.container);
+    if (!c.ok) return null;
+    l = c.container;
+  } else l = Gt("tcPr", t, r, [], [a.container]);
+  if (l === o) return null;
+  if (o) {
+    let c = e.children.map((u) => (u === o ? l : u));
+    return Object.freeze({ ...e, children: c });
+  }
+  let s = 0;
+  for (let c = 0; c < e.children.length; c += 1) {
+    let u = e.children[c];
+    if (u.kind === "paragraph" || u.kind === "table") break;
+    s = c + 1;
+  }
+  let d = [...e.children];
+  return (d.splice(s, 0, l), Object.freeze({ ...e, children: d }));
+}
+function LS(e, n, t, r) {
+  let o = K(e, "tcPr"),
+    i = o && K(o, "shd"),
+    a = _S(i, n, t, r);
+  if (!a.changed || (a.container === null && !i)) return null;
+  let l = o;
+  if (a.container === null) return null;
+  if (l) {
+    let c = pr(l, a.container);
+    if (!c.ok) return null;
+    l = c.container;
+  } else l = Gt("tcPr", t, r, [], [a.container]);
+  if (l === o) return null;
+  if (o) {
+    let c = e.children.map((u) => (u === o ? l : u));
+    return Object.freeze({ ...e, children: c });
+  }
+  let s = 0;
+  for (let c = 0; c < e.children.length; c += 1) {
+    let u = e.children[c];
+    if (u.kind === "paragraph" || u.kind === "table") break;
+    s = c + 1;
+  }
+  let d = [...e.children];
+  return (d.splice(s, 0, l), Object.freeze({ ...e, children: d }));
+}
+function BS(e, n, t, r) {
+  let o = K(e, "tcPr"),
+    i = o && K(o, "vAlign");
+  if (i && rn(i, "val") === n) return null;
+  let a = Gt("vAlign", t, r, [
+      {
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "val",
+        prefix: r.attributePrefix,
+        value: n,
+      },
+    ]),
+    l = o ?? Gt("tcPr", t, r, []),
+    s = pr(l, a);
+  if (!s.ok) return null;
+  if (o) {
+    let c = e.children.map((u) => (u === o ? s.container : u));
+    return Object.freeze({ ...e, children: c });
+  }
+  let d = [s.container, ...e.children];
+  return Object.freeze({ ...e, children: d });
+}
+function _y(e) {
+  return typeof e == "string" && fS.includes(e);
+}
+function FS(e) {
+  return !Oc(e, "tableId") || !Array.isArray(e.cellIds) || !yc(e, "scope")
+    ? "invalidArgs"
+    : e.scope === "none"
+      ? !$t(e, ["op", "tableId", "cellIds", "scope", "target"]) || !_y(e.target)
+        ? "invalidArgs"
+        : null
+      : !$t(e, ["op", "tableId", "cellIds", "scope", "spec"]) || !_y(e.scope)
+        ? "invalidArgs"
+        : null;
+}
+function VS(e) {
+  return !Oc(e, "tableId") ||
+    !Array.isArray(e.cellIds) ||
+    !$t(e, ["op", "tableId", "cellIds", "color"])
+    ? "invalidArgs"
+    : e.color !== null && !kc(e.color)
+      ? "invalid-property-value"
+      : null;
+}
+function WS(e) {
+  return !Oc(e, "tableId") ||
+    !Array.isArray(e.cellIds) ||
+    !$t(e, ["op", "tableId", "cellIds", "alignment"])
+    ? "invalidArgs"
+    : ["top", "center", "bottom"].includes(e.alignment)
+      ? null
+      : "invalid-property-value";
+}
+function co(e, n, t = Le) {
+  let r =
+    n.op === "setTableCellBorders"
+      ? FS(n)
+      : n.op === "setTableCellFill"
+        ? VS(n)
+        : WS(n);
+  if (r) return r;
+  let o = Be(t),
+    i = Ze(e.root, n.tableId, o);
+  if (!i.ok) return pl(i.reason);
+  let a = gl(i.topology, n.cellIds, o);
+  return a.ok
+    ? (n.op === "setTableCellFill" && n.color !== null && !kc(n.color)) ||
+      (n.op === "setTableCellBorders" && n.scope !== "none" && !CS(n.spec))
+      ? "invalid-property-value"
+      : null
+    : a.reason;
+}
+function Pc(e, n, t) {
+  return !t.rowBinding || bi(n, e).has(t.rowBinding.prefix)
+    ? e
+    : Object.freeze({
+        ...e,
+        namespaceBindings: [...e.namespaceBindings, t.rowBinding],
+      });
+}
+function HS(e, n, t, r = Le) {
+  let o = co(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Be(r),
+    a = Ze(e.root, n.tableId, i);
+  if (!a.ok) return { ok: false, reason: pl(a.reason) };
+  let l = gl(a.topology, n.cellIds, i);
+  if (!l.ok) return { ok: false, reason: l.reason };
+  let s =
+      n.scope === "none"
+        ? My(l.selection, "none", n.target)
+        : My(l.selection, n.scope, n.spec),
+    d = ve(e, a.topology.table),
+    c = A(e),
+    u = [],
+    f = new Set(),
+    m = false;
+  for (let [x, h] of s) {
+    let N = l.selection.index.byId.get(x);
+    if (!N) continue;
+    let k = US(N.cell, h, c, d);
+    k && ((m = true), f.add(x), u.push((O) => j(O, x, k, t)));
+  }
+  if (!m) return Me(e, gS);
+  let g = Pc(a.topology.table, e, d);
+  g !== a.topology.table &&
+    (f.add(a.topology.table.id),
+    u.unshift((x) => j(x, a.topology.table.id, g, t)));
+  let p = {
+    dirty: [...f],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  };
+  return C(st(e, u, t), p);
+}
+function jS(e, n, t, r = Le) {
+  let o = co(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Be(r),
+    a = Ze(e.root, n.tableId, i);
+  if (!a.ok) return { ok: false, reason: pl(a.reason) };
+  let l = gl(a.topology, n.cellIds, i);
+  if (!l.ok) return { ok: false, reason: l.reason };
+  let s = ve(e, a.topology.table),
+    d = A(e),
+    c = [],
+    u = new Set(),
+    f = false;
+  for (let p of l.selection.selectedIds) {
+    let x = l.selection.index.byId.get(p);
+    if (!x) continue;
+    let h = LS(x.cell, n.color, d, s);
+    h && ((f = true), u.add(p), c.push((N) => j(N, p, h, t)));
+  }
+  if (!f) return Me(e, Dy);
+  let m = Pc(a.topology.table, e, s);
+  m !== a.topology.table &&
+    (u.add(a.topology.table.id),
+    c.unshift((p) => j(p, a.topology.table.id, m, t)));
+  let g = {
+    dirty: [...u],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "paragraph-local",
+  };
+  return C(st(e, c, t), g);
+}
+function KS(e, n, t, r = Le) {
+  let o = co(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Be(r),
+    a = Ze(e.root, n.tableId, i);
+  if (!a.ok) return { ok: false, reason: pl(a.reason) };
+  let l = gl(a.topology, n.cellIds, i);
+  if (!l.ok) return { ok: false, reason: l.reason };
+  let s = ve(e, a.topology.table),
+    d = A(e),
+    c = [],
+    u = new Set();
+  for (let g of l.selection.selectedIds) {
+    let p = l.selection.index.byId.get(g);
+    if (!p) continue;
+    let x = BS(p.cell, n.alignment, d, s);
+    x && (u.add(g), c.push((h) => j(h, g, x, t)));
+  }
+  if (c.length === 0) return Me(e, Dy);
+  let f = Pc(a.topology.table, e, s);
+  f !== a.topology.table &&
+    (u.add(a.topology.table.id),
+    c.unshift((g) => j(g, a.topology.table.id, f, t)));
+  let m = {
+    dirty: [...u],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  };
+  return C(st(e, c, t), m);
+}
+function wc(e, n, t) {
+  return n.op === "setTableCellBorders"
+    ? HS(e, n, t)
+    : n.op === "setTableCellFill"
+      ? jS(e, n, t)
+      : KS(e, n, t);
+}
+var $S = new Set(["ins", "del", "trPrChange"]),
+  Hy = new Set([
+    "vMerge",
+    "hMerge",
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+    "tcPrChange",
+  ]),
+  GS = new Set([...Hy, "gridSpan"]),
+  jy = dc.filter((e) => !$S.has(e)),
+  Ky = cl.filter((e) => !Hy.has(e)),
+  $y = cl.filter((e) => !GS.has(e)),
+  xl = {
+    tcBorders: ["top", "left", "bottom", "right", "insideH", "insideV"],
+    tcMar: ["top", "left", "bottom", "right"],
+  };
+function tt(e) {
+  return e === "duplicate-node-id" ? "unknown-table" : e;
+}
+function zS(e) {
+  let n = e && K(e, "gridSpan"),
+    t = n && rn(n, "val");
+  if (!t || !/^\d{1,7}$/.test(t)) return 1;
+  let r = Number(t);
+  return Number.isInteger(r) && r > 1 ? Math.min(r, 1024) : 1;
+}
+function XS(e, n) {
+  let t = e && K(e, n),
+    r = t && rn(t, "val");
+  if (!r || !/^\d{1,7}$/.test(r)) return 0;
+  let o = Number(r);
+  return Number.isInteger(o) && o > 0 ? Math.min(o, 1024) : 0;
+}
+function YS(e) {
+  let n = e && K(e, "vMerge");
+  return n ? (rn(n, "val") === "restart" ? "restart" : "continue") : "none";
+}
+function Vy(e) {
+  let n = K(e, "trPr"),
+    r = XS(n, "gridBefore"),
+    o = [];
+  for (let i of e.children) {
+    if (i.kind !== "tableCell") continue;
+    let a = K(i, "tcPr"),
+      l = Math.min(r, 1024),
+      s = Math.min(zS(a), 1024 - l);
+    (o.push({ startCol: l, span: s, vMergeKind: YS(a) }), (r = l + s));
+  }
+  return o;
+}
+function qS(e, n, t, r) {
+  return e === t && n === r;
+}
+var fn = ["val"],
+  fo = ["w", "type"],
+  ZS = [
+    "val",
+    "fill",
+    "color",
+    "themeFill",
+    "themeFillTint",
+    "themeFillShade",
+    "themeColor",
+    "themeTint",
+    "themeShade",
+  ],
+  Gy = [
+    "val",
+    "sz",
+    "color",
+    "space",
+    "shadow",
+    "frame",
+    "themeColor",
+    "themeTint",
+    "themeShade",
+  ],
+  QS = ["val", "hRule"],
+  zy = {
+    cnfStyle: fn,
+    divId: fn,
+    gridBefore: fn,
+    gridAfter: fn,
+    gridSpan: fn,
+    wBefore: fo,
+    wAfter: fo,
+    tcW: fo,
+    cantSplit: fn,
+    trHeight: QS,
+    tblHeader: fn,
+    tblCellSpacing: fo,
+    jc: fn,
+    hidden: fn,
+    shd: ZS,
+    noWrap: fn,
+    textDirection: fn,
+    tcFitText: fn,
+    vAlign: fn,
+    hideMark: fn,
+  },
+  JS = new Set(["cantSplit", "tblHeader", "noWrap", "tcFitText", "hideMark"]);
+function eA(e, n) {
+  if (n <= 0 || n >= e.rows.length) return false;
+  let t = Vy(e.rows[n - 1].row),
+    r = Vy(e.rows[n].row);
+  for (let o of t)
+    if (o.vMergeKind !== "none") {
+      for (let i of r)
+        if (
+          i.vMergeKind === "continue" &&
+          qS(o.startCol, o.span, i.startCol, i.span)
+        )
+          return true;
+    }
+  return false;
+}
+function hl(e, n, t) {
+  let r = new Set(n),
+    o = [];
+  for (let i of e.attributes)
+    i.namespaceUri === y &&
+      r.has(i.localName) &&
+      o.push(
+        i.localName === "val"
+          ? {
+              kind: "wmlVal",
+              namespaceUri: y,
+              localName: "val",
+              prefix: t.attributePrefix,
+              value: i.value,
+            }
+          : {
+              kind: "genericExtension",
+              namespaceUri: y,
+              localName: i.localName,
+              prefix: t.attributePrefix,
+              value: i.value,
+            },
+      );
+  return o;
+}
+function on(e, n, t, r, o = []) {
+  return {
+    id: n(),
+    kind: "generic",
+    namespaceUri: y,
+    localName: e,
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: [],
+    attributes: r,
+    children: o,
+  };
+}
+function Wy(e, n, t) {
+  let r = (o, i) => ({
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: o,
+    prefix: t.attributePrefix,
+    value: i,
+  });
+  return [
+    r("id", e),
+    r("author", n.author),
+    ...(n.date === void 0 ? [] : [r("date", n.date)]),
+  ];
+}
+function Xy(e, n, t, r, o, i) {
+  let a = on(n, o, i, Wy(t, r, i)),
+    l = K(e, "trPr"),
+    s = l ?? on("trPr", o, i, []),
+    d = fc(s, a);
+  if (!d.ok) return e;
+  let c = n === "ins" ? "cellIns" : "cellDel",
+    u = e.children.map((f) => {
+      if (f.kind !== "tableCell") return f === l ? d.container : f;
+      let m = on(c, o, i, Wy(t, r, i)),
+        g = K(f, "tcPr"),
+        p = g ?? on("tcPr", o, i, []),
+        x = pr(p, m);
+      if (!x.ok) return f;
+      let h = g
+        ? f.children.map((N) => (N === g ? x.container : N))
+        : [x.container, ...f.children];
+      return Object.freeze({ ...f, children: h });
+    });
+  return (l || u.unshift(d.container), Object.freeze({ ...e, children: u }));
+}
+function nA(e, n, t) {
+  return {
+    id: e(),
+    kind: "tableRow",
+    namespaceUri: y,
+    localName: "tr",
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: t.rowBinding ? [t.rowBinding] : [],
+    attributes: [],
+    children: n,
+  };
+}
+function Yy(e, n, t) {
+  return {
+    id: e(),
+    kind: "tableCell",
+    namespaceUri: y,
+    localName: "tc",
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: [],
+    attributes: [],
+    children: n,
+  };
+}
+function qy(e) {
+  return e.children.some((n) => n.kind !== "textValue" && n.namespaceUri === y);
+}
+function Zy(e, n, t) {
+  return e.children.some((r) => r.kind === "textValue") || qy(e)
+    ? false
+    : hl(e, n, t).length > 0;
+}
+function tA(e, n, t, r) {
+  return Zy(e, t, r) ? on(e.localName, n, r, hl(e, t, r)) : null;
+}
+function Qy(e, n) {
+  if (e.children.some((o) => o.kind === "textValue") || qy(e)) return false;
+  let t = zy[e.localName];
+  return t ? (hl(e, t, n).length > 0 ? true : JS.has(e.localName)) : false;
+}
+function rA(e, n, t) {
+  if (!Qy(e, t)) return null;
+  let r = zy[e.localName];
+  return on(e.localName, n, t, hl(e, r, t));
+}
+function oA(e, n, t) {
+  let r = xl[e.localName];
+  if (!r) return null;
+  let o = e.localName === "tcMar" ? fo : Gy,
+    i = [];
+  for (let a of r) {
+    let l = e.children.find((d) => tn(d, a));
+    if (!l || l.kind === "textValue") continue;
+    let s = tA(l, n, o, t);
+    s && i.push(s);
+  }
+  return i.length === 0 ? null : on(e.localName, n, t, [], i);
+}
+function iA(e, n, t) {
+  return xl[e.localName] ? oA(e, n, t) : rA(e, n, t);
+}
+function vc(e, n, t, r) {
+  let o = [];
+  for (let i of n) {
+    let a = e.children.find((s) => tn(s, i));
+    if (!a || a.kind === "textValue") continue;
+    let l = iA(a, t, r);
+    l && o.push(l);
+  }
+  return o.length === 0 ? null : on(e.localName, t, r, [], o);
+}
+function aA(e, n) {
+  if (xl[e.localName]) {
+    let t = xl[e.localName],
+      r = e.localName === "tcMar" ? fo : Gy,
+      o = 1;
+    for (let i of t) {
+      let a = e.children.find((l) => tn(l, i));
+      !a || a.kind === "textValue" || !Zy(a, r, n) || (o += 1);
+    }
+    return o > 1 ? o : 0;
+  }
+  return Qy(e, n) ? 1 : 0;
+}
+var lA = Object.freeze({
+  elementPrefix: "w",
+  attributePrefix: "w",
+  rowBinding: null,
+});
+function Rc(e, n) {
+  let t = 1;
+  for (let r of n) {
+    let o = e.children.find((a) => tn(a, r));
+    if (!o || o.kind === "textValue") continue;
+    let i = aA(o, lA);
+    i > 0 && (t += i);
+  }
+  return t;
+}
+function Jy(e) {
+  let n = e.children.filter((o) => o.kind === "tableCell");
+  if (n.length === 0) return null;
+  let t = 1;
+  for (let o of n) {
+    t += 2;
+    let i = K(o, "tcPr");
+    i && (t += Rc(i, Ky));
+  }
+  let r = K(e, "trPr");
+  return (
+    r && (t += Rc(r, jy)),
+    { sourceRow: e, cellCount: n.length, structureBudget: t }
+  );
+}
+function eO(e, n, t, r, o, i) {
+  let a = rr(e, n),
+    l = [];
+  if (a !== null) {
+    let s = mn(r, o);
+    (o.add(s), l.push(...gt(a, s)));
+  }
+  return {
+    id: t(),
+    kind: "paragraph",
+    namespaceUri: y,
+    localName: "p",
+    ...(i.elementPrefix === void 0 ? {} : { prefix: i.elementPrefix }),
+    namespaceBindings: [],
+    attributes: l,
+    children: [],
+  };
+}
+function sA(e, n, t, r, o, i, a) {
+  let l = K(e, "tcPr"),
+    s = l ? vc(l, Ky, r, a) : void 0,
+    d = [];
+  return (s && d.push(s), d.push(eO(n, t, r, `${o}:p`, i, a)), Yy(r, d, a));
+}
+function dA(e, n, t, r) {
+  let o = ve(n, t),
+    i = e.sourceRow,
+    a = K(i, "trPr"),
+    l = a ? vc(a, jy, r, o) : void 0,
+    s = new Set(Mn(n.root)),
+    d = [],
+    c = [];
+  l && d.push(l);
+  let u = 0;
+  for (let m of i.children) {
+    if (m.kind !== "tableCell") continue;
+    let g = sA(m, n, t, r, `${i.id}:c${u}`, s, o);
+    ((u += 1),
+      c.push(g.children.find((p) => p.kind === "paragraph").id),
+      d.push(g));
+  }
+  return { row: nA(r, d, o), paragraphIds: c };
+}
+function cA(e, n) {
+  return e.children.findIndex((t) => t.id === n);
+}
+function uA(e, n, t, r, o) {
+  if (n.rows.length >= o.maxRows) return "resource-limit";
+  let i = Jy(n.rows[t].row);
+  if (i === null) return "tree-invariant";
+  if (i.structureBudget > o.maxTraversalNodes) return "resource-limit";
+  let a = r === "above" ? t : t + 1;
+  return eA(n, a) ? "vertical-merge-crossing" : null;
+}
+function yl(e, n, t = Le) {
+  if (
+    n.revision !== void 0 &&
+    (typeof n.revision.author != "string" ||
+      n.revision.author.trim().length === 0 ||
+      (n.revision.date !== void 0 && typeof n.revision.date != "string"))
+  )
+    return "invalid-property-value";
+  let r = Be(t),
+    o = Ze(e.root, n.tableId, r);
+  if (!o.ok) return tt(o.reason);
+  let { topology: i } = o,
+    a = i.rows.findIndex((l) => l.row.id === n.rowId);
+  return a === -1
+    ? "unknown-row"
+    : n.op === "deleteTableRow"
+      ? i.rows.length === 1
+        ? "block-required"
+        : null
+      : uA(e, i, a, n.where, r);
+}
+function fA(e, n, t, r = Le) {
+  let o = yl(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Be(r),
+    a = Ze(e.root, n.tableId, i);
+  if (!a.ok) return { ok: false, reason: tt(a.reason) };
+  let { topology: l } = a,
+    s = l.rows.findIndex((h) => h.row.id === n.rowId);
+  if (s === -1) return { ok: false, reason: "unknown-row" };
+  let d = Jy(l.rows[s].row);
+  if (d === null) return { ok: false, reason: "tree-invariant" };
+  let c = A(e),
+    u = dA(d, e, l.table, c),
+    f = n.revision
+      ? Xy(u.row, "ins", ao(e)(), n.revision, c, ve(e, l.table))
+      : u.row,
+    m = u.paragraphIds,
+    g = cA(l.table, n.rowId);
+  if (g === -1) return { ok: false, reason: "unknown-row" };
+  let p = n.where === "above" ? g : g + 1,
+    x = {
+      dirty: [l.table.id, f.id],
+      created: [
+        f.id,
+        ...f.children.filter((h) => h.kind === "tableCell").map((h) => h.id),
+        ...m,
+      ],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+      caret: { paragraphId: m[0] },
+    };
+  return C(_(e, l.table.id, p, [f], t), x);
+}
+function mA(e, n, t, r = Le) {
+  let o = yl(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Ze(e.root, n.tableId, Be(r));
+  if (!i.ok) return { ok: false, reason: tt(i.reason) };
+  let a = i.topology.rows.find((p) => p.row.id === n.rowId)?.row;
+  if (!a) return { ok: false, reason: "unknown-row" };
+  let l = i.topology.rows.findIndex((p) => p.row.id === n.rowId),
+    s = i.topology.rows[l],
+    d = l > 0 ? l - 1 : l + 1,
+    c = i.topology.rows[d],
+    u = c?.cells[0];
+  if (n.referenceCellId && c) {
+    let p = s.cells.findIndex((x) => x.id === n.referenceCellId);
+    p >= 0 && c.cells[p] && (u = c.cells[p]);
+  }
+  let f = u ? iO(u) : null;
+  if (!f) return { ok: false, reason: "tree-invariant" };
+  let m = fr(a);
+  if (n.revision) {
+    let p = A(e),
+      x = Xy(a, "del", ao(e)(), n.revision, p, ve(e, i.topology.table)),
+      h = {
+        dirty: [n.tableId, n.rowId],
+        created: [],
+        deleted: [],
+        dependencyKeys: H,
+        impact: "flow-structural",
+        caret: { paragraphId: f },
+      };
+    return C(j(e, n.rowId, x, t), h);
+  }
+  let g = {
+    dirty: [n.tableId],
+    created: [],
+    deleted: [n.rowId, ...m],
+    dependencyKeys: H,
+    impact: "flow-structural",
+    caret: { paragraphId: f },
+  };
+  return C(ie(e, n.rowId, t), g);
+}
+function nO(e, n, t) {
+  return n.op === "insertTableRow" ? fA(e, n, t) : mA(e, n, t);
+}
+function pA(e) {
+  let n = K(e, "tcPr"),
+    t = n && K(n, "tcW");
+  if (!t) return;
+  let r = rn(t, "type");
+  if (r !== void 0 && r !== "dxa") return;
+  let o = rn(t, "w");
+  if (!(!o || !/^\d{1,9}$/.test(o))) return o;
+}
+function gr(e, n) {
+  return Object.prototype.hasOwnProperty.call(e, n);
+}
+function Pt(e, n) {
+  if (!gr(e, n)) return null;
+  let t = e[n];
+  return typeof t != "string" || t.length === 0 ? null : t;
+}
+function Sc(e) {
+  let n = gr(e, "gridColumnId"),
+    t = gr(e, "referenceCellId");
+  if (n === t) return null;
+  if (n) {
+    let o = Pt(e, "gridColumnId");
+    return o ? { kind: "gridColumn", id: o } : null;
+  }
+  let r = Pt(e, "referenceCellId");
+  return r ? { kind: "referenceCell", id: r } : null;
+}
+function Wn(e, n) {
+  let t = e.gridColumns.findIndex((r) => r.id === n);
+  return t === -1 ? null : t;
+}
+function Ac(e, n) {
+  let t = e.rows[0];
+  if (!t) return null;
+  let r = t.cells.findIndex((o) => o.id === n);
+  return r === -1 ? null : r;
+}
+function gA(e) {
+  for (let { cells: n } of e.rows)
+    for (let t of n) {
+      let r = K(t, "tcPr");
+      if (r && (K(r, "gridSpan") || K(r, "hMerge") || K(r, "vMerge")))
+        return true;
+    }
+  return false;
+}
+function tO(e) {
+  if (gA(e)) return "table-has-merge";
+  if (e.rows.length === 0) return "tree-invariant";
+  let n = e.rows[0].cells.length;
+  if (n === 0) return "tree-invariant";
+  for (let { row: t, cells: r } of e.rows) {
+    if (r.length !== n) return "tree-invariant";
+    let o = K(t, "trPr");
+    if (o && (K(o, "gridBefore") || K(o, "gridAfter"))) return "tree-invariant";
+  }
+  return e.grid && e.gridColumns.length !== n ? "tree-invariant" : null;
+}
+function rO(e, n) {
+  let t = e.gridColumns[n];
+  if (t) {
+    let r = rn(t, "w");
+    return r && /^\d{1,9}$/.test(r) ? r : void 0;
+  }
+  return pA(e.rows[0].cells[n]);
+}
+function Ec(e, n, t) {
+  let r = [];
+  return (
+    t &&
+      r.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "w",
+        prefix: n.attributePrefix,
+        value: t,
+      }),
+    on("gridCol", e, n, r)
+  );
+}
+function oO(e) {
+  let n = 0;
+  for (let t of e.children)
+    if (t.kind !== "textValue") {
+      if (tn(t, "tblPr")) {
+        n += 1;
+        continue;
+      }
+      break;
+    }
+  return n;
+}
+function xA(e, n, t, r) {
+  if (e.children.some((l) => l.id === r.id)) return null;
+  let o = e.children.findIndex((l) => l.id === n);
+  if (o === -1) return null;
+  let i = t === "left" ? o : o + 1,
+    a = [...e.children];
+  return (a.splice(i, 0, r), Object.freeze({ ...e, children: a }));
+}
+function hA(e, n, t, r, o) {
+  let i = e.rows[0].cells.length + 1,
+    a = [];
+  for (let l = 0; l < i; l += 1) {
+    if (l === r) {
+      a.push(Ec(n, t, o));
+      continue;
+    }
+    let s = l > r ? l - 1 : l;
+    a.push(Ec(n, t, rO(e, s)));
+  }
+  return {
+    id: n(),
+    kind: "tableGrid",
+    namespaceUri: y,
+    localName: "tblGrid",
+    ...(t.elementPrefix === void 0 ? {} : { prefix: t.elementPrefix }),
+    namespaceBindings: [],
+    attributes: [],
+    children: a,
+  };
+}
+function yA(e, n) {
+  let t = 0;
+  for (let r = 0; r < e.children.length; r += 1)
+    if (e.children[r].kind === "tableCell") {
+      if (t === n) return r;
+      t += 1;
+    }
+  return e.children.length;
+}
+function iO(e) {
+  return e.children.find((t) => t.kind === "paragraph")?.id ?? null;
+}
+function Mc(e, n, t) {
+  return !t.rowBinding || bi(n, e).has(t.rowBinding.prefix)
+    ? e
+    : Object.freeze({
+        ...e,
+        namespaceBindings: [...e.namespaceBindings, t.rowBinding],
+      });
+}
+function aO(e, n, t, r) {
+  let o = t === "left" ? n : n + 1,
+    i = e.rows.map((l) => l.cells[n]),
+    a = e.grid ? 2 : e.rows[0].cells.length + 3;
+  for (let l of i) {
+    a += 2;
+    let s = K(l, "tcPr");
+    s && (a += Rc(s, $y));
+  }
+  return {
+    referenceIndex: n,
+    insertIndex: o,
+    referenceWidth: rO(e, n),
+    structureBudget: a,
+    referenceCells: i,
+    synthesizeGrid: !e.grid || e.gridColumns.length === 0,
+    targetGridColumnId: e.gridColumns[n]?.id ?? null,
+  };
+}
+function OA(e, n, t, r, o, i, a) {
+  let l = K(e, "tcPr"),
+    s = l ? vc(l, $y, r, a) : void 0,
+    d = [];
+  return (s && d.push(s), d.push(eO(n, t, r, `${o}:p`, i, a)), Yy(r, d, a));
+}
+function NA(e, n) {
+  if (!gr(e, "where") || (e.where !== "left" && e.where !== "right"))
+    return "invalidArgs";
+  let t = Sc(e);
+  if (!t) return "invalidArgs";
+  let r = n.grid !== void 0 && n.gridColumns.length > 0;
+  return t.kind === "gridColumn"
+    ? r
+      ? Wn(n, t.id) === null
+        ? "unknown-grid-column"
+        : null
+      : "invalidArgs"
+    : r
+      ? "invalidArgs"
+      : Ac(n, t.id) === null
+        ? "unknown-grid-column"
+        : null;
+}
+function Ol(e, n, t = Le) {
+  if (!Pt(n, "tableId")) return "invalidArgs";
+  let r = Be(t),
+    o = Ze(e.root, n.tableId, r);
+  if (!o.ok) return tt(o.reason);
+  let { topology: i } = o,
+    a = tO(i);
+  if (a) return a;
+  if (n.op === "deleteTableColumn")
+    return Pt(n, "gridColumnId")
+      ? !i.grid || i.gridColumns.length === 0 || Wn(i, n.gridColumnId) === null
+        ? "unknown-grid-column"
+        : i.gridColumns.length === 1
+          ? "block-required"
+          : null
+      : "invalidArgs";
+  let l = NA(n, i);
+  if (l) return l;
+  let s = Sc(n),
+    d = s.kind === "gridColumn" ? Wn(i, s.id) : Ac(i, s.id);
+  if (
+    (i.gridColumns.length > 0
+      ? i.gridColumns.length + 1
+      : i.rows[0].cells.length + 1) > r.maxColumns
+  )
+    return "resource-limit";
+  ve(e, i.table);
+  return aO(i, d, n.where).structureBudget > r.maxTraversalNodes
+    ? "resource-limit"
+    : null;
+}
+function kA(e, n, t, r = Le) {
+  let o = Ol(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Be(r),
+    a = Ze(e.root, n.tableId, i);
+  if (!a.ok) return { ok: false, reason: tt(a.reason) };
+  let { topology: l } = a,
+    s = Sc(n);
+  if (!s) return { ok: false, reason: "invalidArgs" };
+  let d = s.kind === "gridColumn" ? Wn(l, s.id) : Ac(l, s.id);
+  if (d === null) return { ok: false, reason: "unknown-grid-column" };
+  let c = aO(l, d, n.where, ve(e, l.table)),
+    u = ve(e, l.table),
+    f = A(e),
+    m = new Set(Mn(e.root)),
+    g = Mc(l.table, e, u),
+    p = [],
+    x = [];
+  for (let w = 0; w < l.rows.length; w += 1) {
+    let I = c.referenceCells[w],
+      S = OA(I, e, g, f, `${l.table.id}:col:${d}:r${w}`, m, u);
+    (p.push(S), x.push(S.children.find((U) => U.kind === "paragraph").id));
+  }
+  let h, N;
+  if (c.synthesizeGrid)
+    ((h = hA(l, f, u, c.insertIndex, c.referenceWidth)),
+      (N = h.children
+        .filter((w) => w.kind !== "textValue" && w.localName === "gridCol")
+        .map((w) => w.id)));
+  else {
+    let w = Ec(f, u, c.referenceWidth),
+      I = xA(l.grid, c.targetGridColumnId, n.where, w);
+    if (!I) return { ok: false, reason: "tree-invariant" };
+    ((h = I), (N = [w.id]));
+  }
+  let k = [];
+  g !== l.table && k.push((w) => j(w, l.table.id, g, t));
+  for (let w = 0; w < l.rows.length; w += 1) {
+    let I = l.rows[w].row,
+      S = yA(I, c.insertIndex),
+      U = p[w];
+    k.push((L) => _(L, I.id, S, [U], t));
+  }
+  c.synthesizeGrid
+    ? k.push((w) => _(w, l.table.id, oO(l.table), [h], t))
+    : k.push((w) => j(w, l.grid.id, h, t));
+  let O = [l.table.id, ...l.rows.map((w) => w.row.id)];
+  c.synthesizeGrid || O.push(l.grid.id);
+  let b = c.synthesizeGrid
+      ? [h.id, ...N, ...p.map((w) => w.id), ...x]
+      : [...N, ...p.map((w) => w.id), ...x],
+    P = x[0],
+    R = {
+      dirty: O,
+      created: b,
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+      caret: { paragraphId: P },
+    };
+  return C(st(e, k, t), R);
+}
+function bA(e, n, t, r = Le) {
+  let o = Ol(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Ze(e.root, n.tableId, Be(r));
+  if (!i.ok) return { ok: false, reason: tt(i.reason) };
+  let { topology: a } = i,
+    l = Wn(a, n.gridColumnId);
+  if (l === null || !a.grid)
+    return { ok: false, reason: "unknown-grid-column" };
+  let s = a.rows.map((p) => p.cells[l]),
+    d = s.flatMap((p) => fr(p)),
+    c = l < a.gridColumns.length - 1 ? l + 1 : l - 1,
+    u = iO(a.rows[0].cells[c]);
+  if (!u) return { ok: false, reason: "tree-invariant" };
+  let f = Ci(a.grid, n.gridColumnId, null);
+  if (!f.ok)
+    return {
+      ok: false,
+      reason:
+        f.reason === "unknown-grid-column"
+          ? "unknown-grid-column"
+          : "tree-invariant",
+    };
+  let m = [];
+  for (let p of s) m.push((x) => ie(x, p.id, t));
+  m.push((p) => j(p, a.grid.id, f.grid, t));
+  let g = {
+    dirty: [a.table.id, a.grid.id, ...a.rows.map((p) => p.row.id)],
+    created: [],
+    deleted: [n.gridColumnId, ...s.map((p) => p.id), ...d],
+    dependencyKeys: H,
+    impact: "flow-structural",
+    caret: { paragraphId: u },
+  };
+  return C(st(e, m, t), g);
+}
+function lO(e, n, t) {
+  return n.op === "insertTableColumn" ? kA(e, n, t) : bA(e, n, t);
+}
+function Ic(e, n) {
+  if (!gr(e, n)) return null;
+  let t = e[n];
+  return typeof t != "number" ||
+    !Number.isFinite(t) ||
+    !Number.isInteger(t) ||
+    t < 300 ||
+    t > 31680
+    ? null
+    : t;
+}
+function PA(e, n) {
+  if (!gr(e, n)) return null;
+  let t = e[n];
+  return typeof t != "number" ||
+    !Number.isFinite(t) ||
+    !Number.isInteger(t) ||
+    t < 300 ||
+    t > 31680
+    ? null
+    : t;
+}
+function uo(e) {
+  let n = rn(e, "w");
+  if (!n || !/^\d{1,9}$/.test(n)) return null;
+  let t = Number(n);
+  return !Number.isInteger(t) || t < 0 ? null : t;
+}
+function Cc(e, n, t) {
+  let r = String(n),
+    o = e.attributes.filter(
+      (i) => !(i.namespaceUri === y && i.localName === "w"),
+    );
+  return (
+    o.push({
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "w",
+      prefix: t.attributePrefix,
+      value: r,
+    }),
+    Object.freeze({ ...e, attributes: o })
+  );
+}
+function sO(e, n, t, r) {
+  return on(e, n, t, [
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "w",
+      prefix: t.attributePrefix,
+      value: String(r),
+    },
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "type",
+      prefix: t.attributePrefix,
+      value: "dxa",
+    },
+  ]);
+}
+function wA(e, n) {
+  return on("tblLayout", e, n, [
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "type",
+      prefix: n.attributePrefix,
+      value: "fixed",
+    },
+  ]);
+}
+function RA(e, n, t, r) {
+  let o = K(e, "tblPr"),
+    i = o ?? on("tblPr", n, t, [], []),
+    a = uc(i, wA(n, t));
+  if (!a.ok) return { ok: false };
+  if (((i = a.container), r !== void 0)) {
+    let l = uc(i, sO("tblW", n, t, r));
+    if (!l.ok) return { ok: false };
+    i = l.container;
+  }
+  return { ok: true, tblPr: i, insert: o === void 0 };
+}
+function dO(e, n, t, r, o, i) {
+  let a = K(n, "tblPr"),
+    l = RA(n, t, r, i);
+  return l.ok
+    ? l.insert
+      ? (e.push((s) => _(s, n.id, oO(n), [l.tblPr], o)), null)
+      : (l.tblPr !== a && e.push((s) => j(s, a.id, l.tblPr, o)), null)
+    : "tree-invariant";
+}
+function Tc(e, n, t, r) {
+  let o = sO("tcW", t, r, n),
+    i = K(e, "tcPr");
+  if (i) {
+    let d = pr(i, o);
+    if (!d.ok || d.container === i) return e;
+    let c = e.children.map((u) => (u === i ? d.container : u));
+    return Object.freeze({ ...e, children: c });
+  }
+  let a = on("tcPr", t, r, [], [o]),
+    l = 0;
+  for (let d = 0; d < e.children.length; d += 1) {
+    let c = e.children[d];
+    if (c.kind === "paragraph" || c.kind === "table") break;
+    l = d + 1;
+  }
+  let s = [...e.children];
+  return (s.splice(l, 0, a), Object.freeze({ ...e, children: s }));
+}
+function EA(e) {
+  if (!e.grid || e.gridColumns.length === 0) return "unknown-grid-column";
+  for (let n of e.gridColumns) if (uo(n) === null) return "tree-invariant";
+  return null;
+}
+function IA(e) {
+  return !Pt(e, "leftGridColumnId") ||
+    !Pt(e, "rightGridColumnId") ||
+    Ic(e, "leftWidthTwips") === null ||
+    Ic(e, "rightWidthTwips") === null ||
+    e.leftGridColumnId === e.rightGridColumnId
+    ? "invalidArgs"
+    : null;
+}
+function CA(e) {
+  return !Pt(e, "gridColumnId") ||
+    Ic(e, "columnWidthTwips") === null ||
+    PA(e, "tableWidthTwips") === null
+    ? "invalidArgs"
+    : null;
+}
+function TA(e) {
+  return !Pt(e, "rowId") ||
+    !gr(e, "heightTwips") ||
+    typeof e.heightTwips != "number" ||
+    !Number.isInteger(e.heightTwips) ||
+    e.heightTwips < 20 ||
+    e.heightTwips > 31680
+    ? "invalidArgs"
+    : null;
+}
+function Ti(e, n, t = Le) {
+  if (!Pt(n, "tableId")) return "invalidArgs";
+  let r =
+    n.op === "setTableColumnWidths"
+      ? IA(n)
+      : n.op === "setTableRightEdgeWidth"
+        ? CA(n)
+        : TA(n);
+  if (r) return r;
+  let o = Be(t),
+    i = Ze(e.root, n.tableId, o);
+  if (!i.ok) return tt(i.reason);
+  let { topology: a } = i;
+  if (n.op === "setTableRowHeight")
+    return a.rows.some((g) => g.row.id === n.rowId) ? null : "unknown-row";
+  let l = tO(a);
+  if (l) return l;
+  let s = EA(a);
+  if (s) return s;
+  if (n.op === "setTableColumnWidths") {
+    let g = Wn(a, n.leftGridColumnId),
+      p = Wn(a, n.rightGridColumnId);
+    if (g === null || p === null) return "unknown-grid-column";
+    if (p !== g + 1) return "invalidArgs";
+    let x = uo(a.gridColumns[g]),
+      h = uo(a.gridColumns[p]),
+      N = n.leftWidthTwips,
+      k = n.rightWidthTwips;
+    return N + k !== x + h || (N === x && k === h) ? "invalidArgs" : null;
+  }
+  let d = a.gridColumns.length - 1,
+    c = Wn(a, n.gridColumnId);
+  if (c === null) return "unknown-grid-column";
+  if (c !== d) return "invalidArgs";
+  let u = uo(a.gridColumns[d]),
+    f = 0;
+  for (let g of a.gridColumns) f += uo(g);
+  if (n.columnWidthTwips === u && n.tableWidthTwips === f) return "invalidArgs";
+  let m = 0;
+  for (let g = 0; g < a.gridColumns.length; g += 1) {
+    let p = g === d ? n.columnWidthTwips : uo(a.gridColumns[g]);
+    m += p;
+  }
+  return n.tableWidthTwips !== m ? "invalidArgs" : null;
+}
+function vA(e, n, t, r = Le) {
+  let o = Ti(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Ze(e.root, n.tableId, Be(r));
+  if (!i.ok) return { ok: false, reason: tt(i.reason) };
+  let { topology: a } = i,
+    l = Wn(a, n.leftGridColumnId),
+    s = Wn(a, n.rightGridColumnId);
+  if (l === null || s === null || !a.grid)
+    return { ok: false, reason: "unknown-grid-column" };
+  let d = ve(e, a.table),
+    c = Mc(a.table, e, d),
+    u = A(e),
+    f = Cc(a.gridColumns[l], n.leftWidthTwips, d),
+    m = Cc(a.gridColumns[s], n.rightWidthTwips, d),
+    g = a.grid,
+    p = Ci(g, n.leftGridColumnId, f);
+  if (!p.ok)
+    return {
+      ok: false,
+      reason:
+        p.reason === "unknown-grid-column"
+          ? "unknown-grid-column"
+          : "tree-invariant",
+    };
+  if (((g = p.grid), (p = Ci(g, n.rightGridColumnId, m)), !p.ok))
+    return {
+      ok: false,
+      reason:
+        p.reason === "unknown-grid-column"
+          ? "unknown-grid-column"
+          : "tree-invariant",
+    };
+  g = p.grid;
+  let x = [];
+  (c !== a.table && x.push((O) => j(O, a.table.id, c, t)),
+    g !== a.grid && x.push((O) => j(O, a.grid.id, g, t)));
+  let h = dO(x, c, u, d, t);
+  if (h) return { ok: false, reason: h };
+  for (let { cells: O } of a.rows) {
+    let b = Tc(O[l], n.leftWidthTwips, u, d),
+      P = Tc(O[s], n.rightWidthTwips, u, d);
+    (b !== O[l] && x.push((R) => j(R, b.id, b, t)),
+      P !== O[s] && x.push((R) => j(R, P.id, P, t)));
+  }
+  let k = {
+    dirty: [a.table.id, a.grid.id, ...a.rows.map((O) => O.row.id)],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  };
+  return C(st(e, x, t), k);
+}
+function SA(e, n, t, r = Le) {
+  let o = Ti(e, n, r);
+  if (o) return { ok: false, reason: o };
+  let i = Ze(e.root, n.tableId, Be(r));
+  if (!i.ok) return { ok: false, reason: tt(i.reason) };
+  let { topology: a } = i,
+    l = a.gridColumns.length - 1;
+  if (!a.grid || Wn(a, n.gridColumnId) !== l)
+    return { ok: false, reason: "invalidArgs" };
+  let s = ve(e, a.table),
+    d = Mc(a.table, e, s),
+    c = A(e),
+    u = Cc(a.gridColumns[l], n.columnWidthTwips, s),
+    f = Ci(a.grid, n.gridColumnId, u);
+  if (!f.ok)
+    return {
+      ok: false,
+      reason:
+        f.reason === "unknown-grid-column"
+          ? "unknown-grid-column"
+          : "tree-invariant",
+    };
+  let m = f.grid,
+    g = [];
+  (d !== a.table && g.push((N) => j(N, a.table.id, d, t)),
+    g.push((N) => j(N, a.grid.id, m, t)));
+  let p = dO(g, d, c, s, t, n.tableWidthTwips);
+  if (p) return { ok: false, reason: p };
+  for (let { cells: N } of a.rows) {
+    let k = Tc(N[l], n.columnWidthTwips, c, s);
+    k !== N[l] && g.push((O) => j(O, k.id, k, t));
+  }
+  let h = {
+    dirty: [a.table.id, a.grid.id, ...a.rows.map((N) => N.row.id)],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  };
+  return C(st(e, g, t), h);
+}
+function AA(e, n, t) {
+  let r = Ti(e, n);
+  if (r) return { ok: false, reason: r };
+  let o = Ze(e.root, n.tableId);
+  if (!o.ok) return { ok: false, reason: tt(o.reason) };
+  let i = o.topology.rows.find((x) => x.row.id === n.rowId)?.row;
+  if (!i) return { ok: false, reason: "unknown-row" };
+  let a = A(e),
+    l = ve(e, i),
+    s = (x, h) => ({
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: x,
+      prefix: l.attributePrefix,
+      value: h,
+    }),
+    d = on("trHeight", a, l, [
+      s("val", String(n.heightTwips)),
+      s("hRule", "exact"),
+    ]),
+    c = K(i, "trPr"),
+    u = c ?? on("trPr", a, l, []),
+    f = fc(u, d);
+  if (!f.ok) return { ok: false, reason: "tree-invariant" };
+  let m = c
+      ? i.children.map((x) => (x === c ? f.container : x))
+      : [f.container, ...i.children],
+    g = Object.freeze({ ...i, children: m }),
+    p = {
+      dirty: [i.id, ...fr(i)],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    };
+  return C(j(e, i.id, g, t), p);
+}
+function cO(e, n, t) {
+  return n.op === "setTableColumnWidths"
+    ? vA(e, n, t)
+    : n.op === "setTableRightEdgeWidth"
+      ? SA(e, n, t)
+      : AA(e, n, t);
+}
+var uO = new Set(Vt),
+  fO = new Set(["unlocked", "sdtLocked", "contentLocked", "sdtContentLocked"]),
+  MA = new Set(Wt);
+function _c(e, n) {
+  for (let t of e) {
+    if (!n.has(t.localName)) return "unsupported-property";
+    for (let [r, o] of Object.entries(t.attributes ?? {}))
+      if (!/^[A-Za-z_][\w.-]*$/.test(r) || typeof o != "string" || !Z(o))
+        return "invalid-property-value";
+  }
+  return null;
+}
+var gO = 512;
+function Dc(e, n, t) {
+  return am(Y(e), n, t);
+}
+function mO(e, n, t) {
+  let r = Y(e),
+    o = new Set(),
+    i = (a, l) => {
+      if (a.kind === "textValue") return;
+      let s = l || a.kind === "hyperlink";
+      s && a.kind === "run" && o.add(a.id);
+      for (let d of a.children) i(d, s);
+    };
+  for (let a of e.children) i(a, false);
+  return o.size === 0
+    ? false
+    : r.some((a) => o.has(a.runId) && a.start < t && a.end > n);
+}
+function pO(e) {
+  let n = e.relationshipId !== void 0,
+    t = e.anchor !== void 0;
+  if (n === t) return "invalid-property-value";
+  for (let r of [e.relationshipId, e.anchor, e.tooltip])
+    if (
+      r !== void 0 &&
+      (typeof r != "string" || r.length === 0 || r.length > gO || !Z(r))
+    )
+      return "invalid-property-value";
+  return null;
+}
+function _A(e, n, t, r) {
+  if (typeof r != "string" || r.length === 0) return "invalidArgs";
+  let o = E(e, r);
+  if (!o) return "unknown-content-control";
+  if (o.kind !== "contentControl") return "not-a-content-control";
+  let i = E(e, n);
+  if (!i || !pn(i)) return null;
+  let a = Uc(o, n)
+    ? { start: 0, end: Qn(i) }
+    : Uc(i, r)
+      ? _e(i).spanOf(o)
+      : null;
+  return a
+    ? !Number.isInteger(t) || t < a.start || t > a.end
+      ? "offset-out-of-range"
+      : null
+    : "unknown-content-control";
+}
+function Nl(e, n, t, r, o) {
+  let i = Y(n),
+    a = i.filter((u) => u.start < r && u.end > t);
+  if (a.length > 0) return Ge(e, a[0].runId);
+  if (t !== r) return Ge(e, n.id);
+  let l = i.find((u) => u.start === t),
+    s = [...i].reverse().find((u) => u.end === t),
+    d = l ? Ge(e, l.runId) : null,
+    c = s ? Ge(e, s.runId) : null;
+  if (d && ti(d)) return d;
+  if (c && ti(c)) return c;
+  if (d && dn(d)) return d;
+  if (c && dn(c)) return c;
+  if (
+    o !== "right" &&
+    s &&
+    s.removeNodeIds === void 0 &&
+    c?.id === d?.id &&
+    !td(n, s, l)
+  )
+    return c ?? Ge(e, n.id);
+  if (l) return d ?? Ge(e, n.id);
+  if (c) {
+    let u = ht(e, c.id);
+    return u[u.length - 1] ?? null;
+  }
+  return Ge(e, n.id);
+}
+function DA(e, n, t, r, o) {
+  let i = Y(n),
+    a = new Set(i.filter((s) => s.start < r && s.end > t).map((s) => s.runId));
+  if (a.size === 0 && t === r) {
+    let s = i.find((f) => f.start === t),
+      d = [...i].reverse().find((f) => f.end === t),
+      u =
+        o !== "right" &&
+        d !== void 0 &&
+        d.removeNodeIds === void 0 &&
+        Ge(e, d.runId)?.id === (s ? Ge(e, s.runId)?.id : void 0) &&
+        !td(n, d, s)
+          ? d
+          : s;
+    u && a.add(u.runId);
+  }
+  for (let s of a) {
+    if (Ce(e, s)) return "bound";
+    if (Ae(e, s).content) return "locked";
+  }
+  let l = Nl(e, n, t, r, o);
+  if (l) {
+    if (Zn(l) || ht(e, l.id).some(Zn)) return "bound";
+    if (Un(e, l).content || (dn(l) && Un(e, l).wrapper)) return "locked";
+  }
+  return null;
+}
+function Uc(e, n) {
+  return e.id === n
+    ? true
+    : e.kind === "textValue"
+      ? false
+      : e.children.some((t) => Uc(t, n));
+}
+function xr(e, n, t, r, o) {
+  return DA(e, n, t, r, o);
+}
+function UA(e, n) {
+  if (Ce(e, n)) return "bound";
+  if (Ae(e, n).content) return "locked";
+  let t = Ge(e, n);
+  if (t) {
+    if (Zn(t) || ht(e, t.id).some(Zn)) return "bound";
+    if (dn(t) && Un(e, t).wrapper) return "locked";
+  }
+  return null;
+}
+function LA(e, n) {
+  if (n.kind === "textValue") return null;
+  if (Ce(e, n.id)) return "bound";
+  if (Ae(e, n.id).content) return "locked";
+  let t = (r) => {
+    if (r.kind === "textValue") return null;
+    if (ye(r)) {
+      if (Zn(r)) return "bound";
+      let o = Xr(r);
+      if (o.content || o.wrapper) return "locked";
+    }
+    for (let o of r.children) {
+      let i = t(o);
+      if (i) return i;
+    }
+    return null;
+  };
+  return t(n);
+}
+function BA(e, n, t) {
+  if (typeof n != "string" || n.length === 0) return "unknown-control";
+  let r = Ln(e, n);
+  if (!r) return "unknown-control";
+  if (og(r) || qr(r) === "repeatingSection") return "unsupported";
+  if (Zn(r) || ht(e, r.id).some(Zn)) return "bound";
+  if (Un(e, r).content || (dn(r) && Un(e, r).wrapper)) return "locked";
+  if (typeof t != "string" || !Z(t)) return "invalidArgs";
+  switch (qr(r)) {
+    case "dropdown":
+      return ri(r).some((a) => a.value === t) ? null : "invalidArgs";
+    case "combo":
+      return null;
+    case "checkbox":
+      return Zr(t) === null ? "typeMismatch" : null;
+    case "date":
+      return Da(t, void 0) === null ? "invalidArgs" : null;
+    case "picture":
+      return "typeMismatch";
+    case "text":
+    case "richText":
+    case "other":
+      return null;
+    default:
+      return "unsupported";
+  }
+}
+function FA(e, n) {
+  if (typeof n != "string" || n.length === 0) return "unknown-control";
+  let t = Ln(e, n);
+  return t ? (Un(e, t).wrapper ? "locked" : null) : "unknown-control";
+}
+function Lc(e, n) {
+  if (!tl.includes(n.op)) return "unknown-op";
+  if (ol(n)) return Ud(e, n);
+  if (n.op === "insertText" && n.inside !== void 0) {
+    let i = _A(e, n.paragraphId, n.offset, n.inside);
+    if (i) return i;
+  }
+  if (n.op !== "deleteBlock") {
+    let i = oy(e, n);
+    if (i) return i;
+  }
+  let t = iy(e, n);
+  if (t) return t;
+  if (
+    n.op === "setContentControlProperties" ||
+    (n.op === "setContentControlValue" && typeof n.value != "string") ||
+    (n.op === "removeContentControl" && n.keepContent !== void 0)
+  ) {
+    let i = E(e, n.controlId);
+    if (!i) return "unknown-content-control";
+    if (i.kind !== "contentControl") return "not-a-content-control";
+    if (n.op === "setContentControlProperties") {
+      if (n.tag === void 0 && n.alias === void 0 && n.lock === void 0)
+        return "invalidArgs";
+      for (let a of [n.tag, n.alias])
+        if (!oc(a)) return "invalid-property-value";
+      if (n.lock !== void 0 && !fO.has(n.lock)) return "invalidArgs";
+    }
+    return null;
+  }
+  if (n.op === "insertContentControl") {
+    if (!Jh.includes(n.type)) return "invalidArgs";
+    for (let a of [n.tag, n.alias]) if (!oc(a)) return "invalid-property-value";
+    if (n.lock !== void 0 && !fO.has(n.lock)) return "invalidArgs";
+    if (!Number.isInteger(n.start) || !Number.isInteger(n.end))
+      return "invalid-range";
+    let i = E(e, n.paragraphId);
+    return i ? (pn(i) ? null : "not-a-paragraph") : "unknown-paragraph";
+  }
+  if (
+    n.op === "createHeaderFooter" ||
+    n.op === "deleteHeaderFooter" ||
+    n.op === "linkToPrevious" ||
+    n.op === "unlinkFromPrevious"
+  )
+    return (
+      !Number.isInteger(n.sectionIndex) ||
+        n.sectionIndex < 0 ||
+        (n.kind !== "header" && n.kind !== "footer") ||
+        (n.variant !== "default" &&
+          n.variant !== "first" &&
+          n.variant !== "even"),
+      "invalidArgs"
+    );
+  if (n.op === "setSectionFurnitureOptions") {
+    if (
+      n.titlePage === void 0 &&
+      n.evenAndOddHeaders === void 0 &&
+      n.headerDistanceTwips === void 0 &&
+      n.footerDistanceTwips === void 0
+    )
+      return "invalidArgs";
+    for (let a of [n.headerDistanceTwips, n.footerDistanceTwips])
+      if (a !== void 0 && (!Number.isInteger(a) || a < 0 || a > 31680))
+        return "invalidArgs";
+    return (
+      n.sectionIndex !== void 0 &&
+        (!Number.isInteger(n.sectionIndex) || n.sectionIndex < 0),
+      "invalidArgs"
+    );
+  }
+  if (
+    n.op === "insertNote" ||
+    n.op === "deleteNote" ||
+    n.op === "convertNote" ||
+    n.op === "convertAllNotes" ||
+    n.op === "setNoteProperties"
+  )
+    return "invalidArgs";
+  if (
+    n.op === "addRepeatingSectionItem" ||
+    n.op === "removeRepeatingSectionItem"
+  )
+    return "unsupported";
+  if (n.op === "setContentControlValue")
+    return typeof n.value != "string"
+      ? "typeMismatch"
+      : BA(e, n.controlId, n.value);
+  if (n.op === "removeContentControl") return FA(e, n.controlId);
+  if (n.op === "insertTable") return sc(e, n);
+  if (n.op === "insertToc") return xy(e, n);
+  if (n.op === "replaceTocResult") return yy(e, n);
+  if (n.op === "rewriteTocPageNumbers") return Oy(e, n);
+  if (n.op === "setSectionProperties") {
+    let i = [n.pageWidthTwips, n.pageHeightTwips],
+      a = [
+        n.marginTopTwips,
+        n.marginRightTwips,
+        n.marginBottomTwips,
+        n.marginLeftTwips,
+      ];
+    if (
+      i.every((l) => l === void 0) &&
+      a.every((l) => l === void 0) &&
+      n.orientation === void 0
+    )
+      return "invalid-property-value";
+    for (let l of i)
+      if (l !== void 0 && (!Number.isInteger(l) || l < 1 || l > 63360))
+        return "invalid-property-value";
+    for (let l of a)
+      if (l !== void 0 && (!Number.isInteger(l) || l < 0 || l > 31680))
+        return "invalid-property-value";
+    if (
+      n.orientation !== void 0 &&
+      n.orientation !== "portrait" &&
+      n.orientation !== "landscape"
+    )
+      return "invalid-property-value";
+    if (n.anchorParagraphId !== void 0) {
+      let l = E(e, n.anchorParagraphId);
+      if (!l) return "unknown-paragraph";
+      if (!pn(l)) return "not-a-paragraph";
+    }
+    if (!to(e)) return "tree-invariant";
+    for (let l of ro(e, n.anchorParagraphId)) {
+      let s = oo(l),
+        { widthTwips: d, heightTwips: c } = Ni(s, n),
+        u = n.marginTopTwips ?? s.topTwips,
+        f = n.marginRightTwips ?? s.rightTwips,
+        m = n.marginBottomTwips ?? s.bottomTwips,
+        g = n.marginLeftTwips ?? s.leftTwips;
+      if (d - g - s.gutterTwips - f <= 0 || c - u - m <= 0)
+        return "invalid-property-value";
+    }
+    return null;
+  }
+  if (n.op === "deleteBlock") {
+    let i = E(e, n.blockId);
+    if (i && i.kind !== "textValue") {
+      let a = LA(e, i);
+      if (a) return a;
+    }
+    return Lh(e, n.blockId);
+  }
+  if (n.op === "insertTableRow" || n.op === "deleteTableRow") return yl(e, n);
+  if (n.op === "insertTableColumn" || n.op === "deleteTableColumn")
+    return Ol(e, n);
+  if (
+    n.op === "setTableColumnWidths" ||
+    n.op === "setTableRightEdgeWidth" ||
+    n.op === "setTableRowHeight"
+  )
+    return Ti(e, n);
+  if (
+    n.op === "setTableCellBorders" ||
+    n.op === "setTableCellFill" ||
+    n.op === "setTableCellVerticalAlignment"
+  )
+    return co(e, n);
+  if (n.op === "joinParagraphs") {
+    let i = E(e, n.firstId),
+      a = E(e, n.secondId);
+    if (!i || !a) return "unknown-paragraph";
+    if (!pn(i) || !pn(a)) return "not-a-paragraph";
+    if (Ce(e, n.firstId) || Ce(e, n.secondId)) return "bound";
+    if (Ae(e, n.firstId).content || Ae(e, n.secondId).content) return "locked";
+    for (let l of [n.firstId, n.secondId]) {
+      let s = Ge(e, l);
+      if (s && dn(s) && Un(e, s).wrapper) return "locked";
+    }
+    return null;
+  }
+  if (n.op === "setHyperlinkTarget" || n.op === "removeHyperlink") {
+    let i = E(e, n.linkId);
+    if (!i) return "unknown-paragraph";
+    if (i.kind !== "hyperlink") return "not-a-paragraph";
+    {
+      let a = UA(e, n.linkId);
+      if (a) return a;
+    }
+    return n.op === "setHyperlinkTarget" ? pO(n) : null;
+  }
+  if (n.op === "insertCommentMarker") {
+    let i = E(e, n.paragraphId);
+    return i
+      ? pn(i)
+        ? !Number.isInteger(n.offset) || n.offset < 0 || n.offset > Qn(i)
+          ? "offset-out-of-range"
+          : typeof n.commentId != "string" || !/^\d+$/.test(n.commentId)
+            ? "invalid-property-value"
+            : null
+        : "not-a-paragraph"
+      : "unknown-paragraph";
+  }
+  if (
+    n.op === "acceptRevision" ||
+    n.op === "rejectRevision" ||
+    n.op === "acceptAllRevisions" ||
+    n.op === "rejectAllRevisions"
+  ) {
+    if (n.op === "acceptRevision" || n.op === "rejectRevision") {
+      let i = n.revision;
+      if (
+        typeof i?.id != "string" ||
+        i.id.length === 0 ||
+        typeof i.author != "string" ||
+        (i.date !== void 0 && typeof i.date != "string")
+      )
+        return "invalid-property-value";
+    } else if (
+      n.scopeRootId !== void 0 &&
+      (typeof n.scopeRootId != "string" ||
+        n.scopeRootId.length === 0 ||
+        sr(e, n.scopeRootId) === null)
+    )
+      return "invalid-property-value";
+    return null;
+  }
+  let r = E(e, n.paragraphId);
+  if (!r) return "unknown-paragraph";
+  if (!pn(r)) return "not-a-paragraph";
+  let o = Qn(r);
+  switch (n.op) {
+    case "insertText":
+      return !Number.isInteger(n.offset) || n.offset < 0 || n.offset > o
+        ? "offset-out-of-range"
+        : typeof n.text != "string" || !Z(n.text)
+          ? "invalid-text"
+          : Xe(r, n.offset)
+            ? "splits-surrogate-pair"
+            : n.bias !== void 0 && n.bias !== "left" && n.bias !== "right"
+              ? "invalidArgs"
+              : n.inside !== void 0
+                ? null
+                : xr(e, r, n.offset, n.offset, n.bias);
+    case "setListLevel":
+      return !Number.isInteger(n.level) || n.level < 0 || n.level > 8
+        ? "invalid-range"
+        : Ce(e, n.paragraphId)
+          ? "bound"
+          : Ae(e, n.paragraphId).content
+            ? "locked"
+            : null;
+    case "proposeParagraphMerge":
+      return typeof n.revision?.author != "string" ||
+        n.revision.author.length === 0
+        ? "invalid-property-value"
+        : null;
+    case "setParagraphMarkRevision":
+      return n.kind !== "ins" && n.kind !== "del"
+        ? "invalid-range"
+        : typeof n.revision?.author != "string" ||
+            n.revision.author.length === 0
+          ? "invalid-property-value"
+          : null;
+    case "setParagraphMarkProperties":
+      if (!Array.isArray(n.properties)) return "invalid-range";
+      {
+        let i = _c(n.properties, uO);
+        if (i) return i;
+      }
+      return Ce(e, n.paragraphId)
+        ? "bound"
+        : Ae(e, n.paragraphId).content
+          ? "locked"
+          : null;
+    case "setListNumbering": {
+      let i = n.level ?? 0;
+      return !Number.isInteger(i) ||
+        i < 0 ||
+        i > 8 ||
+        (n.numId !== null && !/^\d{1,9}$/.test(n.numId))
+        ? "invalid-range"
+        : Ce(e, n.paragraphId)
+          ? "bound"
+          : Ae(e, n.paragraphId).content
+            ? "locked"
+            : null;
+    }
+    case "insertTab":
+    case "insertHardBreak":
+    case "insertPageBreak":
+      return !Number.isInteger(n.offset) || n.offset < 0 || n.offset > o
+        ? "offset-out-of-range"
+        : Xe(r, n.offset)
+          ? "splits-surrogate-pair"
+          : xr(e, r, n.offset, n.offset);
+    case "insertPageField":
+      return !Number.isInteger(n.offset) || n.offset < 0 || n.offset > o
+        ? "offset-out-of-range"
+        : Xe(r, n.offset)
+          ? "splits-surrogate-pair"
+          : n.field !== "PAGE" &&
+              n.field !== "NUMPAGES" &&
+              n.field !== "SECTIONPAGES" &&
+              n.field !== "PAGE_X_OF_Y"
+            ? "invalidArgs"
+            : xr(e, r, n.offset, n.offset);
+    case "splitParagraph":
+      return !Number.isInteger(n.offset) || n.offset < 0 || n.offset > o
+        ? "offset-out-of-range"
+        : Xe(r, n.offset)
+          ? "splits-surrogate-pair"
+          : Dc(r, n.offset, n.offset + 1)
+            ? "invalid-range"
+            : null;
+    case "splitParagraphMany": {
+      if (!Array.isArray(n.offsets) || n.offsets.length === 0)
+        return "invalid-range";
+      let i = -1;
+      for (let a of n.offsets) {
+        if (!Number.isInteger(a) || a < 0 || a > o)
+          return "offset-out-of-range";
+        if (a < i) return "invalid-range";
+        if (((i = a), Xe(r, a))) return "splits-surrogate-pair";
+        let l = xr(e, r, a, a);
+        if (l) return l;
+        if (Dc(r, a, a + 1)) return "invalid-range";
+      }
+      return null;
+    }
+    case "deleteText":
+      return !Number.isInteger(n.start) || !Number.isInteger(n.end)
+        ? "invalid-range"
+        : n.start < 0 || n.end > o
+          ? "offset-out-of-range"
+          : n.start >= n.end
+            ? "invalid-range"
+            : Xe(r, n.start) || Xe(r, n.end)
+              ? "splits-surrogate-pair"
+              : Dc(r, n.start, n.end)
+                ? "invalid-range"
+                : xr(e, r, n.start, n.end);
+    case "setRunProperties": {
+      if (!Number.isInteger(n.start) || !Number.isInteger(n.end))
+        return "invalid-range";
+      if (n.start < 0 || n.end > o) return "offset-out-of-range";
+      if (n.start >= n.end) return "invalid-range";
+      {
+        let i = _c(n.properties, uO);
+        if (i) return i;
+      }
+      return xr(e, r, n.start, n.end);
+    }
+    case "setParagraphProperties": {
+      let i = _c(n.properties, MA);
+      return (
+        i ||
+        (Ce(e, n.paragraphId)
+          ? "bound"
+          : Ae(e, n.paragraphId).content
+            ? "locked"
+            : null)
+      );
+    }
+    case "insertInlineContentControl":
+      return Number.isInteger(n.offset)
+        ? n.offset < 0 || n.offset > o
+          ? "offset-out-of-range"
+          : Xe(r, n.offset)
+            ? "splits-surrogate-pair"
+            : typeof n.tag != "string" ||
+                n.tag.length === 0 ||
+                n.tag.length > 64 ||
+                typeof n.text != "string" ||
+                n.text.length === 0 ||
+                mO(r, n.offset, n.offset) ||
+                (n.dataBinding !== void 0 && !Ax(n.dataBinding))
+              ? "invalid-property-value"
+              : null
+        : "invalid-range";
+    case "insertHyperlink": {
+      if (!Number.isInteger(n.start) || !Number.isInteger(n.end))
+        return "invalid-range";
+      if (n.start < 0 || n.end > o) return "offset-out-of-range";
+      if (n.start >= n.end) return "invalid-range";
+      if (Xe(r, n.start) || Xe(r, n.end)) return "splits-surrogate-pair";
+      if (
+        mO(r, n.start, n.end) ||
+        (n.styleId !== void 0 &&
+          (typeof n.styleId != "string" ||
+            n.styleId.length === 0 ||
+            n.styleId.length > gO ||
+            !Z(n.styleId)))
+      )
+        return "invalid-property-value";
+      {
+        let i = xr(e, r, n.start, n.end);
+        if (i) return i;
+      }
+      return pO(n);
+    }
+    case "setSectionMark": {
+      let i = Oe(r);
+      return (i && Nt(i, "sectPr")) || Oi(e, n.paragraphId)
+        ? "invalid-property-value"
+        : Ce(e, n.paragraphId)
+          ? "bound"
+          : Ae(e, n.paragraphId).content
+            ? "locked"
+            : null;
+    }
+    default:
+      return "unknown-op";
+  }
+}
+function vn(e, n, t = "text") {
+  let r = e();
+  return {
+    id: e(),
+    kind: t,
+    namespaceUri: y,
+    localName: t === "deletedText" ? "delText" : "t",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [{ id: r, kind: "textValue", value: n }],
+  };
+}
+function Bc(e, n, t = "line") {
+  return {
+    id: e(),
+    kind: n === "tab" ? "tab" : "hardBreak",
+    namespaceUri: y,
+    localName: n,
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: n === "br" ? [...op(t)] : [],
+    children: [],
+  };
+}
+function VA(e, n, t) {
+  let r = E(e, n);
+  return !r || r.kind !== "paragraph" ? t : Math.min(t, Qn(r));
+}
+function Tn(e, n) {
+  return {
+    id: e(),
+    kind: "run",
+    namespaceUri: y,
+    localName: "r",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: n,
+  };
+}
+function bl(e, n, t) {
+  let r = Lc(e, n);
+  if (r) return { ok: false, reason: r };
+  if (n.op === "setContentControlValue" && typeof n.value != "string")
+    return cy(e, n, t);
+  if (n.op === "setContentControlProperties") return uy(e, n, t);
+  if (n.op === "removeContentControl" && n.keepContent !== void 0)
+    return rc(e, n, t);
+  if (n.op === "insertContentControl") return fy(e, n, t);
+  if (n.op === "insertText" && !n.revision) {
+    let a = my(e, n.paragraphId, n.offset);
+    if (a) {
+      let l = py(e, a.control.id, t);
+      if (l) return bl(l, { ...n, offset: VA(l, n.paragraphId, a.offset) }, t);
+    }
+  }
+  if (n.op === "insertTableRow" || n.op === "deleteTableRow")
+    return nO(e, n, t);
+  if (n.op === "insertTableColumn" || n.op === "deleteTableColumn")
+    return lO(e, n, t);
+  if (
+    n.op === "setTableColumnWidths" ||
+    n.op === "setTableRightEdgeWidth" ||
+    n.op === "setTableRowHeight"
+  )
+    return cO(e, n, t);
+  if (
+    n.op === "setTableCellBorders" ||
+    n.op === "setTableCellFill" ||
+    n.op === "setTableCellVerticalAlignment"
+  )
+    return wc(e, n, t);
+  if (ol(n)) return hh(e, n, t);
+  if (n.op === "insertTable") return Ry(e, n, t);
+  if (n.op === "deleteBlock") return l0(e, n.blockId, t);
+  if (n.op === "insertToc") return ky(e, n, t);
+  if (n.op === "replaceTocResult") return by(e, n, t);
+  if (n.op === "rewriteTocPageNumbers") return Py(e, n, t);
+  if (n.op === "joinParagraphs") return hO(e, n.firstId, n.secondId, t);
+  if (n.op === "setHyperlinkTarget") return YA(e, n, t);
+  if (n.op === "removeHyperlink") return qA(e, n.linkId, t);
+  if (n.op === "insertCommentMarker") {
+    let a = E(e, n.paragraphId);
+    return !a || a.kind !== "paragraph"
+      ? { ok: false, reason: "not-a-paragraph" }
+      : Nh(e, a, n, t);
+  }
+  if (
+    n.op === "acceptRevision" ||
+    n.op === "rejectRevision" ||
+    n.op === "acceptAllRevisions" ||
+    n.op === "rejectAllRevisions"
+  ) {
+    let a = n.op === "acceptRevision" || n.op === "acceptAllRevisions",
+      l =
+        n.op === "acceptRevision" || n.op === "rejectRevision"
+          ? n.revision
+          : void 0,
+      s =
+        n.op === "acceptRevision" || n.op === "rejectRevision"
+          ? n.localName
+          : void 0,
+      d =
+        n.op === "acceptAllRevisions" || n.op === "rejectAllRevisions"
+          ? n.scopeRootId
+          : void 0,
+      c = Gx(e, a ? "accept" : "reject", l, {
+        ...t,
+        ...(s === void 0 ? {} : { localName: s }),
+        ...(d === void 0 ? {} : { scopeRootId: d }),
+      });
+    return !c.ok || !c.part || !c.effect
+      ? { ok: false, reason: c.reason ?? "tree-invariant" }
+      : { ok: true, part: c.part, effect: c.effect };
+  }
+  if (n.op === "removeContentControl") return bO(e, n.controlId, t);
+  if (n.op === "setContentControlValue")
+    return typeof n.value != "string"
+      ? { ok: false, reason: "typeMismatch" }
+      : QA(e, n.controlId, n.value, t);
+  if (n.op === "setSectionProperties") return jh(e, n, t);
+  if (n.op === "setSectionMark") return Gh(e, n.paragraphId, t);
+  if (
+    n.op === "createHeaderFooter" ||
+    n.op === "deleteHeaderFooter" ||
+    n.op === "linkToPrevious" ||
+    n.op === "unlinkFromPrevious" ||
+    n.op === "setSectionFurnitureOptions" ||
+    n.op === "insertNote" ||
+    n.op === "deleteNote" ||
+    n.op === "convertNote" ||
+    n.op === "convertAllNotes" ||
+    n.op === "setNoteProperties"
+  )
+    return { ok: false, reason: "invalidArgs", detail: "package-lifecycle-op" };
+  if (
+    n.op === "addRepeatingSectionItem" ||
+    n.op === "removeRepeatingSectionItem"
+  )
+    return { ok: false, reason: "unsupported" };
+  let o = E(e, n.paragraphId),
+    i = A(e);
+  switch (n.op) {
+    case "insertText":
+      return n.revision
+        ? Eh(e, o, n.offset, n.text, n.revision, t)
+        : vi(e, o, n.offset, [(a) => vn(a, n.text)], t, n.inside, n.bias);
+    case "insertTab":
+      return vi(e, o, n.offset, [(a) => Bc(a, "tab")], t);
+    case "insertHardBreak":
+      return vi(e, o, n.offset, [(a) => Bc(a, "br", "line")], t);
+    case "setListLevel":
+      return Kh(e, o, n.level, t, i);
+    case "setParagraphMarkProperties":
+      return zh(e, o, n.properties, t, i);
+    case "setListNumbering":
+      return $h(e, o, n.numId, n.level ?? 0, t, i);
+    case "insertPageBreak":
+      return vi(e, o, n.offset, [(a) => Bc(a, "br", "page")], t);
+    case "insertPageField":
+      return vi(e, o, n.offset, Xh(n.field), t);
+    case "deleteText":
+      return n.revision
+        ? Th(e, o, n.start, n.end, n.revision, t)
+        : KA(e, o, n.start, n.end, t);
+    case "insertHyperlink":
+      return GA(e, o, n, t);
+    case "insertInlineContentControl":
+      return zA(e, o, n, t);
+    case "setParagraphMarkRevision": {
+      if (n.kind === "del" && Ah(o, n.revision.author)) {
+        let a = ee(e, o.id),
+          l = a?.children.findIndex((d) => d.id === o.id) ?? -1,
+          s = l >= 0 ? a?.children[l + 1] : void 0;
+        if (s && s.kind === "paragraph") return hO(e, o.id, s.id, t);
+      }
+      return zd(e, o, n.kind, n.revision, t);
+    }
+    case "proposeParagraphMerge":
+      return Sh(e, o, n.revision, t);
+    case "splitParagraph":
+      return r0(e, o, n.offset, t);
+    case "splitParagraphMany":
+      return o0(e, o, n.offsets, t);
+    case "setRunProperties":
+      return u0(e, o, n.start, n.end, n.properties, t, n.targetRunIds);
+    case "setParagraphProperties": {
+      let a = Oe(o),
+        l = Ri(a?.children ?? [], n.properties, Fh, i),
+        s = {
+          dirty: [o.id],
+          created: [],
+          deleted: [],
+          dependencyKeys: H,
+          impact: "paragraph-local",
+        };
+      if (l.length === 0) return a ? C(ie(e, a.id, t), s) : Me(e, s);
+      if (a) return C(F(e, a.id, l, t), s);
+      let d = {
+        id: i(),
+        kind: "paragraphProperties",
+        namespaceUri: y,
+        localName: "pPr",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [],
+        children: l,
+      };
+      return C(_(e, o.id, 0, [d], t), s);
+    }
+    default:
+      return { ok: false, reason: "unknown-op" };
+  }
+}
+function vi(e, n, t, r, o, i, a = "left") {
+  let l = Nl(e, n, t, t, a);
+  if (l && ti(l)) return WA(e, l, r, o);
+  let s = A(e),
+    d = r.map((O) => O(s)),
+    c = Y(n),
+    u = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "text-local",
+    },
+    f = i === void 0 ? null : E(e, i);
+  if (i !== void 0 && (f === null || f.kind === "textValue"))
+    return { ok: false, reason: "unknown-content-control" };
+  let m = f?.kind === "textValue" ? null : f,
+    g = rd(n, t, m),
+    p;
+  if (g.kind === "withinValue") {
+    let O = g.segment;
+    if (O.node.kind !== "textValue")
+      return { ok: false, reason: "tree-invariant" };
+    let b = t - O.start,
+      P = O.node.value,
+      R = OO(n, O.node.id);
+    if (!R)
+      return {
+        ok: false,
+        reason: "tree-invariant",
+        detail: "orphan text value",
+      };
+    let w = E(e, O.runId);
+    if (!w || w.kind !== "run") return { ok: false, reason: "tree-invariant" };
+    if (R.kind === "deletedText") {
+      let T = Fc(e, n, w, d, "after", {
+        nextId: s,
+        effect: u,
+        control: l,
+        options: o,
+      });
+      if (T) return T;
+    }
+    let I = R.kind === "deletedText" ? "deletedText" : "text",
+      S = vn(s, P.slice(0, b), I),
+      U = vn(s, P.slice(b), I),
+      L = w.children.flatMap((T) => (T.id === R.id ? [S, ...d, U] : [T]));
+    return ((p = C(F(e, w.id, L, Hn(o, l)), u)), Cn(p, l, o));
+  }
+  if (i !== void 0) {
+    if (g.kind === "atBoundary") {
+      let O = E(e, g.segment.runId);
+      if (!O || O.kind !== "run")
+        return { ok: false, reason: "tree-invariant" };
+      let b = O.children.findIndex((P) => hr(P, g.segment.node.id));
+      return ((p = C(_(e, O.id, Math.max(0, b), d, Hn(o, l)), u)), Cn(p, l, o));
+    }
+    return g.kind === "appendToRun"
+      ? ((p = C(_(e, g.run.id, g.run.children.length, d, Hn(o, l)), u)),
+        Cn(p, l, o))
+      : ((p = C(
+          _(e, g.holder.id, g.holder.children.length, [Tn(s, d)], Hn(o, l)),
+          u,
+        )),
+        Cn(p, l, o));
+  }
+  let x = yO(c, (O) => O.end === t),
+    h = c.find((O) => O.start === t);
+  if (
+    a === "left" &&
+    x &&
+    x.removeNodeIds === void 0 &&
+    !HA(e, x, h) &&
+    !jA(n, x, h)
+  ) {
+    let O = E(e, x.runId);
+    if (!O || O.kind !== "run") return { ok: false, reason: "tree-invariant" };
+    let b = Fc(e, n, O, d, "after", {
+      nextId: s,
+      effect: u,
+      control: l,
+      options: o,
+    });
+    if (b) return b;
+    let P = O.children.findIndex((R) => hr(R, x.node.id));
+    return (
+      (p = C(_(e, O.id, P < 0 ? O.children.length : P + 1, d, Hn(o, l)), u)),
+      Cn(p, l, o)
+    );
+  }
+  if (h) {
+    let O = E(e, h.runId);
+    if (!O || O.kind !== "run") return { ok: false, reason: "tree-invariant" };
+    let b = Fc(e, n, O, d, "before", {
+      nextId: s,
+      effect: u,
+      control: l,
+      options: o,
+    });
+    if (b) return b;
+    let P = O.children.findIndex((R) => hr(R, h.node.id));
+    return ((p = C(_(e, O.id, Math.max(0, P), d, Hn(o, l)), u)), Cn(p, l, o));
+  }
+  if (x) {
+    let O = Yr(n, x.runId);
+    if (O) {
+      let b = ee(e, O.id);
+      if (b) {
+        let P = b.children.findIndex((R) => R.id === O.id);
+        if (P >= 0)
+          return (
+            (p = C(_(e, b.id, P + 1, [Tn(s, d)], Hn(o, l)), u)),
+            Cn(p, l, o)
+          );
+      }
+    }
+  }
+  let N = n.children.filter((O) => O.kind === "run"),
+    k = N[N.length - 1];
+  return k
+    ? ((p = C(_(e, k.id, k.children.length, d, Hn(o, l)), u)), Cn(p, l, o))
+    : ((p = C(_(e, n.id, n.children.length, [Tn(s, d)], Hn(o, l)), u)),
+      Cn(p, l, o));
+}
+function Fc(e, n, t, r, o, i) {
+  let a = null,
+    l = false;
+  for (let f = ee(e, t.id); f && f.id !== n.id; f = ee(e, f.id))
+    Ne(f.kind) &&
+      ((a = f),
+      (f.kind === "revisionDelete" || f.kind === "revisionMoveFrom") &&
+        (l = true));
+  if (!l || !a) return null;
+  let s = ee(e, a.id);
+  if (!s) return { ok: false, reason: "tree-invariant" };
+  let d = s.children.findIndex((f) => f.id === a.id);
+  if (d < 0) return { ok: false, reason: "tree-invariant" };
+  let c = (t.kind === "textValue" ? [] : t.children)
+      .filter((f) => Ut(f))
+      .map((f) => ze(f, i.nextId)),
+    u = C(
+      _(
+        e,
+        s.id,
+        o === "after" ? d + 1 : d,
+        [Tn(i.nextId, [...c, ...r])],
+        Hn(i.options, i.control),
+      ),
+      i.effect,
+    );
+  return Cn(u, i.control, i.options);
+}
+function Hn(e, n) {
+  return n && dn(n) ? { ...e, deferValidation: true } : e;
+}
+function Cn(e, n, t) {
+  if (!e.ok || !n || !dn(n) || !Ln(e.part, n.id)) return e;
+  let o = bO(e.part, n.id, t);
+  return o.ok
+    ? Me(o.part, {
+        dirty: [...new Set([...e.effect.dirty, ...o.effect.dirty])],
+        created: e.effect.created,
+        deleted: e.effect.deleted,
+        dependencyKeys: H,
+        impact: "flow-structural",
+      })
+    : o;
+}
+function WA(e, n, t, r) {
+  let o = A(e),
+    i = t.map((f) => f(o)),
+    a = ee(e, n.id),
+    l = a?.kind === "paragraph",
+    s = Tn(o, i),
+    d = l
+      ? [s]
+      : [
+          {
+            id: o(),
+            kind: "paragraph",
+            namespaceUri: y,
+            localName: "p",
+            prefix: "w",
+            namespaceBindings: [],
+            attributes: [],
+            children: [s],
+          },
+        ],
+    c = PO(n, d, o);
+  c = mo(c, rt);
+  let u = {
+    dirty: a ? [a.id] : [n.id],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: dn(n) ? "flow-structural" : "text-local",
+  };
+  if (dn(n)) {
+    if (!a) return { ok: false, reason: "tree-invariant" };
+    let f = _a(c);
+    if (!f) return { ok: false, reason: "tree-invariant" };
+    let m = a.children.flatMap((g) => (g.id === n.id ? f : [g]));
+    return C(F(e, a.id, m, r), { ...u, impact: "flow-structural" });
+  }
+  return C(j(e, n.id, c, r), u);
+}
+function yO(e, n) {
+  for (let t = e.length - 1; t >= 0; t -= 1) {
+    let r = e[t];
+    if (n(r)) return r;
+  }
+}
+function HA(e, n, t) {
+  let r = Ge(e, n.runId)?.id,
+    o = t ? Ge(e, t.runId)?.id : void 0;
+  return r !== o;
+}
+function jA(e, n, t) {
+  let r = (i) => {
+      let a = null,
+        l = (s, d) => {
+          if (s.kind === "textValue" || a) return;
+          if (s.id === i) {
+            a = d;
+            return;
+          }
+          let c =
+            s.kind === "hyperlink" ||
+            s.kind === "fldSimple" ||
+            s.kind === "contentControl" ||
+            (s.kind === "generic" && s.localName === "fldSimple")
+              ? s
+              : d;
+          for (let u of s.children) l(u, c);
+        };
+      for (let s of e.children) l(s, null);
+      return a;
+    },
+    o = r(n.runId);
+  return o === null ? false : t === void 0 || r(t.runId) !== o;
+}
+function hr(e, n) {
+  return e.id === n
+    ? true
+    : e.kind === "textValue"
+      ? false
+      : e.children.some((t) => hr(t, n));
+}
+function kl(e, n) {
+  let t = (r) => {
+    if (r.kind === "textValue") return null;
+    if (
+      (r.kind === "text" || r.kind === "deletedText") &&
+      r.children.some((o) => o.id === n)
+    )
+      return r.kind;
+    for (let o of r.children) {
+      let i = t(o);
+      if (i) return i;
+    }
+    return null;
+  };
+  return t(e) ?? "text";
+}
+function OO(e, n) {
+  let t = (r) => {
+    if (r.kind === "textValue") return null;
+    if (
+      (r.kind === "text" || r.kind === "deletedText") &&
+      r.children.some((o) => o.id === n)
+    )
+      return r;
+    for (let o of r.children) {
+      let i = t(o);
+      if (i) return i;
+    }
+    return null;
+  };
+  return t(e);
+}
+function KA(e, n, t, r, o) {
+  let i = Nl(e, n, t, r),
+    a = Hn(o, i),
+    l = Y(n),
+    s = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "text-local",
+    },
+    d = e,
+    c = A(e);
+  for (let f of [...l].reverse()) {
+    if (f.end <= t || f.start >= r) continue;
+    if (f.removeNodeIds && f.removeNodeIds.length > 0) {
+      for (let N of f.removeNodeIds) {
+        if (!E(d, N)) continue;
+        let k = ie(d, N, o);
+        if (!k.ok) return C(k, s);
+        d = k.part;
+      }
+      continue;
+    }
+    if (f.node.kind !== "textValue") {
+      let N = ie(d, f.node.id, a);
+      if (!N.ok) return C(N, s);
+      d = N.part;
+      continue;
+    }
+    let m = Math.max(0, t - f.start),
+      g = Math.min(f.node.value.length, r - f.start),
+      p = f.node.value.slice(0, m) + f.node.value.slice(g),
+      x = OO(n, f.node.id);
+    if (!x)
+      return {
+        ok: false,
+        reason: "tree-invariant",
+        detail: "orphan text value",
+      };
+    let h =
+      p.length === 0
+        ? ie(d, x.id, a)
+        : j(
+            d,
+            x.id,
+            vn(c, p, x.kind === "deletedText" ? "deletedText" : "text"),
+            a,
+          );
+    if (!h.ok) return C(h, s);
+    d = h.part;
+  }
+  let u = E(d, n.id);
+  if (u && u.kind === "paragraph") {
+    let f = (g) => {
+        for (let p of g) {
+          if (p.kind === "hyperlink") {
+            let N = f(p.children);
+            if (N) return N;
+            let k = E(d, p.id);
+            if (k && k.kind !== "textValue" && Lt(k).length === 0) {
+              let O = ee(d, p.id);
+              if (!O) return { ok: false, reason: "tree-invariant" };
+              let b = F(
+                d,
+                O.id,
+                O.children.flatMap((P) =>
+                  P.id === p.id ? [...k.children] : [P],
+                ),
+                a,
+              );
+              if (!b.ok) return C(b, s);
+              d = b.part;
+            }
+            continue;
+          }
+          if (p.kind !== "textValue" && Ne(p.kind)) {
+            let N = f(p.children);
+            if (N) return N;
+            let k = E(d, p.id);
+            if (k && k.kind !== "textValue" && Lt(k).length === 0) {
+              let O = ee(d, p.id);
+              if (!O) return { ok: false, reason: "tree-invariant" };
+              let b = F(
+                d,
+                O.id,
+                O.children.flatMap((P) =>
+                  P.id === p.id ? [...k.children] : [P],
+                ),
+                a,
+              );
+              if (!b.ok) return C(b, s);
+              d = b.part;
+            }
+            continue;
+          }
+          if (ye(p)) {
+            let N = Dn(p);
+            if (N) {
+              let k = f(N.children);
+              if (k) return k;
+            }
+            continue;
+          }
+          if (p.kind !== "run" || p.children.some((N) => !Ut(N))) continue;
+          let h = ie(d, p.id, a);
+          if (!h.ok) return C(h, s);
+          d = h.part;
+        }
+        return null;
+      },
+      m = f(u.children);
+    if (m) return m;
+  }
+  return Cn(Me(d, s), i, o);
+}
+var po = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+function $A(e, n, t) {
+  let r = [
+    {
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: "history",
+      prefix: "w",
+      value: "1",
+    },
+  ];
+  (n.relationshipId !== void 0 &&
+    r.push({
+      kind: "genericExtension",
+      namespaceUri: po,
+      localName: "id",
+      prefix: "r",
+      value: n.relationshipId,
+    }),
+    n.anchor !== void 0 &&
+      r.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "anchor",
+        prefix: "w",
+        value: n.anchor,
+      }),
+    n.tooltip !== void 0 &&
+      r.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "tooltip",
+        prefix: "w",
+        value: n.tooltip,
+      }));
+  let o =
+    n.relationshipId !== void 0 ? [{ prefix: "r", namespaceUri: po }] : [];
+  return {
+    id: e(),
+    kind: "hyperlink",
+    namespaceUri: y,
+    localName: "hyperlink",
+    prefix: "w",
+    namespaceBindings: o,
+    attributes: r,
+    children: t,
+  };
+}
+function NO(e, n, t) {
+  if (e.kind === "hyperlink")
+    return ge(
+      e,
+      e.children.map((l) => NO(l, n, t)),
+      null,
+    );
+  if (e.kind !== "run") return e;
+  let r = {
+      id: t(),
+      kind: "generic",
+      namespaceUri: y,
+      localName: "rStyle",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [
+        {
+          kind: "genericExtension",
+          namespaceUri: y,
+          localName: "val",
+          prefix: "w",
+          value: n,
+        },
+      ],
+      children: [],
+    },
+    o = yt(e);
+  if (!o) {
+    let l = {
+      id: t(),
+      kind: "runProperties",
+      namespaceUri: y,
+      localName: "rPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [r],
+    };
+    return ge(e, [l, ...e.children], null);
+  }
+  let i = o.children.filter(
+      (l) =>
+        l.kind === "textValue" ||
+        l.localName !== "rStyle" ||
+        l.namespaceUri !== y,
+    ),
+    a = ge(o, [r, ...i], null);
+  return ge(
+    e,
+    e.children.map((l) => (l.id === o.id ? a : l)),
+    null,
+  );
+}
+function GA(e, n, t, r) {
+  let o = A(e),
+    i = Y(n),
+    a = [],
+    l = [],
+    s = [],
+    d = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "paragraph-local",
+    },
+    c = 0;
+  for (let p of n.children) {
+    if (Dt(p)) continue;
+    let x = ot(p, i);
+    if (x.length === 0) {
+      (c < t.start ? a : c < t.end ? l : s).push(p);
+      continue;
+    }
+    let h = x[0].start,
+      N = x[x.length - 1].end;
+    if (((c = N), N <= t.start)) {
+      a.push(p);
+      continue;
+    }
+    if (h >= t.end) {
+      s.push(p);
+      continue;
+    }
+    if (h >= t.start && N <= t.end) {
+      l.push(p);
+      continue;
+    }
+    let [k, O, b] = Si(p, [t.start, t.end], 3, i, o);
+    (a.push(...k), l.push(...O), s.push(...b));
+  }
+  if (l.length === 0) return { ok: false, reason: "invalid-range" };
+  let u = t.styleId === void 0 ? l : l.map((p) => NO(p, t.styleId, o)),
+    f = $A(o, t, u),
+    m = Oe(n),
+    g = [...(m ? [m] : []), ...a, f, ...s];
+  return C(F(e, n.id, g, r), d);
+}
+function zA(e, n, t, r) {
+  let o = A(e),
+    i = Y(n),
+    a = [],
+    l = [],
+    s = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "paragraph-local",
+    },
+    d = 0;
+  for (let x of n.children) {
+    if (Dt(x)) continue;
+    let h = ot(x, i);
+    if (h.length === 0) {
+      (d < t.offset ? a : l).push(x);
+      continue;
+    }
+    let N = h[0].start,
+      k = h[h.length - 1].end;
+    if (((d = k), k <= t.offset)) {
+      a.push(x);
+      continue;
+    }
+    if (N >= t.offset) {
+      l.push(x);
+      continue;
+    }
+    let [O, b] = Si(x, [t.offset], 2, i, o);
+    (a.push(...O), l.push(...b));
+  }
+  let c =
+      yO(i, (x) => x.end <= t.offset && x.end > 0) ??
+      i.find((x) => x.start >= t.offset),
+    u = c ? E(e, c.runId) : null,
+    f = u && u.kind === "run" ? yt(u) : null,
+    m = XA(o, t, f ? kO(f, o) : null),
+    g = Oe(n),
+    p = [...(g ? [g] : []), ...a, m, ...l];
+  return C(F(e, n.id, p, r), s);
+}
+function kO(e, n) {
+  return e.kind === "textValue"
+    ? { id: n(), kind: "textValue", value: e.value }
+    : { ...e, id: n(), children: e.children.map((t) => kO(t, n)) };
+}
+function XA(e, n, t = null) {
+  let r = (u, f) => ({
+      kind: "genericExtension",
+      namespaceUri: y,
+      localName: u,
+      prefix: "w",
+      value: f,
+    }),
+    o = (u, f) => ({
+      id: e(),
+      kind: "generic",
+      namespaceUri: y,
+      localName: u,
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [
+        {
+          kind: "genericExtension",
+          namespaceUri: y,
+          localName: "val",
+          prefix: "w",
+          value: f,
+        },
+      ],
+      children: [],
+    }),
+    i = e(),
+    a = String(Xo(`${i} ${n.tag}`) & 2147483647 || 1),
+    l = n.dataBinding,
+    s = () => ({
+      id: e(),
+      kind: "contentControlDataBinding",
+      namespaceUri: y,
+      localName: "dataBinding",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [
+        r("prefixMappings", l.prefixMappings),
+        r("xpath", l.xpath),
+        r("storeItemID", l.storeItemId),
+      ],
+      children: [],
+    }),
+    d = {
+      id: i,
+      kind: "contentControlProperties",
+      namespaceUri: y,
+      localName: "sdtPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [
+        ...(n.alias === void 0 ? [] : [o("alias", n.alias)]),
+        o("tag", n.tag),
+        o("id", a),
+        ...(n.lock === void 0 ? [] : [o("lock", n.lock)]),
+        ...(l ? [s()] : []),
+      ],
+    },
+    c = {
+      id: e(),
+      kind: "contentControlContent",
+      namespaceUri: y,
+      localName: "sdtContent",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [Tn(e, [...(t ? [t] : []), vn(e, n.text)])],
+    };
+  return {
+    id: e(),
+    kind: "contentControl",
+    namespaceUri: y,
+    localName: "sdt",
+    prefix: "w",
+    namespaceBindings: [],
+    attributes: [],
+    children: [d, c],
+  };
+}
+function YA(e, n, t) {
+  let r = E(e, n.linkId);
+  if (!r || r.kind !== "hyperlink")
+    return { ok: false, reason: "tree-invariant" };
+  let o = ee(e, r.id);
+  if (!o) return { ok: false, reason: "tree-invariant" };
+  let i = r.attributes.filter((c) =>
+      c.namespaceUri === po && c.localName === "id"
+        ? false
+        : c.namespaceUri !== y
+          ? true
+          : c.localName === "anchor"
+            ? false
+            : c.localName === "tooltip"
+              ? n.tooltip === void 0
+              : true,
+    ),
+    a = [];
+  (n.relationshipId !== void 0 &&
+    a.push({
+      kind: "genericExtension",
+      namespaceUri: po,
+      localName: "id",
+      prefix: "r",
+      value: n.relationshipId,
+    }),
+    n.anchor !== void 0 &&
+      a.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "anchor",
+        prefix: "w",
+        value: n.anchor,
+      }),
+    n.tooltip !== void 0 &&
+      a.push({
+        kind: "genericExtension",
+        namespaceUri: y,
+        localName: "tooltip",
+        prefix: "w",
+        value: n.tooltip,
+      }));
+  let l = r.namespaceBindings;
+  n.relationshipId !== void 0 &&
+    !l.some((c) => c.prefix === "r" && c.namespaceUri === po) &&
+    (l = [...l, { prefix: "r", namespaceUri: po }]);
+  let s = { ...r, namespaceBindings: l, attributes: [...i, ...a] },
+    d = {
+      dirty: [o.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "paragraph-local",
+    };
+  return C(j(e, r.id, s, t), d);
+}
+function qA(e, n, t) {
+  let r = E(e, n);
+  if (!r || r.kind !== "hyperlink")
+    return { ok: false, reason: "tree-invariant" };
+  let o = ee(e, r.id);
+  if (!o) return { ok: false, reason: "tree-invariant" };
+  let i = o.children.flatMap((l) => (l.id === r.id ? [...r.children] : [l])),
+    a = {
+      dirty: [o.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "paragraph-local",
+    };
+  return C(F(e, o.id, i, t), a);
+}
+function bO(e, n, t) {
+  let r = Ln(e, n);
+  if (!r) return { ok: false, reason: "tree-invariant" };
+  let o = ee(e, r.id);
+  if (!o) return { ok: false, reason: "tree-invariant" };
+  let i = _a(r);
+  if (!i) return { ok: false, reason: "tree-invariant" };
+  let a = o.children.flatMap((s) => (s.id === r.id ? i : [s])),
+    l = {
+      dirty: [o.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "flow-structural",
+    };
+  return C(F(e, o.id, a, t), l);
+}
+function ZA(e, n, t) {
+  let r = [];
+  return (
+    t &&
+      r.push({
+        id: e(),
+        kind: "runProperties",
+        namespaceUri: y,
+        localName: "rPr",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [],
+        children: [
+          {
+            id: e(),
+            kind: "generic",
+            namespaceUri: y,
+            localName: "rFonts",
+            prefix: "w",
+            namespaceBindings: [],
+            attributes: [
+              { namespaceUri: y, prefix: "w", localName: "ascii", value: t },
+              { namespaceUri: y, prefix: "w", localName: "hAnsi", value: t },
+              { namespaceUri: y, prefix: "w", localName: "eastAsia", value: t },
+            ],
+            children: [],
+          },
+        ],
+      }),
+    /^[0-9A-Fa-f]{4}$/.test(n) && t
+      ? r.push({
+          id: e(),
+          kind: "generic",
+          namespaceUri: y,
+          localName: "sym",
+          prefix: "w",
+          namespaceBindings: [],
+          attributes: [
+            { namespaceUri: y, prefix: "w", localName: "font", value: t },
+            { namespaceUri: y, prefix: "w", localName: "char", value: n },
+          ],
+          children: [],
+        })
+      : r.push(vn(e, n)),
+    Tn(e, r)
+  );
+}
+function PO(e, n, t) {
+  if (e.kind === "textValue") return e;
+  let r = Dn(e),
+    o = r
+      ? ge(r, n, null)
+      : {
+          id: t(),
+          kind: "generic",
+          namespaceUri: y,
+          localName: "sdtContent",
+          prefix: "w",
+          namespaceBindings: [],
+          attributes: [],
+          children: n,
+        },
+    i = [],
+    a = false;
+  for (let l of e.children) {
+    if (l.kind !== "textValue" && l.localName === "sdtContent") {
+      (i.push(o), (a = true));
+      continue;
+    }
+    i.push(l);
+  }
+  return (a || i.push(o), ge(e, i, null));
+}
+function rt(e) {
+  let n = e.children;
+  return ge(
+    e,
+    n.filter((t) => t.kind === "textValue" || t.localName !== "showingPlcHdr"),
+    null,
+  );
+}
+function mo(e, n) {
+  if (e.kind === "textValue") return e;
+  let t = _n(e);
+  if (!t) return e;
+  let r = n(t);
+  return ge(
+    e,
+    e.children.map((o) => (o.id === t.id ? r : o)),
+    null,
+  );
+}
+function xO(e, n) {
+  let t = e.attributes.filter((r) => r.localName !== "lastValue");
+  return {
+    ...e,
+    attributes: [
+      ...t,
+      { namespaceUri: y, prefix: "w", localName: "lastValue", value: n },
+    ],
+  };
+}
+function QA(e, n, t, r) {
+  let o = Ln(e, n);
+  if (!o) return { ok: false, reason: "tree-invariant" };
+  let i = A(e),
+    a = ee(e, o.id),
+    l = a?.kind === "paragraph",
+    s = qr(o),
+    d = o,
+    c = (f, m) => {
+      let g = ZA(i, f, m),
+        p = Dn(d),
+        x = !l && p?.children.length === 1 ? p.children[0] : void 0,
+        h =
+          x?.kind === "paragraph"
+            ? { ...x, children: [...x.children.filter(Dt), g] }
+            : void 0,
+        N = l
+          ? [g]
+          : [
+              h ?? {
+                id: i(),
+                kind: "paragraph",
+                namespaceUri: y,
+                localName: "p",
+                prefix: "w",
+                namespaceBindings: [],
+                attributes: [],
+                children: [g],
+              },
+            ];
+      ((d = PO(d, N, i)), (d = mo(d, rt)));
+    };
+  switch (s) {
+    case "dropdown": {
+      let m = ri(o).find((g) => g.value === t);
+      if (!m) return { ok: false, reason: "invalidArgs" };
+      ((d = mo(d, (g) => {
+        let p = be(g, "dropDownList");
+        if (!p) return rt(g);
+        let x = g.children;
+        return ge(
+          rt(g),
+          x.map((h) => (h.id === p.id ? xO(p, t) : h)),
+          null,
+        );
+      })),
+        c(m.displayText));
+      break;
+    }
+    case "combo": {
+      let g = ri(o).find((p) => p.value === t)?.displayText ?? t;
+      ((d = mo(d, (p) => {
+        let x = be(p, "comboBox");
+        if (!x) return rt(p);
+        let h = p.children;
+        return ge(
+          rt(p),
+          h.map((N) => (N.id === x.id ? xO(x, t) : N)),
+          null,
+        );
+      })),
+        c(g));
+      break;
+    }
+    case "checkbox": {
+      let f = Zr(t);
+      if (f === null) return { ok: false, reason: "typeMismatch" };
+      let m = ig(o);
+      if (!m) return { ok: false, reason: "typeMismatch" };
+      d = mo(d, (x) => {
+        let h = be(x, "checkbox");
+        if (!h) return rt(x);
+        let N = h.children,
+          k = ge(
+            h,
+            N.map((w) => {
+              if (w.kind === "textValue" || w.localName !== "checked") return w;
+              let I = w.attributes.filter((S) => S.localName !== "val");
+              return {
+                ...w,
+                attributes: [
+                  ...I,
+                  {
+                    namespaceUri: w.attributes[0]?.namespaceUri ?? W,
+                    prefix: w.attributes[0]?.prefix ?? "w14",
+                    localName: "val",
+                    value: f ? "1" : "0",
+                  },
+                ],
+              };
+            }),
+            null,
+          ),
+          b = (k.kind === "textValue" ? [] : k.children).some(
+            (w) => w.kind !== "textValue" && w.localName === "checked",
+          ),
+          P = b
+            ? k
+            : ge(
+                h,
+                [
+                  {
+                    id: i(),
+                    kind: "generic",
+                    namespaceUri: W,
+                    localName: "checked",
+                    prefix: "w14",
+                    namespaceBindings: [],
+                    attributes: [
+                      {
+                        namespaceUri: W,
+                        prefix: "w14",
+                        localName: "val",
+                        value: f ? "1" : "0",
+                      },
+                    ],
+                    children: [],
+                  },
+                  ...N,
+                ],
+                null,
+              ),
+          R = x.children;
+        return ge(
+          rt(x),
+          R.map((w) => (w.id === h.id ? (b ? k : P) : w)),
+          null,
+        );
+      });
+      let g = f ? m.checkedGlyph : m.uncheckedGlyph,
+        p = f ? m.checkedFont : m.uncheckedFont;
+      c(g, p);
+      break;
+    }
+    case "date": {
+      let f = _n(o),
+        m = be(f, "date"),
+        g = qn(be(m, "dateFormat"), "val"),
+        p = oi(t),
+        x = p ? Da(p, g) : null;
+      if (p === null || x === null) return { ok: false, reason: "invalidArgs" };
+      ((d = mo(d, (h) => {
+        let N = be(h, "date");
+        if (!N) return rt(h);
+        let k = N.attributes.filter((P) => P.localName !== "fullDate"),
+          O = {
+            ...N,
+            attributes: [
+              ...k,
+              { namespaceUri: y, prefix: "w", localName: "fullDate", value: p },
+            ],
+          },
+          b = h.children;
+        return ge(
+          rt(h),
+          b.map((P) => (P.id === N.id ? O : P)),
+          null,
+        );
+      })),
+        c(x));
+      break;
+    }
+    case "text":
+    case "richText":
+    case "other":
+      c(t);
+      break;
+    default:
+      return { ok: false, reason: "unsupported" };
+  }
+  let u = {
+    dirty: a ? [a.id] : [o.id],
+    created: [],
+    deleted: [],
+    dependencyKeys: H,
+    impact: "flow-structural",
+  };
+  if (dn(o)) {
+    if (!a) return { ok: false, reason: "tree-invariant" };
+    let f = _a(d);
+    if (!f) return { ok: false, reason: "tree-invariant" };
+    let m = a.children.flatMap((g) => (g.id === o.id ? f : [g]));
+    return C(F(e, a.id, m, r), u);
+  }
+  return C(j(e, o.id, d, r), u);
+}
+var JA = new Set([
+    "bookmarkEnd",
+    "commentRangeEnd",
+    "moveFromRangeEnd",
+    "moveToRangeEnd",
+    "permEnd",
+    "customXmlInsRangeEnd",
+    "customXmlDelRangeEnd",
+    "customXmlMoveFromRangeEnd",
+    "customXmlMoveToRangeEnd",
+  ]),
+  wO = new Map([
+    ["bookmarkEnd", "bookmarkStart"],
+    ["commentRangeEnd", "commentRangeStart"],
+    ["moveFromRangeEnd", "moveFromRangeStart"],
+    ["moveToRangeEnd", "moveToRangeStart"],
+    ["permEnd", "permStart"],
+    ["customXmlInsRangeEnd", "customXmlInsRangeStart"],
+    ["customXmlDelRangeEnd", "customXmlDelRangeStart"],
+    ["customXmlMoveFromRangeEnd", "customXmlMoveFromRangeStart"],
+    ["customXmlMoveToRangeEnd", "customXmlMoveToRangeStart"],
+  ]),
+  e0 = new Set(wO.values());
+function n0(e) {
+  return e.kind !== "textValue" && JA.has(e.localName);
+}
+function RO(e, n) {
+  if (n.kind === "textValue") return null;
+  let t = n.attributes.find((r) => r.localName === "id");
+  return t ? `${e}\0${t.value}` : null;
+}
+function EO(e) {
+  return e.kind === "textValue" || !e0.has(e.localName)
+    ? null
+    : RO(e.localName, e);
+}
+function IO(e, n) {
+  if (!n0(e) || e.kind === "textValue") return false;
+  let t = wO.get(e.localName),
+    r = t ? RO(t, e) : null;
+  return r === null || !n.has(r);
+}
+function t0(e, n, t, r) {
+  return n !== t ? n < t : IO(e, r);
+}
+function CO(e, n) {
+  let t = ba(n);
+  if (t === null || !Yn(t)) return null;
+  let r = rr(e, n);
+  return r === null ? null : { headId: t.toUpperCase(), prefix: r };
+}
+function ot(e, n) {
+  let t = new Set(Lt(e).map((r) => r.id));
+  return t.size === 0 ? [] : n.filter((r) => t.has(r.runId));
+}
+function TO(e, n, t, r) {
+  if (e.kind === "hyperlink" || ye(e)) {
+    if (e.kind === "textValue") return { head: e, tail: null };
+    let d = ye(e) ? Dn(e) : e;
+    if (!d) return { head: e, tail: null };
+    let c = [],
+      u = [],
+      f = ot(e, t)[0]?.start ?? 0,
+      m = d.children;
+    for (let x of m) {
+      let h = ot(x, t);
+      if (h.length === 0) {
+        (f < n ? c : u).push(x);
+        continue;
+      }
+      let N = h[0].start,
+        k = h[h.length - 1].end;
+      if (((f = k), k <= n)) c.push(x);
+      else if (N >= n) u.push(x);
+      else {
+        let O = TO(x, n, t, r);
+        (O.head && c.push(O.head), O.tail && u.push(O.tail));
+      }
+    }
+    if (e.kind === "hyperlink")
+      return {
+        head: c.length > 0 ? ge(e, c, null) : null,
+        tail: u.length > 0 ? ge(e, u, r) : null,
+      };
+    let g = e.children,
+      p = (x, h) => {
+        let N = ge(d, x, h ? r : null);
+        return h
+          ? ge(
+              e,
+              g.map((k) => (k.id === d.id ? N : ze(k, r))),
+              r,
+            )
+          : ge(
+              e,
+              g.map((k) => (k.id === d.id ? N : k)),
+              null,
+            );
+      };
+    return {
+      head: c.length > 0 ? p(c, false) : null,
+      tail: u.length > 0 ? p(u, true) : null,
+    };
+  }
+  if (e.kind !== "run") return { head: e, tail: null };
+  let o = t.filter((d) => d.runId === e.id),
+    i = yt(e),
+    a = [],
+    l = [];
+  for (let d of e.children) {
+    if (Ut(d)) continue;
+    let c = o.find((u) => hr(d, u.node.id));
+    if (!c) {
+      a.push(d);
+      continue;
+    }
+    if (c.end <= n) a.push(d);
+    else if (c.start >= n) l.push(d);
+    else if (c.node.kind === "textValue") {
+      let u = n - c.start,
+        f = kl(e, c.node.id);
+      (a.push(vn(r, c.node.value.slice(0, u), f)),
+        l.push(vn(r, c.node.value.slice(u), f)));
+    } else a.push(d);
+  }
+  let s = i ? ze(i, r) : null;
+  return {
+    head: a.length > 0 ? Tn(r, i ? [i, ...a] : a) : null,
+    tail: l.length > 0 ? Tn(r, s ? [s, ...l] : l) : null,
+  };
+}
+function ge(e, n, t) {
+  return { ...e, ...(t ? { id: t() } : {}), children: n };
+}
+function r0(e, n, t, r) {
+  let o = A(e),
+    i = Y(n),
+    a = [],
+    l = [],
+    s = Oe(n),
+    d = 0,
+    c = new Set();
+  for (let N of n.children) {
+    if (Dt(N)) continue;
+    let k = ot(N, i);
+    if (k.length === 0) {
+      (t0(N, d, t, c) ? a : l).push(N);
+      let R = EO(N);
+      R && c.add(R);
+      continue;
+    }
+    let O = k[0].start,
+      b = k[k.length - 1].end;
+    if ((b > d && c.clear(), (d = b), b <= t)) {
+      a.push(N);
+      continue;
+    }
+    if (O >= t) {
+      l.push(N);
+      continue;
+    }
+    let P = TO(N, t, i, o);
+    (P.head && a.push(P.head), P.tail && l.push(P.tail));
+  }
+  let u = s ? qd(s) : void 0,
+    f = CO(e, n),
+    m = {
+      id: o(),
+      kind: "paragraph",
+      namespaceUri: y,
+      localName: "p",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: f ? gt(f.prefix, mn(`${f.headId}:${t}`, Mn(e.root))) : [],
+      children: s ? [ze(s, o), ...l] : l,
+    },
+    g = {
+      dirty: [n.id],
+      created: [m.id],
+      deleted: [],
+      split: { from: n.id, tail: m.id },
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    p = ee(e, n.id);
+  if (!p)
+    return {
+      ok: false,
+      reason: "tree-invariant",
+      detail: "paragraph has no parent",
+    };
+  let x = Object.freeze({ ...n, children: u ? [u, ...a] : a }),
+    h = p.children.flatMap((N) => (N.id === n.id ? [x, m] : [N]));
+  return C(F(e, p.id, h, r), g);
+}
+function On(e, n, t = "tail") {
+  let r = 0,
+    o = e.length;
+  for (; r < o;) {
+    let i = (r + o) >> 1;
+    (t === "tail" ? e[i] <= n : e[i] < n) ? (r = i + 1) : (o = i);
+  }
+  return r;
+}
+function Si(e, n, t, r, o) {
+  let i = Array.from({ length: t }, () => []);
+  if (e.kind === "hyperlink") {
+    let u = Array.from({ length: t }, () => []),
+      f = ot(e, r)[0]?.start ?? 0;
+    for (let g of e.children) {
+      let p = ot(g, r);
+      if (p.length === 0) {
+        u[On(n, f)].push(g);
+        continue;
+      }
+      let x = p[0].start,
+        h = p[p.length - 1].end;
+      f = h;
+      let N = On(n, x),
+        k = h > x ? On(n, h - 1) : N;
+      if (N === k) {
+        u[N].push(g);
+        continue;
+      }
+      let O = Si(g, n, t, r, o);
+      for (let b = 0; b < t; b += 1) for (let P of O[b]) u[b].push(P);
+    }
+    let m = false;
+    for (let g = 0; g < t; g += 1) {
+      let p = u[g];
+      p.length !== 0 && (i[g].push(ge(e, p, m ? o : null)), (m = true));
+    }
+    return i;
+  }
+  if (ye(e)) {
+    if (e.kind === "textValue") return (i[0].push(e), i);
+    let u = Dn(e);
+    if (!u) return (i[0].push(e), i);
+    let f = e.children,
+      m = u.children,
+      g = Array.from({ length: t }, () => []),
+      p = ot(e, r)[0]?.start ?? 0;
+    for (let h of m) {
+      let N = ot(h, r);
+      if (N.length === 0) {
+        g[On(n, p)].push(h);
+        continue;
+      }
+      let k = N[0].start,
+        O = N[N.length - 1].end;
+      p = O;
+      let b = On(n, k),
+        P = O > k ? On(n, O - 1) : b;
+      if (b === P) {
+        g[b].push(h);
+        continue;
+      }
+      let R = Si(h, n, t, r, o);
+      for (let w = 0; w < t; w += 1) for (let I of R[w]) g[w].push(I);
+    }
+    let x = false;
+    for (let h = 0; h < t; h += 1) {
+      let N = g[h];
+      if (N.length === 0) continue;
+      let k = ge(u, N, x ? o : null);
+      (x
+        ? i[h].push(
+            ge(
+              e,
+              f.map((O) => (O.id === u.id ? k : ze(O, o))),
+              o,
+            ),
+          )
+        : i[h].push(
+            ge(
+              e,
+              f.map((O) => (O.id === u.id ? k : O)),
+              null,
+            ),
+          ),
+        (x = true));
+    }
+    return i;
+  }
+  if (e.kind !== "run") return (i[On(n, 0)].push(e), i);
+  let a = r.filter((u) => u.runId === e.id),
+    l = On(n, a[0]?.start ?? 0),
+    s = yt(e),
+    d = Array.from({ length: t }, () => []);
+  for (let u of e.children) {
+    if (Ut(u)) continue;
+    let f = a.find((O) => hr(u, O.node.id));
+    if (!f) {
+      d[l].push(u);
+      continue;
+    }
+    if (f.node.kind !== "textValue") {
+      d[On(n, f.start)].push(u);
+      continue;
+    }
+    let m = f.start,
+      g = f.end,
+      p = m,
+      x = On(n, m),
+      h = false,
+      N = u;
+    for (let O of n) {
+      if (O <= m) continue;
+      if (O >= g) break;
+      let b = f.node.value.slice(p - m, O - m);
+      (b.length > 0 && d[x].push(vn(o, b, kl(N, f.node.id))),
+        (p = O),
+        (x += 1),
+        (h = true));
+    }
+    if (!h) {
+      d[x].push(u);
+      continue;
+    }
+    let k = f.node.value.slice(p - m);
+    k.length > 0 && d[x].push(vn(o, k, kl(N, f.node.id)));
+  }
+  let c = false;
+  for (let u = 0; u < t; u += 1) {
+    let f = d[u];
+    if (f.length === 0) continue;
+    let m = s ? (c ? ze(s, o) : s) : null;
+    ((c = true), i[u].push(Tn(o, m ? [m, ...f] : f)));
+  }
+  return i;
+}
+function o0(e, n, t, r) {
+  let o = A(e),
+    i = Y(n),
+    a = Oe(n),
+    l = t.length + 1,
+    s = Array.from({ length: l }, () => []),
+    d = 0,
+    c = new Set();
+  for (let k of n.children) {
+    if (Dt(k)) continue;
+    let O = ot(k, i);
+    if (O.length === 0) {
+      let S = On(t, d, IO(k, c) ? "head" : "tail");
+      s[S].push(k);
+      let U = EO(k);
+      U && c.add(U);
+      continue;
+    }
+    let b = O[0].start,
+      P = O[O.length - 1].end;
+    (P > d && c.clear(), (d = P));
+    let R = On(t, b),
+      w = P > b ? On(t, P - 1) : R;
+    if (R === w) {
+      s[R].push(k);
+      continue;
+    }
+    let I = Si(k, t, l, i, o);
+    for (let S = 0; S < l; S += 1) for (let U of I[S]) s[S].push(U);
+  }
+  let u = a ? qd(a) : void 0,
+    f = CO(e, n),
+    m = Array.from({ length: l }, () => null);
+  if (f) {
+    let k = new Set(Mn(e.root));
+    for (let O = l - 1; O >= 1; O -= 1) {
+      let b = mn(`${f.headId}:${t[O - 1]}`, k);
+      (k.add(b), (m[O] = gt(f.prefix, b)));
+    }
+  }
+  let g = [];
+  for (let k = 1; k < l; k += 1) {
+    let b = k === l - 1 ? a : u;
+    g.push({
+      id: o(),
+      kind: "paragraph",
+      namespaceUri: y,
+      localName: "p",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: m[k] ?? [],
+      children: b ? [ze(b, o), ...s[k]] : s[k],
+    });
+  }
+  let p = {
+      dirty: [n.id],
+      created: g.map((k) => k.id),
+      deleted: [],
+      splits: g.map((k) => ({ from: n.id, tail: k.id })),
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    x = ee(e, n.id);
+  if (!x)
+    return {
+      ok: false,
+      reason: "tree-invariant",
+      detail: "paragraph has no parent",
+    };
+  let h = Object.freeze({ ...n, children: u ? [u, ...s[0]] : s[0] }),
+    N = x.children.flatMap((k) => (k.id === n.id ? [h, ...g] : [k]));
+  return C(F(e, x.id, N, r), p);
+}
+function i0(e, n) {
+  let t = n;
+  for (; t;) {
+    let r = E(e, t);
+    if (!r || r.kind === "textValue") return null;
+    if (r.kind === "table") return r;
+    t = ee(e, t)?.id ?? null;
+  }
+  return null;
+}
+function a0(e, n, t, r) {
+  let o = ve(e, n),
+    i = Mn(e.root),
+    a = [],
+    l = rr(e, n);
+  if (l !== null) {
+    let s = mn(r, i);
+    a.push(...gt(l, s));
+  }
+  return {
+    id: t(),
+    kind: "paragraph",
+    namespaceUri: y,
+    localName: "p",
+    ...(o.elementPrefix === void 0 ? {} : { prefix: o.elementPrefix }),
+    namespaceBindings: [],
+    attributes: a,
+    children: [],
+  };
+}
+function l0(e, n, t) {
+  let r = E(e, n);
+  if (!r) return { ok: false, reason: "unknown-block" };
+  let o = Uh(e, n);
+  if (!o) return { ok: false, reason: "block-required" };
+  let i = ee(e, n),
+    a =
+      r.kind === "table" &&
+      i?.kind === "tableCell" &&
+      i.children.every((x) => x.kind !== "paragraph"),
+    l = fr(r),
+    s = [],
+    d = {
+      dirty: [],
+      created: s,
+      deleted: [n, ...l.filter((x) => x !== n)],
+      dependencyKeys: H,
+      impact: "flow-structural",
+      caret: { paragraphId: o },
+    },
+    c = ie(e, n, t);
+  if (!c.ok) return { ok: false, reason: "unknown-block" };
+  if (!a || !i) return C(c, d);
+  let u = i0(c.part, i.id);
+  if (!u) return C(c, d);
+  let f = A(c.part),
+    m = a0(c.part, u, f, `${n}:cell-p`),
+    g = E(c.part, i.id);
+  if (!g || g.kind === "textValue") return C(c, d);
+  let p = _(c.part, i.id, g.children.length, [m], t);
+  return p.ok
+    ? C(p, { ...d, created: [...s, m.id] })
+    : { ok: false, reason: "tree-invariant" };
+}
+function hO(e, n, t, r) {
+  let o = E(e, t),
+    i = ee(e, n),
+    a = ee(e, t);
+  if (!i || !a || i.id !== a.id)
+    return { ok: false, reason: "not-adjacent-siblings" };
+  let l = i.children.findIndex((O) => O.id === n);
+  if (i.children.findIndex((O) => O.id === t) !== l + 1)
+    return { ok: false, reason: "not-adjacent-siblings" };
+  let d = [],
+    c = new Set();
+  for (let O of [n, t]) {
+    let b = Ge(e, O);
+    b && dn(b) && !c.has(b.id) && (c.add(b.id), d.push(b));
+  }
+  let u = {
+      dirty: [n],
+      created: [],
+      deleted: [t],
+      join: { kept: n, removed: t },
+      dependencyKeys: H,
+      impact: "flow-structural",
+    },
+    f = o.children.filter((O) => !Dt(O)),
+    m = i.children.find((O) => O.id === n);
+  if (!m || m.kind !== "paragraph")
+    return { ok: false, reason: "tree-invariant", detail: "survivor missing" };
+  let g = A(e),
+    p = d0(m, o, g),
+    x = Object.freeze({ ...p, children: [...p.children, ...f] }),
+    h = i.children.flatMap((O) => (O.id === n ? [x] : O.id === t ? [] : [O])),
+    N = d.length > 0 ? { ...r, deferValidation: true } : r,
+    k = C(F(e, i.id, h, N), u);
+  for (let O of d) k = Cn(k, O, r);
+  return k;
+}
+var s0 = new Set(["ins", "del", "moveFrom", "moveTo"]),
+  Vc = (e) =>
+    e.kind !== "textValue" && e.namespaceUri === y && s0.has(e.localName);
+function d0(e, n, t) {
+  let r = (Bn(Oe(n), "rPr")?.children ?? []).filter(Vc),
+    o = (Bn(Oe(e), "rPr")?.children ?? []).some(Vc),
+    i = r.length > 0 || o ? c0(e, r, t) : e,
+    a = Bn(Oe(n), "sectPr");
+  if (!a) return i;
+  let l = ze(a, t),
+    s = Oe(i);
+  if (!s) {
+    let m = {
+      id: t(),
+      kind: "paragraphProperties",
+      namespaceUri: y,
+      localName: "pPr",
+      prefix: "w",
+      namespaceBindings: [],
+      attributes: [],
+      children: [l],
+    };
+    return { ...i, children: [m, ...i.children] };
+  }
+  let d = s.children.filter(
+      (m) => m.kind === "textValue" || m.localName !== "sectPr",
+    ),
+    c = d.findIndex(
+      (m) => m.kind !== "textValue" && m.localName === "pPrChange",
+    ),
+    u = c === -1 ? d.length : c,
+    f = { ...s, children: [...d.slice(0, u), l, ...d.slice(u)] };
+  return { ...i, children: i.children.map((m) => (m.id === s.id ? f : m)) };
+}
+function c0(e, n, t) {
+  let r = n.map((c) => ze(c, t)),
+    o = Oe(e);
+  if (!o) {
+    if (r.length === 0) return e;
+    let c = {
+        id: t(),
+        kind: "runProperties",
+        namespaceUri: y,
+        localName: "rPr",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [],
+        children: r,
+      },
+      u = {
+        id: t(),
+        kind: "paragraphProperties",
+        namespaceUri: y,
+        localName: "pPr",
+        prefix: "w",
+        namespaceBindings: [],
+        attributes: [],
+        children: [c],
+      };
+    return { ...e, children: [u, ...e.children] };
+  }
+  let i = Bn(o, "rPr"),
+    a = (i?.children ?? []).filter((c) => !Vc(c)),
+    l =
+      i === void 0
+        ? r.length > 0
+          ? {
+              id: t(),
+              kind: "runProperties",
+              namespaceUri: y,
+              localName: "rPr",
+              prefix: "w",
+              namespaceBindings: [],
+              attributes: [],
+              children: r,
+            }
+          : void 0
+        : { ...i, children: [...r, ...a] };
+  if (!l) return e;
+  let s =
+      i === void 0
+        ? (() => {
+            let c = o.children.findIndex(
+                (f) =>
+                  f.kind !== "textValue" &&
+                  (f.localName === "sectPr" || f.localName === "pPrChange"),
+              ),
+              u = c === -1 ? o.children.length : c;
+            return [...o.children.slice(0, u), l, ...o.children.slice(u)];
+          })()
+        : o.children.map((c) => (c.id === i.id ? l : c)),
+    d = { ...o, children: s };
+  return { ...e, children: e.children.map((c) => (c.id === o.id ? d : c)) };
+}
+function u0(e, n, t, r, o, i, a) {
+  let l = {
+      dirty: [n.id],
+      created: [],
+      deleted: [],
+      dependencyKeys: H,
+      impact: "text-local",
+    },
+    s = e;
+  for (let m of [r, t]) {
+    let g = E(s, n.id),
+      p = Pi(s, g, m, i);
+    if (!p.ok) return p;
+    s = p.part;
+  }
+  let d = E(s, n.id),
+    c = Y(d),
+    u = new Set();
+  if (a && a.length > 0) for (let m of a) u.add(m);
+  else
+    for (let m of c)
+      if (!(m.start < t || m.end > r))
+        if (m.formatRunIds && m.formatRunIds.length > 0)
+          for (let g of m.formatRunIds) u.add(g);
+        else m.runId && u.add(m.runId);
+  let f = A(s);
+  for (let m of u) {
+    let g = E(s, m);
+    if (!g || g.kind !== "run") continue;
+    let p = yt(g),
+      x = g.children.filter((O) => !Ut(O)),
+      h = Ri(p?.children ?? [], o, il, f);
+    if (h.length === 0) {
+      if (!p) continue;
+      let O = F(s, g.id, x, i);
+      if (!O.ok) return C(O, l);
+      s = O.part;
+      continue;
+    }
+    let N = p
+        ? { ...p, children: h }
+        : {
+            id: f(),
+            kind: "runProperties",
+            namespaceUri: y,
+            localName: "rPr",
+            prefix: "w",
+            namespaceBindings: [],
+            attributes: [],
+            children: h,
+          },
+      k = F(s, g.id, [N, ...x], i);
+    if (!k.ok) return C(k, l);
+    s = k.part;
+  }
+  return Me(s, l);
+}
+function Pi(e, n, t, r) {
+  let o = Y(n),
+    i = [];
+  for (let h of o) i[i.length - 1] !== h.runId && i.push(h.runId);
+  let a = i.find((h) => {
+    let N = o.filter((k) => k.runId === h);
+    return N[0].start < t && N[N.length - 1].end > t;
+  });
+  if (a === void 0) return { ok: true, part: e };
+  let l = E(e, a);
+  if (!l || l.kind !== "run") return { ok: false, reason: "tree-invariant" };
+  let s = A(e),
+    d = yt(l),
+    c = [],
+    u = [];
+  for (let h of l.children) {
+    if (Ut(h)) continue;
+    let N = o.find((k) => k.runId === l.id && hr(h, k.node.id));
+    if (!N) {
+      c.push(h);
+      continue;
+    }
+    if (N.end <= t) c.push(h);
+    else if (N.start >= t) u.push(h);
+    else if (N.node.kind === "textValue") {
+      let k = t - N.start,
+        O = kl(h, N.node.id);
+      (c.push(vn(s, N.node.value.slice(0, k), O)),
+        u.push(vn(s, N.node.value.slice(k), O)));
+    } else c.push(h);
+  }
+  let f = Tn(s, d ? [d, ...c] : c),
+    m = Tn(s, d ? [ze(d, s), ...u] : u),
+    g = ee(e, l.id);
+  if (!g) return { ok: false, reason: "tree-invariant" };
+  let p = g.children.flatMap((h) => (h.id === l.id ? [f, m] : [h])),
+    x = F(e, g.id, p, r);
+  return x.ok
+    ? { ok: true, part: x.part }
+    : { ok: false, reason: "tree-invariant", detail: JSON.stringify(x.issues) };
+}
+function f0(e, n) {
+  let t = E(e, n);
+  if (!pn(t)) return null;
+  let r = "";
+  for (let o of Y(t)) {
+    if (o.removeNodeIds && o.removeNodeIds.length > 0) {
+      r += Bs();
+      continue;
+    }
+    o.node.kind === "textValue"
+      ? (r += o.node.value)
+      : o.node.kind === "tab"
+        ? (r += "	")
+        : o.node.kind === "hardBreak"
+          ? (r += Na(o.node))
+          : (o.node.kind === "fldChar" ||
+              o.node.kind === "fldSimple" ||
+              (o.node.kind === "generic" &&
+                (o.node.localName === "fldChar" ||
+                  o.node.localName === "fldSimple"))) &&
+            (r += Bs());
+  }
+  return r;
+}
+function m0(e) {
+  if (!(e === null || e.start !== e.end)) return e;
+}
+var go = {
+  "text-local": 0,
+  "paragraph-local": 1,
+  "flow-structural": 2,
+  global: 3,
+};
+function p0(e) {
+  return Object.freeze({
+    parts: new Map([[e.name, e]]),
+    partBytes: new Map(),
+    relationships: new Map(),
+    externalTargets: [],
+    contentTypes: {
+      defaults: new Map(),
+      overrides: new Map([[e.name.toLowerCase(), e.contentType]]),
+    },
+    mainDocumentPart: e.name,
+  });
+}
+var xo = class {
+  current;
+  storyPartName;
+  rev = 0;
+  commitCounter = 0;
+  undoStack = [];
+  redoStack = [];
+  subscribers = new Set();
+  historyLimit;
+  storyRef = null;
+  composition = null;
+  constructor(n, t, r = {}) {
+    let o = "root" in n,
+      i = typeof t == "string" ? t : void 0,
+      a = typeof t == "object" && t !== null ? t : r;
+    ((this.current = o ? p0(n) : n),
+      (this.storyPartName = i ?? (o ? n.name : n.mainDocumentPart)),
+      (this.historyLimit = a.historyLimit ?? 200));
+  }
+  setStoryRef(n) {
+    this.storyRef = n;
+  }
+  get part() {
+    let n = this.current.parts.get(this.storyPartName);
+    if (!n) throw new Error(`story part missing: ${this.storyPartName}`);
+    return n;
+  }
+  get package() {
+    return this.current;
+  }
+  get revision() {
+    return this.rev;
+  }
+  get canUndo() {
+    return this.undoStack.length > 0;
+  }
+  get canRedo() {
+    return this.redoStack.length > 0;
+  }
+  get historyDepth() {
+    return this.undoStack.length;
+  }
+  get compositionActive() {
+    return this.composition !== null;
+  }
+  graftPackage(n) {
+    this.current = n(this.current);
+  }
+  replacePart(n) {
+    let t = this.current.parts.get(n.name);
+    n !== t && ((this.current = D(this.current, n)), (this.rev += 1));
+  }
+  checkpoint() {
+    return {
+      pkg: this.current,
+      revision: this.rev,
+      undoStack: this.undoStack.slice(),
+      redoStack: this.redoStack.slice(),
+      composition: this.composition
+        ? {
+            entry: { ...this.composition.entry },
+            committed: this.composition.committed,
+          }
+        : null,
+    };
+  }
+  restoreCheckpoint(n) {
+    ((this.current = n.pkg),
+      (this.rev = n.revision),
+      (this.undoStack.length = 0),
+      this.undoStack.push(...n.undoStack),
+      (this.redoStack.length = 0),
+      this.redoStack.push(...n.redoStack),
+      (this.composition = n.composition
+        ? {
+            entry: { ...n.composition.entry },
+            committed: n.composition.committed,
+          }
+        : null));
+  }
+  restoreHistoryStacks(n) {
+    ((this.undoStack.length = 0),
+      this.undoStack.push(...n.undoStack),
+      (this.redoStack.length = 0),
+      this.redoStack.push(...n.redoStack));
+  }
+  subscribe(n) {
+    return (this.subscribers.add(n), () => this.subscribers.delete(n));
+  }
+  transact(n, t = {}) {
+    let r = t.origin ?? me.mutationHuman,
+      o = this.current,
+      i = this.rev,
+      a = this.current,
+      l = null,
+      s = 0,
+      d = new Set(),
+      c = new Set(),
+      u = new Set(),
+      f = new Set(),
+      m = new Set(),
+      g = [],
+      p = t.minimumImpact ?? "text-local",
+      x = null,
+      h = false,
+      N = null,
+      k = null,
+      O = (I, S) => {
+        if (l) return false;
+        let U = a.parts.get(I);
+        if (!U) return ((l = { reason: "unknown-part", detail: I }), false);
+        let L = ly(U, ni(a), S);
+        if (L) return ((l = { reason: L }), false);
+        let T = bl(U, S, { deferValidation: true });
+        if (!T.ok)
+          return (
+            (l = {
+              reason: T.reason,
+              ...(T.detail ? { detail: T.detail } : {}),
+            }),
+            false
+          );
+        if (
+          ((a = D(a, T.part)),
+          T.part === U &&
+            T.effect.dirty.length === 0 &&
+            T.effect.created.length === 0 &&
+            T.effect.deleted.length === 0 &&
+            T.effect.split === void 0 &&
+            (T.effect.splits === void 0 || T.effect.splits.length === 0) &&
+            T.effect.join === void 0 &&
+            T.effect.caret === void 0)
+        )
+          return true;
+        (d.add(I), (s += 1));
+        for (let an of T.effect.dirty) c.add(an);
+        for (let an of T.effect.created) u.add(an);
+        for (let an of T.effect.deleted) f.add(an);
+        for (let an of T.effect.dependencyKeys) m.add(an);
+        T.effect.split && g.push({ split: T.effect.split });
+        for (let an of T.effect.splits ?? []) g.push({ split: an });
+        return (
+          T.effect.join && g.push({ join: T.effect.join }),
+          go[T.effect.impact] > go[p] && (p = T.effect.impact),
+          T.effect.caret &&
+            (k = { paragraphId: T.effect.caret.paragraphId, start: 0, end: 0 }),
+          true
+        );
+      };
+    if (
+      (n({
+        apply: (I) => O(this.storyPartName, I),
+        applyTo: (I, S) => O(I, S),
+        applyPackage: (I) => {
+          if (l) return false;
+          let S = I(a);
+          if (S === a) return true;
+          for (let [U, L] of S.parts) a.parts.get(U) !== L && d.add(U);
+          return (
+            (a = S),
+            (s += 1),
+            go["flow-structural"] > go[p] && (p = "flow-structural"),
+            true
+          );
+        },
+        selectionBefore: (I) => {
+          x = I;
+        },
+        selectionAfter: (I) => {
+          ((h = true), (N = I));
+        },
+      }),
+      l)
+    ) {
+      let I = l;
+      return {
+        ok: false,
+        reason: I.reason,
+        ...(I.detail ? { detail: I.detail } : {}),
+      };
+    }
+    if (s === 0) return { ok: true, change: null };
+    let b = h ? N : k,
+      P = h ? m0(N) : (k ?? void 0);
+    for (let I of d) {
+      let S = o.parts.get(I),
+        U = a.parts.get(I);
+      if (U === void 0) continue;
+      let L = S ? Qi(S, U) : Qi(U, U);
+      if (!L.ok)
+        return {
+          ok: false,
+          reason: "tree-invariant",
+          detail: JSON.stringify(L.issues),
+        };
+    }
+    let R = Dm(a);
+    return R.ok
+      ? (r !== me.projection &&
+          (this.composition
+            ? ((this.composition.committed = true),
+              (this.composition = {
+                ...this.composition,
+                entry: { ...this.composition.entry, selectionAfter: b },
+              }))
+            : (this.pushUndo({
+                pkg: o,
+                revision: i,
+                selectionBefore: x,
+                selectionAfter: b,
+              }),
+              (this.redoStack.length = 0))),
+        (this.current = a),
+        (this.rev += 1),
+        t.story && (this.storyRef = t.story),
+        t.minimumImpact && go[t.minimumImpact] > go[p] && (p = t.minimumImpact),
+        {
+          ok: true,
+          change: this.publish(
+            r,
+            i,
+            {
+              dirty: c,
+              created: u,
+              deleted: f,
+              dependencyKeys: m,
+              splitJoin: g,
+              impact: p,
+              caret: P,
+            },
+            t.story ?? this.storyRef ?? void 0,
+          ),
+        })
+      : {
+          ok: false,
+          reason: "package-invariant",
+          detail: JSON.stringify(R.issues),
+        };
+  }
+  beginComposition(n = null) {
+    this.composition ||
+      (this.composition = {
+        entry: {
+          pkg: this.current,
+          revision: this.rev,
+          selectionBefore: n,
+          selectionAfter: null,
+        },
+        committed: false,
+      });
+  }
+  endComposition() {
+    let n = this.composition;
+    ((this.composition = null),
+      !(!n || !n.committed) &&
+        (this.pushUndo(n.entry), (this.redoStack.length = 0)));
+  }
+  cancelComposition() {
+    this.composition = null;
+  }
+  undo() {
+    let n = this.undoStack.pop();
+    if (!n) return null;
+    let t = this.rev;
+    return (
+      this.redoStack.push({
+        pkg: this.current,
+        revision: this.rev,
+        selectionBefore: n.selectionBefore,
+        selectionAfter: n.selectionAfter,
+      }),
+      (this.current = n.pkg),
+      (this.rev += 1),
+      this.publish(me.mutationUndo, t, null, this.storyRef ?? void 0)
+    );
+  }
+  redo() {
+    let n = this.redoStack.pop();
+    if (!n) return null;
+    let t = this.rev;
+    return (
+      this.undoStack.push({
+        pkg: this.current,
+        revision: this.rev,
+        selectionBefore: n.selectionBefore,
+        selectionAfter: n.selectionAfter,
+      }),
+      (this.current = n.pkg),
+      (this.rev += 1),
+      this.publish(me.mutationRedo, t, null, this.storyRef ?? void 0)
+    );
+  }
+  selectionForUndo() {
+    return this.undoStack[this.undoStack.length - 1]?.selectionBefore ?? null;
+  }
+  selectionForRedo() {
+    return this.redoStack[this.redoStack.length - 1]?.selectionAfter ?? null;
+  }
+  pushUndo(n) {
+    (this.undoStack.push(n),
+      this.undoStack.length > this.historyLimit && this.undoStack.shift());
+  }
+  publish(n, t, r, o) {
+    this.commitCounter += 1;
+    let i = {
+      change: "model-change",
+      fromRevision: t,
+      toRevision: this.rev,
+      commitId: `commit-${this.commitCounter}`,
+      origin: n,
+      dirty: r ? [...r.dirty] : [],
+      created: r ? [...r.created] : [],
+      deleted: r ? [...r.deleted] : [],
+      splitJoin: r ? r.splitJoin : [],
+      dependencyKeys: r ? [...r.dependencyKeys] : [],
+      impact: r
+        ? r.impact
+        : o?.kind === "headerFooter"
+          ? "global"
+          : "flow-structural",
+      ...(r?.caret ? { caret: r.caret } : {}),
+      ...(o ? { story: o } : {}),
+    };
+    for (let a of this.subscribers) a(i);
+    return i;
+  }
+};
+var MO = "http://schemas.openxmlformats.org/package/2006/relationships",
+  _O = "application/vnd.openxmlformats-package.relationships+xml",
+  h0 = "http://schemas.openxmlformats.org/package/2006/content-types",
+  vO = "/[Content_Types].xml",
+  ho = "/word/numbering.xml",
+  SO =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering",
+  Ai =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
+  y0 = `<Override PartName="${ho}" ContentType="${Ai}"/>`;
+function Pl(e) {
+  return `${e.ownerPart}\0${e.id}`;
+}
+function DO(e, n, t) {
+  let r = new Set(n.externalTargets.filter((l) => l.type === en).map(Pl)),
+    o = t.externalTargets.filter((l) => l.type === en && !r.has(Pl(l)));
+  if (o.length === 0) return e;
+  let i = new Set(e.map(Pl)),
+    a = o.filter((l) => !i.has(Pl(l)));
+  return a.length === 0 ? e : Object.freeze([...e, ...a]);
+}
+function UO(e, n, t) {
+  let r = e.filter((o) => o.ownerPart === t || n.has(o.ownerPart));
+  return r.length === e.length ? e : Object.freeze(r);
+}
+function LO(e, n, t = []) {
+  if (e === n) return e;
+  let r = O0(e, n);
+  return ((r = N0(r, n, t)), r);
+}
+function BO(e, n) {
+  let t = new Set();
+  for (let o of e.externalTargets)
+    o.type === en &&
+      o.ownerPart !== e.mainDocumentPart &&
+      (e.parts.has(o.ownerPart) || n.has(o.ownerPart) || t.add(o.ownerPart));
+  for (let o of e.parts.keys()) {
+    let i = w0(o);
+    !i ||
+      i === e.mainDocumentPart ||
+      e.parts.has(i) ||
+      n.has(i) ||
+      e.externalTargets.some((a) => a.ownerPart === i) ||
+      t.add(i);
+  }
+  if (t.size === 0) return e;
+  let r = e;
+  for (let o of t) r = R0(r, o);
+  return r;
+}
+function O0(e, n) {
+  let t = n.parts.get(ho);
+  if (!t) return e;
+  let r = D(e, t),
+    o = (n.relationships.get(n.mainDocumentPart) ?? []).find(
+      (a) => a.type === SO,
+    ),
+    i = r.relationships.get(r.mainDocumentPart) ?? [];
+  if (o && !i.some((a) => a.type === SO) && !i.some((a) => a.id === o.id)) {
+    let a = b0(r, { ...o, ownerPart: r.mainDocumentPart });
+    a && (r = a);
+  }
+  if (r.contentTypes.overrides.get($(ho)) !== Ai) {
+    let a = E0(r);
+    a && (r = a);
+  }
+  return r;
+}
+function N0(e, n, t) {
+  let r = t.filter((i) => i.type === en);
+  if (r.length === 0) return e;
+  let o = e;
+  for (let i of r) {
+    let a = k0(e, n, i.ownerPart);
+    if (
+      !a ||
+      o.externalTargets.some((d) => d.ownerPart === a && d.id === i.id) ||
+      new Set((o.relationships.get(a) ?? []).map((d) => d.id)).has(i.id)
+    )
+      continue;
+    let s = P0(
+      o,
+      {
+        ownerPart: a,
+        id: i.id,
+        type: en,
+        rawTarget: i.rawTarget,
+        sinkSafe: i.sinkSafe,
+      },
+      a,
+    );
+    s && (o = s);
+  }
+  return o;
+}
+function k0(e, n, t) {
+  return t === n.mainDocumentPart
+    ? e.mainDocumentPart
+    : typeof t != "string" || t.length === 0
+      ? null
+      : t;
+}
+function b0(e, n) {
+  let t = e.mainDocumentPart,
+    r = Wc(t),
+    o = e.parts.get(r),
+    i = re(
+      `<Relationships xmlns="${MO}"><Relationship Id="${Je(n.id, "relationship id")}" Type="${Je(n.type, "relationship type")}" Target="${Je(n.rawTarget, "relationship target")}"/></Relationships>`,
+      { name: r, contentType: _O },
+    );
+  if (!i.ok) return null;
+  let a = e.relationships.get(t) ?? [];
+  if (a.some((d) => d.id === n.id)) return null;
+  let l = {
+      ...n,
+      ownerPart: t,
+      order: a.reduce((d, c) => Math.max(d, c.order), -1) + 1,
+    },
+    s = new Map([...e.relationships, [t, [...a, l]]]);
+  return o
+    ? FO(e, o, i.part.root.children[0], s)
+    : Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [r, i.part]]),
+        relationships: s,
+      });
+}
+function P0(e, n, t = e.mainDocumentPart) {
+  let r = t;
+  if (typeof r != "string" || r.length === 0) return null;
+  let o = Wc(r),
+    i = e.parts.get(o),
+    a = re(
+      `<Relationships xmlns="${MO}"><Relationship Id="${Je(n.id, "relationship id")}" Type="${en}" Target="${Je(n.rawTarget, "relationship target")}" TargetMode="External"/></Relationships>`,
+      { name: o, contentType: _O },
+    );
+  if (!a.ok) return null;
+  let l = [...e.externalTargets, n];
+  if (!i)
+    return Object.freeze({
+      ...e,
+      parts: new Map([...e.parts, [o, a.part]]),
+      externalTargets: l,
+    });
+  let s = FO(e, i, a.part.root.children[0], e.relationships);
+  return s ? Object.freeze({ ...s, externalTargets: l }) : null;
+}
+function FO(e, n, t, r) {
+  if (!t) return null;
+  let o = A(n),
+    i = _(n, n.root.id, n.root.children.length, [VO(t, o)]);
+  return i.ok
+    ? Object.freeze({
+        ...e,
+        parts: new Map([...e.parts, [n.name, i.part]]),
+        relationships: r,
+      })
+    : null;
+}
+function VO(e, n) {
+  return e.kind === "textValue"
+    ? { ...e, id: n() }
+    : { ...e, id: n(), children: e.children.map((t) => VO(t, n)) };
+}
+function Wc(e) {
+  let n = e.lastIndexOf("/");
+  return `${e.slice(0, n)}/_rels/${e.slice(n + 1)}.rels`;
+}
+function w0(e) {
+  let n = /^(.*)\/_rels\/([^/]+)\.rels$/.exec(e);
+  if (!n) return null;
+  let t = n[1],
+    r = n[2];
+  return t === "" || r === "" ? null : `${t}/${r}`;
+}
+function R0(e, n) {
+  let t = Wc(n),
+    r = new Map(e.parts);
+  r.delete(t);
+  let o = new Map(e.partBytes);
+  o.delete(t);
+  let i = new Map(e.relationships);
+  i.delete(n);
+  let a = Object.freeze(e.externalTargets.filter((l) => l.ownerPart !== n));
+  return Object.freeze({
+    ...e,
+    parts: r,
+    partBytes: o,
+    relationships: i,
+    externalTargets: a,
+  });
+}
+function E0(e) {
+  let n = e.contentTypes.overrides.get($(ho));
+  if (n === Ai) return e;
+  if (n !== void 0) return null;
+  let t = e.partBytes.get(vO);
+  if (!t) return null;
+  let r = strFromU8(t),
+    o = AO(r);
+  if (!o) return null;
+  let i = r.lastIndexOf(`</${o.rootName}>`);
+  if (i === -1) return null;
+  let a = r.slice(0, i) + y0 + r.slice(i),
+    l = AO(a);
+  if (!l || l.rootName !== o.rootName) return null;
+  let s = [...o.children, WO("Override", { PartName: ho, ContentType: Ai })];
+  return l.children.length !== s.length || l.children.some((d, c) => d !== s[c])
+    ? null
+    : Object.freeze({
+        ...e,
+        partBytes: new Map([...e.partBytes, [vO, strToU8(a)]]),
+        contentTypes: Object.freeze({
+          defaults: e.contentTypes.defaults,
+          overrides: new Map([...e.contentTypes.overrides, [$(ho), Ai]]),
+        }),
+      });
+}
+function AO(e) {
+  let n = $n(e);
+  if (!n.ok) return null;
+  let t = n.nodes.filter((l) => l.type === "element");
+  if (t.length !== 1) return null;
+  let r = t[0],
+    o = r.name.indexOf(":"),
+    i = o === -1 ? "" : r.name.slice(0, o);
+  if (
+    r.name.slice(o + 1) !== "Types" ||
+    r.attributes[i ? `xmlns:${i}` : "xmlns"] !== h0
+  )
+    return null;
+  let a = [];
+  for (let l of r.children)
+    l.type === "element" && a.push(WO(l.name, l.attributes));
+  return { rootName: r.name, children: a };
+}
+function WO(e, n) {
+  let t = Object.entries(n)
+    .map(([r, o]) => `${r}=${o}`)
+    .sort();
+  return [e, ...t].join("");
+}
+var HO = 4e3,
+  jO = 64;
+function KO(e) {
+  return De(e, "footnote") !== null || De(e, "endnote") !== null;
+}
+function $O(e, n, t, r) {
+  if (!KO(e)) return false;
+  if (r.has(t.paragraphId)) return true;
+  r.add(t.paragraphId);
+  let o = E(n, t.paragraphId);
+  return !o || o.kind !== "paragraph"
+    ? true
+    : Y(o).some(
+        (i) =>
+          i.node.kind === "noteReference" && i.start < t.end && i.end > t.start,
+      );
+}
+function GO(e, n, t, r) {
+  if (!KO(e)) return false;
+  if (r.has(t.blockId)) return true;
+  r.add(t.blockId);
+  let o = E(n, t.blockId);
+  if (!o || o.kind === "textValue") return true;
+  let i = 0,
+    a = (l, s) => {
+      if (i >= HO || s > jO) return true;
+      if (((i += 1), l.kind === "textValue")) return false;
+      if (l.kind === "paragraph")
+        return Y(l).some((d) => d.node.kind === "noteReference");
+      for (let d of l.children) if (a(d, s + 1)) return true;
+      return false;
+    };
+  return a(o, 0);
+}
+function zO(e, n, t) {
+  if (t.count >= HO || n > jO) return true;
+  if (((t.count += 1), e.kind === "textValue")) return false;
+  if (
+    e.kind === "commentRangeStart" ||
+    e.kind === "commentRangeEnd" ||
+    e.kind === "commentReference"
+  )
+    return true;
+  for (let r of e.children) if (zO(r, n + 1, t)) return true;
+  return false;
+}
+function XO(e, n, t, r) {
+  if (!pd(e)) return false;
+  let o = t.op === "deleteText" ? t.paragraphId : t.blockId;
+  if (r.has(o)) return true;
+  r.add(o);
+  let i = E(n, o);
+  return !i || i.kind === "textValue" ? true : zO(i, 0, { count: 0 });
+}
+function yo(e, n) {
+  return n.compositionActive || e.compositionSessionOpen()
+    ? { ok: false, reason: "invalidArgs", detail: "ime-composition-active" }
+    : null;
+}
+function YO(e, n) {
+  let t = E(e, n);
+  return !t || t.kind !== "drawing"
+    ? null
+    : (t.children.find(
+        (o) => o.kind === "inlineDrawing" || o.kind === "anchoredDrawing",
+      ) ?? null);
+}
+function qO(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return null;
+  let o = E(r, t);
+  return !o || o.kind !== "drawing"
+    ? null
+    : Zt(o, {
+        ownerPartName: n,
+        supportedMcRequires: Gn,
+        limits: St,
+        resolveRelationship: ss(e, n),
+      });
+}
+function ZO(e, n, t) {
+  let r = Pr(e.relationships.get(n) ?? [], n, t);
+  return r.mode === "internal" ? r.partName : null;
+}
+function Mi(e, n, t, r) {
+  let o = e.resolveStory(n);
+  if (!o.ok)
+    return {
+      ok: false,
+      reason: o.reason,
+      ...(o.detail ? { detail: o.detail } : {}),
+    };
+  let i = yo(e, o.store);
+  if (i) return i;
+  let { store: a, story: l } = o,
+    s = l.partName,
+    d = e.currentPackage(),
+    c = a.checkpoint(),
+    u = a.historyDepth,
+    f = null,
+    m = false,
+    g = false,
+    p = a.transact(
+      (N) => {
+        if (r?.commitGuard?.() === false) {
+          g = true;
+          return;
+        }
+        if (
+          r?.expectedPackageRevision !== void 0 &&
+          e.packageRevision !== r.expectedPackageRevision
+        ) {
+          m = true;
+          return;
+        }
+        let k = t(N, s);
+        if (k === null) {
+          N.apply({
+            op: "insertText",
+            paragraphId: "\0task12-abort",
+            offset: 0,
+            text: "x",
+          });
+          return;
+        }
+        f = k;
+      },
+      {
+        story: l,
+        ...(l.kind === "headerFooter" || l.kind === "notesPart"
+          ? { minimumImpact: "global" }
+          : {}),
+      },
+    );
+  if (g)
+    return {
+      ok: false,
+      reason: "invalidArgs",
+      detail: "stale drawing selection",
+    };
+  if (m)
+    return { ok: false, reason: "invalidArgs", detail: "stale-package-epoch" };
+  if (!p.ok)
+    return {
+      ok: false,
+      reason: p.reason,
+      ...(p.detail ? { detail: p.detail } : {}),
+    };
+  if (!p.change) return { ok: true, change: null };
+  let x = p.change.created.find((N) => {
+    let k = a.part;
+    return E(k, N)?.kind === "drawing";
+  });
+  return (
+    x && (f = x),
+    {
+      ok: true,
+      change: e.promoteStoryTransactionToPackageUnit(d, a, c, u),
+      ...(f ? { drawingNodeId: f } : {}),
+    }
+  );
+}
+function QO(e, n, t) {
+  let r = e.parts.get(n);
+  if (!r) return null;
+  let o = YO(r, t);
+  return o ? fh(o) : null;
+}
+function Hc(e, n, t, r) {
+  let o = false;
+  return (
+    e.applyPackage((i) => {
+      let a = i.parts.get(n);
+      if (!a) return i;
+      let l = E(a, t);
+      if (!l || l.kind !== "drawing") return i;
+      let s = YO(a, t);
+      if (!s) return i;
+      let d = mh(s, r),
+        c = I0(l, d),
+        u = j(a, l.id, c, { deferValidation: true });
+      return u.ok ? ((o = true), D(i, u.part)) : i;
+    }),
+    o
+  );
+}
+function I0(e, n) {
+  return { ...e, children: e.children.map((t) => (t.id === n.id ? n : t)) };
+}
+async function JO(e, n, t) {
+  let r = vs(t.widthPoints),
+    o = vs(t.heightPoints);
+  if (r === null || o === null)
+    return { ok: false, reason: "invalidArgs", detail: "invalid-dimensions" };
+  let i = e.resolveStory(n);
+  if (!i.ok)
+    return {
+      ok: false,
+      reason: i.reason,
+      ...(i.detail ? { detail: i.detail } : {}),
+    };
+  let a = yo(e, i.store);
+  if (a) return a;
+  let l = i.story.partName,
+    s = await xa(t.decodePort, t.bytes, t.mime);
+  if (!s.ok)
+    return { ok: false, reason: "invalidArgs", detail: "invalid-image" };
+  let d = s.bytes,
+    c = Lr(e.currentPackage(), l, { bytes: d, mime: t.mime });
+  if (!c.ok)
+    return {
+      ok: false,
+      reason: "invalidArgs",
+      detail: c.reason === "invalid-image" ? "invalid-image" : c.reason,
+    };
+  let u = c.partName,
+    f = Mi(
+      e,
+      n,
+      (m, g) => {
+        let p = e.currentPackage(),
+          x = Lr(p, g, { bytes: d, mime: t.mime });
+        if (!x.ok) return null;
+        ((p = x.pkg), (u = x.partName));
+        let h;
+        if (t.hyperlink) {
+          let k = Pa(p, t.hyperlink, g);
+          if (!k) return null;
+          ((p = k.pkg), (h = k.relationshipId));
+        }
+        if (!m.applyPackage(() => p)) return null;
+        let N = Zm({
+          docPrId: x.docPrId,
+          relationshipId: x.relationshipId,
+          extentEmu: { cx: r, cy: o },
+          ...(t.title !== void 0 ? { title: t.title } : {}),
+          ...(t.description !== void 0 ? { description: t.description } : {}),
+          ...(h ? { hyperlinkRelationshipId: h } : {}),
+        });
+        return m.apply({
+          op: "insertDrawing",
+          paragraphId: t.paragraphId,
+          offset: t.offset,
+          drawing: N,
+        })
+          ? N.id
+          : null;
+      },
+      {
+        expectedPackageRevision: t.expectedPackageRevision,
+        ...(t.commitGuard ? { commitGuard: t.commitGuard } : {}),
+      },
+    );
+  return f.ok
+    ? f.change
+      ? { ...f, mediaPartName: u }
+      : { ok: true, change: null, mediaPartName: u }
+    : f;
+}
+async function jc(e, n, t, r, o, i, a) {
+  let l = e.resolveStory(n);
+  if (!l.ok)
+    return {
+      ok: false,
+      reason: l.reason,
+      ...(l.detail ? { detail: l.detail } : {}),
+    };
+  let s = yo(e, l.store);
+  if (s) return s;
+  let d = l.story.partName,
+    c = await xa(i, r, o);
+  if (!c.ok)
+    return { ok: false, reason: "invalidArgs", detail: "invalid-image" };
+  let u = c.bytes,
+    f = Lr(e.currentPackage(), d, { bytes: u, mime: o });
+  return f.ok
+    ? Mi(
+        e,
+        n,
+        (m, g) => {
+          let p = e.currentPackage(),
+            x = qO(p, d, t),
+            h = x?.picture?.embeddedRelationshipId ?? null,
+            N = x?.picture?.linkedRelationshipId ?? null,
+            k = h ?? N;
+          if (!k) return null;
+          let O = h !== null ? ZO(p, d, h) : null,
+            b = p,
+            P = Lr(b, g, { bytes: u, mime: o });
+          return !P.ok ||
+            ((b = P.pkg), !m.applyPackage(() => b)) ||
+            !m.apply({
+              op: "replaceDrawingResource",
+              drawingNodeId: t,
+              relationshipId: P.relationshipId,
+            })
+            ? null
+            : (m.applyPackage((R) => Ss(R, g, O, k)), t);
+        },
+        {
+          expectedPackageRevision: a.expectedPackageRevision,
+          ...(a.commitGuard ? { commitGuard: a.commitGuard } : {}),
+        },
+      )
+    : {
+        ok: false,
+        reason: "invalidArgs",
+        detail: f.reason === "invalid-image" ? "invalid-image" : f.reason,
+      };
+}
+function eN(e, n, t) {
+  let r = e.resolveStory(n);
+  if (!r.ok)
+    return {
+      ok: false,
+      reason: r.reason,
+      ...(r.detail ? { detail: r.detail } : {}),
+    };
+  let o = yo(e, r.store);
+  if (o) return o;
+  let i = r.story.partName,
+    a = e.currentPackage(),
+    l = qO(a, i, t);
+  if (!l) return { ok: false, reason: "unknown-drawing" };
+  let s = l.picture?.embeddedRelationshipId ?? null,
+    d = l.picture?.linkedRelationshipId ?? null,
+    c = s ?? d,
+    u = s !== null ? ZO(a, i, s) : null;
+  return Mi(e, n, (f, m) =>
+    f.apply({ op: "deleteDrawing", drawingNodeId: t })
+      ? (f.applyPackage((g) => Ss(g, m, u, c)), t)
+      : null,
+  );
+}
+async function nN(e, n, t, r, o, i, a) {
+  let l = await Qm(o, r, i, void 0, a);
+  return l.ok
+    ? jc(e, n, t, l.bytes, l.mime, a, {
+        expectedPackageRevision: e.packageRevision,
+      })
+    : {
+        ok: false,
+        reason: "invalidArgs",
+        detail: `${l.reason}${l.detail ? `:${l.detail}` : ""}`,
+      };
+}
+function tN(e, n, t, r, o, i) {
+  let a = e.resolveStory(n);
+  if (!a.ok)
+    return {
+      ok: false,
+      reason: a.reason,
+      ...(a.detail ? { detail: a.detail } : {}),
+    };
+  let l = yo(e, a.store);
+  return (
+    l ||
+    Mi(e, n, (s, d) => {
+      let c = QO(e.currentPackage(), d, t),
+        u = null;
+      if (i !== null) {
+        let m = Pa(e.currentPackage(), i, d);
+        if (!m || !s.applyPackage(() => m.pkg)) return null;
+        u = m.relationshipId;
+      }
+      if (
+        !s.apply({
+          op: "setDrawingMetadata",
+          drawingNodeId: t,
+          title: r,
+          description: o,
+          ...(i === null ? { hyperlink: null } : {}),
+        })
+      )
+        return null;
+      if (i !== null && u !== null) {
+        if (!Hc(s, d, t, u)) return null;
+      } else if (i === null && !Hc(s, d, t, null)) return null;
+      let f = false;
+      return (
+        s.applyPackage((m) => {
+          let g = $s(m, d, c);
+          return g === null ? ((f = true), m) : g;
+        }),
+        f ? null : t
+      );
+    })
+  );
+}
+function rN(e, n, t) {
+  let r = e.resolveStory(n);
+  if (!r.ok)
+    return {
+      ok: false,
+      reason: r.reason,
+      ...(r.detail ? { detail: r.detail } : {}),
+    };
+  let o = yo(e, r.store);
+  return (
+    o ||
+    Mi(e, n, (i, a) => {
+      let l = QO(e.currentPackage(), a, t.drawingNodeId),
+        s = null;
+      if (t.hyperlink !== null) {
+        let c = Pa(e.currentPackage(), t.hyperlink, a);
+        if (!c || !i.applyPackage(() => c.pkg)) return null;
+        s = c.relationshipId;
+      }
+      for (let c of t.ops) if (!i.apply(c)) return null;
+      if (!Hc(i, a, t.drawingNodeId, t.hyperlink === null ? null : s))
+        return null;
+      let d = false;
+      return (
+        i.applyPackage((c) => {
+          let u = $s(c, a, l);
+          return u === null ? ((d = true), c) : u;
+        }),
+        d ? null : t.drawingNodeId
+      );
+    })
+  );
+}
+var oN = new Set([
+    "acceptRevision",
+    "rejectRevision",
+    "acceptAllRevisions",
+    "rejectAllRevisions",
+  ]),
+  C0 = new Set([
+    "deleteTableRow",
+    "deleteTableColumn",
+    "removeContentControl",
+    "removeRepeatingSectionItem",
+  ]),
+  aN =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+  lN =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+  T0 = 64,
+  iN = class {
+    pkg;
+    packageRev = 0;
+    body;
+    stories = new Map();
+    rIdToPartName = new Map();
+    undoOrder = [];
+    redoOrder = [];
+    subscribers = new Set();
+    historyLimit;
+    maxEditableStoryParts;
+    cascadeNoteReferences;
+    lastChange = null;
+    shellHyperlinks = Object.freeze([]);
+    compositionSession = null;
+    commitCounter = 0;
+    currentPackageMemo = null;
+    constructor(n, t, r = {}) {
+      ((this.pkg = D(n, t)),
+        (this.historyLimit = r.historyLimit ?? 200),
+        (this.maxEditableStoryParts = r.maxEditableStoryParts ?? T0),
+        (this.cascadeNoteReferences = r.cascadeDeletedNoteReferences ?? vg),
+        (this.body = new xo(this.pkg, t.name, {
+          historyLimit: this.historyLimit,
+        })),
+        this.body.setStoryRef({ kind: "body", partName: t.name }));
+    }
+    get packageRevision() {
+      return this.packageRev;
+    }
+    get canUndo() {
+      return this.undoOrder.length > 0;
+    }
+    get canRedo() {
+      return this.redoOrder.length > 0;
+    }
+    get lastModelChange() {
+      return this.lastChange;
+    }
+    bodyStore() {
+      return this.body;
+    }
+    currentPackage() {
+      let n = this.currentPackageMemo;
+      if (n && n.pkg === this.pkg && n.bodyPart === this.body.part) {
+        let o = 0,
+          i = true;
+        for (let a of this.stories.values()) {
+          if (n.storyParts[o] !== a.part) {
+            i = false;
+            break;
+          }
+          o += 1;
+        }
+        if (i && o === n.storyParts.length) return n.result;
+      }
+      let t = D(this.pkg, this.body.part),
+        r = [];
+      for (let o of this.stories.values())
+        (r.push(o.part), this.pkg.parts.has(o.part.name) && (t = D(t, o.part)));
+      return (
+        (this.currentPackageMemo = {
+          pkg: this.pkg,
+          bodyPart: this.body.part,
+          storyParts: r,
+          result: t,
+        }),
+        t
+      );
+    }
+    subscribe(n) {
+      return (this.subscribers.add(n), () => this.subscribers.delete(n));
+    }
+    resolveStory(n) {
+      return n.kind === "body"
+        ? {
+            ok: true,
+            story: { kind: "body", partName: this.body.part.name },
+            store: this.body,
+          }
+        : n.kind === "notesPart"
+          ? n.noteKind !== "footnote" && n.noteKind !== "endnote"
+            ? { ok: false, reason: "unknown-scope", detail: String(n.noteKind) }
+            : this.openNotesPartStore(n.noteKind)
+          : n.kind !== "headerFooter" ||
+              typeof n.rId != "string" ||
+              n.rId.length === 0
+            ? { ok: false, reason: "unknown-scope", detail: String(n.kind) }
+            : this.openHeaderFooterStore(n.rId);
+    }
+    partFor(n) {
+      let t = this.resolveStory(n);
+      return t.ok ? t.store.part : null;
+    }
+    revisionFor(n) {
+      let t = this.resolveStory(n);
+      return t.ok ? t.store.revision : null;
+    }
+    transact(n, t, r = {}) {
+      let o = this.resolveStory(n);
+      if (!o.ok)
+        return {
+          ok: false,
+          reason: o.reason,
+          ...(o.detail ? { detail: o.detail } : {}),
+        };
+      let { store: i, story: a } = o,
+        l = this.currentPackage(),
+        s = i.historyDepth,
+        d = i.compositionActive,
+        c = i.checkpoint(),
+        u = false,
+        f = new Set(),
+        m = false,
+        g = new Set(),
+        p = i.transact(
+          (h) => {
+            t({
+              ...h,
+              apply: (N) => (
+                u ||
+                  (((N.op === "deleteText" && $O(this.pkg, i.part, N, f)) ||
+                    (N.op === "deleteBlock" && GO(this.pkg, i.part, N, f)) ||
+                    oN.has(N.op)) &&
+                    (u = true)),
+                m ||
+                  (N.op === "deleteText" || N.op === "deleteBlock"
+                    ? (m = XO(this.pkg, i.part, N, g))
+                    : (oN.has(N.op) || C0.has(N.op)) && (m = true)),
+                h.apply(N)
+              ),
+              selectionBefore: (N) => h.selectionBefore(N),
+              selectionAfter: (N) => h.selectionAfter(N),
+            });
+          },
+          {
+            ...r,
+            story: a,
+            ...(a.kind === "headerFooter" || a.kind === "notesPart"
+              ? { minimumImpact: "global" }
+              : {}),
+          },
+        );
+      if (!p.ok)
+        return {
+          ok: false,
+          reason: p.reason,
+          ...(p.detail ? { detail: p.detail } : {}),
+        };
+      this.syncPackageFromStore(i);
+      let x = false;
+      if (p.change && u) {
+        let h = this.currentPackage(),
+          N = this.cascadeNoteReferences(l, h);
+        if (N === null)
+          return (
+            i.restoreCheckpoint(c),
+            this.installPackageSnapshotInternal(l),
+            { ok: false, reason: "invalidArgs", detail: "note-cascade-failed" }
+          );
+        N !== h &&
+          (this.installPackageSnapshotInternal(N),
+          d
+            ? this.compositionSession &&
+              (this.compositionSession.packageWideEffects = true)
+            : i.restoreHistoryStacks(c),
+          (x = true));
+      }
+      if (p.change && m) {
+        let h = this.currentPackage(),
+          N = mx(l, h, { storyPartName: a.partName });
+        if (N === null)
+          return (
+            i.restoreCheckpoint(c),
+            this.installPackageSnapshotInternal(l),
+            {
+              ok: false,
+              reason: "invalidArgs",
+              detail: "comment-cascade-failed",
+            }
+          );
+        N !== h &&
+          (this.installPackageSnapshotInternal(N),
+          d
+            ? this.compositionSession &&
+              (this.compositionSession.packageWideEffects = true)
+            : i.restoreHistoryStacks(c),
+          (x = true));
+      }
+      if (p.change) {
+        ((this.packageRev += 1),
+          !d &&
+            (i.historyDepth > s || x) &&
+            (x
+              ? this.pushUndoPointer({
+                  kind: "package",
+                  before: l,
+                  after: this.currentPackage(),
+                })
+              : this.pushUndoPointer({
+                  kind: "story",
+                  partName: a.partName,
+                  story: a,
+                })));
+        let h = x
+          ? this.publishSynthetic(
+              p.change.origin,
+              "global",
+              a,
+              p.change.created,
+            )
+          : p.change;
+        return (x || this.publish(h), { ok: true, change: h });
+      }
+      return { ok: true, change: p.change };
+    }
+    compositionSessionOpen() {
+      return this.compositionSession !== null;
+    }
+    beginComposition(n, t = null) {
+      let r = this.resolveStory(n);
+      return !r.ok ||
+        (this.compositionSession &&
+          this.compositionSession.partName !== r.story.partName &&
+          (this.endComposition(), (r = this.resolveStory(n)), !r.ok))
+        ? false
+        : (this.compositionSession ||
+            (this.compositionSession = {
+              partName: r.story.partName,
+              beforePackage: this.currentPackage(),
+              storyCheckpoint: r.store.checkpoint(),
+              packageWideEffects: false,
+            }),
+          r.store.beginComposition(t),
+          true);
+    }
+    endComposition() {
+      let n = this.compositionSession;
+      if (((this.compositionSession = null), !n)) {
+        this.body.endComposition();
+        return;
+      }
+      let t =
+        n.partName === this.body.part.name
+          ? this.body
+          : this.stories.get(n.partName);
+      if (!t) return;
+      let r = t.historyDepth;
+      if ((t.endComposition(), n.packageWideEffects)) {
+        (t.restoreHistoryStacks(n.storyCheckpoint),
+          this.syncPackageFromStore(t),
+          this.pushUndoPointer({
+            kind: "package",
+            before: n.beforePackage,
+            after: this.currentPackage(),
+          }));
+        return;
+      }
+      if (t.historyDepth > r) {
+        let o =
+          n.partName === this.body.part.name
+            ? { kind: "body", partName: n.partName }
+            : this.storyRefForPart(n.partName);
+        o &&
+          this.pushUndoPointer({
+            kind: "story",
+            partName: n.partName,
+            story: o,
+          });
+      }
+      this.syncPackageFromStore(t);
+    }
+    cancelComposition() {
+      let n = this.compositionSession;
+      if (((this.compositionSession = null), !n)) {
+        this.body.cancelComposition();
+        return;
+      }
+      let t =
+        n.partName === this.body.part.name
+          ? this.body
+          : this.stories.get(n.partName);
+      if (n.packageWideEffects) {
+        (t && t.restoreCheckpoint(n.storyCheckpoint),
+          this.installPackageSnapshotInternal(n.beforePackage),
+          (this.packageRev += 1));
+        let r =
+          n.partName === this.body.part.name
+            ? { kind: "body", partName: n.partName }
+            : this.storyRefForPart(n.partName);
+        this.publishSynthetic(
+          me.mutationHuman,
+          "global",
+          r ?? { kind: "body", partName: this.body.part.name },
+          [],
+        );
+        return;
+      }
+      t?.cancelComposition();
+    }
+    applyLifecycleOp(n) {
+      let t = this.currentPackage();
+      if (id(n)) {
+        let a = Cg(t, n);
+        if (!a.ok)
+          return {
+            ok: false,
+            reason: a.reason,
+            ...(a.detail ? { detail: a.detail } : {}),
+          };
+        if (a.package === t) return { ok: true, change: null };
+        (this.installPackageSnapshotInternal(a.package),
+          this.pushUndoPointer({
+            kind: "package",
+            before: t,
+            after: a.package,
+          }),
+          (this.packageRev += 1));
+        let l = { kind: "body", partName: this.body.part.name },
+          s = this.publishSynthetic(
+            me.mutationHuman,
+            a.impact,
+            l,
+            a.createdPartName ? [a.createdPartName] : [],
+          );
+        return (this.evictUnreachableStories(), { ok: true, change: s });
+      }
+      if (!Xs(n))
+        return { ok: false, reason: "invalidArgs", detail: "not-lifecycle-op" };
+      let r = Lp(t, n);
+      if (!r.ok)
+        return {
+          ok: false,
+          reason: r.reason,
+          ...(r.detail ? { detail: r.detail } : {}),
+        };
+      (this.installPackageSnapshotInternal(r.package),
+        this.pushUndoPointer({ kind: "package", before: t, after: r.package }),
+        (this.packageRev += 1));
+      let o = { kind: "body", partName: this.body.part.name },
+        i = this.publishSynthetic(
+          me.mutationHuman,
+          r.impact,
+          o,
+          r.createdPartName ? [r.createdPartName] : [],
+        );
+      return (this.evictUnreachableStories(), { ok: true, change: i });
+    }
+    undo() {
+      let n = this.undoOrder.pop();
+      if (!n) return null;
+      if (n.kind === "package") {
+        (this.installPackageSnapshotInternal(n.before),
+          this.redoOrder.push(n),
+          (this.packageRev += 1));
+        let o = this.publishSynthetic(
+          me.mutationUndo,
+          "global",
+          { kind: "body", partName: this.body.part.name },
+          [],
+        );
+        return (this.evictUnreachableStories(), o);
+      }
+      let t =
+        n.partName === this.body.part.name
+          ? this.body
+          : this.stories.get(n.partName);
+      if (!t) return null;
+      let r = t.undo();
+      return r
+        ? (this.redoOrder.push(n),
+          this.syncPackageFromStore(t),
+          (this.packageRev += 1),
+          this.publish(r),
+          this.evictUnreachableStories(),
+          r)
+        : null;
+    }
+    redo() {
+      let n = this.redoOrder.pop();
+      if (!n) return null;
+      if (n.kind === "package") {
+        (this.installPackageSnapshotInternal(n.after),
+          this.undoOrder.push(n),
+          (this.packageRev += 1));
+        let o = this.publishSynthetic(
+          me.mutationRedo,
+          "global",
+          { kind: "body", partName: this.body.part.name },
+          [],
+        );
+        return (this.evictUnreachableStories(), o);
+      }
+      let t =
+        n.partName === this.body.part.name
+          ? this.body
+          : this.stories.get(n.partName);
+      if (!t) return null;
+      let r = t.redo();
+      return r
+        ? (this.undoOrder.push(n),
+          this.syncPackageFromStore(t),
+          (this.packageRev += 1),
+          this.publish(r),
+          this.evictUnreachableStories(),
+          r)
+        : null;
+    }
+    selectionForUndo() {
+      let n = this.undoOrder[this.undoOrder.length - 1];
+      return !n || n.kind === "package"
+        ? null
+        : ((n.partName === this.body.part.name
+            ? this.body
+            : this.stories.get(n.partName)
+          )?.selectionForUndo() ?? null);
+    }
+    selectionForRedo() {
+      let n = this.redoOrder[this.redoOrder.length - 1];
+      return !n || n.kind === "package"
+        ? null
+        : ((n.partName === this.body.part.name
+            ? this.body
+            : this.stories.get(n.partName)
+          )?.selectionForRedo() ?? null);
+    }
+    openedStoryCount() {
+      return 1 + this.stories.size;
+    }
+    insertImage(n, t) {
+      return JO(this, n, t);
+    }
+    replaceImage(n, t, r, o, i, a) {
+      return jc(this, n, t, r, o, i, a);
+    }
+    deleteImage(n, t) {
+      return eN(this, n, t);
+    }
+    embedExternalImage(n, t, r, o, i, a) {
+      return nN(this, n, t, r, o, i, a);
+    }
+    setDrawingMetadataWithHyperlink(n, t, r, o, i) {
+      return tN(this, n, t, r, o, i);
+    }
+    applyImageProperties(n, t) {
+      return rN(this, n, t);
+    }
+    promoteStoryTransactionToPackageUnit(n, t, r, o) {
+      (this.installPackageSnapshotInternal(t.package),
+        t.historyDepth > o && t.restoreHistoryStacks(r),
+        this.pushUndoPointer({
+          kind: "package",
+          before: n,
+          after: this.currentPackage(),
+        }),
+        (this.packageRev += 1));
+      let i =
+        t.part.name === this.body.part.name
+          ? { kind: "body", partName: t.part.name }
+          : this.storyRefForPart(t.part.name);
+      return this.publishSynthetic(
+        me.mutationHuman,
+        i?.kind === "headerFooter" ? "global" : "flow-structural",
+        i ?? { kind: "body", partName: this.body.part.name },
+        [],
+      );
+    }
+    publishStoryWrite(n) {
+      return n ? ((this.packageRev += 1), this.publish(n), n) : null;
+    }
+    adoptPackageUnit(n) {
+      let t = this.currentPackage();
+      n !== t && this.pushUndoPointer({ kind: "package", before: n, after: t });
+    }
+    installPackageSnapshot(n) {
+      this.installPackageSnapshotInternal(n);
+    }
+    replacePackageShell(n) {
+      this.shellHyperlinks = DO(this.shellHyperlinks, this.pkg, n);
+      let t = n;
+      t = D(t, this.body.part);
+      for (let r of this.stories.values())
+        n.parts.has(r.part.name) && (t = D(t, r.part));
+      this.pkg = t;
+    }
+    installPackageSnapshotInternal(n) {
+      let t = LO(n, this.pkg, this.shellHyperlinks),
+        r = t.parts.get(t.mainDocumentPart);
+      if (!r) return;
+      this.body.replacePart(r);
+      for (let [i, a] of this.stories) {
+        let l = t.parts.get(i);
+        l && a.replacePart(l);
+      }
+      this.rIdToPartName.clear();
+      let o = t.relationships.get(t.mainDocumentPart) ?? [];
+      for (let i of o) {
+        if (i.type !== aN && i.type !== lN) continue;
+        let a = Ee(i);
+        a.mode !== "Internal" ||
+          !a.target.ok ||
+          (this.stories.has(a.target.partName) &&
+            t.parts.has(a.target.partName) &&
+            this.rIdToPartName.set(i.id, a.target.partName));
+      }
+      ((this.pkg = t), (this.pkg = D(this.pkg, this.body.part)));
+      for (let i of this.stories.values())
+        this.pkg.parts.has(i.part.name) && (this.pkg = D(this.pkg, i.part));
+    }
+    openNotesPartStore(n) {
+      let t = De(this.currentPackage(), n);
+      if (!t) return { ok: false, reason: "missing-part", detail: n };
+      let r = this.stories.get(t.name);
+      if (r)
+        return {
+          ok: true,
+          story: { kind: "notesPart", partName: t.name, noteKind: n },
+          store: r,
+        };
+      if (
+        (this.openedStoryCount() >= this.maxEditableStoryParts &&
+          this.evictUnreachableStories(),
+        this.openedStoryCount() >= this.maxEditableStoryParts)
+      )
+        return {
+          ok: false,
+          reason: "too-many-story-stores",
+          detail: String(this.maxEditableStoryParts),
+        };
+      let o = Ks(t),
+        i = new xo(o, { historyLimit: this.historyLimit }),
+        a = { kind: "notesPart", partName: o.name, noteKind: n };
+      return (
+        i.setStoryRef(a),
+        this.stories.set(o.name, i),
+        o !== t && (this.pkg = D(this.pkg, o)),
+        { ok: true, story: a, store: i }
+      );
+    }
+    openHeaderFooterStore(n) {
+      let t = this.rIdToPartName.get(n);
+      if (t) {
+        let s = this.stories.get(t);
+        if (s)
+          return {
+            ok: true,
+            story: { kind: "headerFooter", partName: t, rId: n },
+            store: s,
+          };
+      }
+      let r = v0(this.currentPackage(), n);
+      if (!r.ok) return r;
+      let o = this.stories.get(r.partName);
+      if (o)
+        return (
+          this.rIdToPartName.set(n, r.partName),
+          {
+            ok: true,
+            story: { kind: "headerFooter", partName: r.partName, rId: n },
+            store: o,
+          }
+        );
+      if (
+        (this.openedStoryCount() >= this.maxEditableStoryParts &&
+          this.evictUnreachableStories(),
+        this.openedStoryCount() >= this.maxEditableStoryParts)
+      )
+        return {
+          ok: false,
+          reason: "too-many-story-stores",
+          detail: String(this.maxEditableStoryParts),
+        };
+      let i = Ks(r.part),
+        a = new xo(i, { historyLimit: this.historyLimit }),
+        l = { kind: "headerFooter", partName: i.name, rId: n };
+      return (
+        a.setStoryRef(l),
+        this.stories.set(i.name, a),
+        this.rIdToPartName.set(n, i.name),
+        i !== r.part && (this.pkg = D(this.pkg, i)),
+        { ok: true, story: l, store: a }
+      );
+    }
+    storyRefForPart(n) {
+      if (n === this.body.part.name) return { kind: "body", partName: n };
+      for (let [r, o] of this.rIdToPartName)
+        if (o === n) return { kind: "headerFooter", partName: n, rId: r };
+      let t = this.currentPackage().parts.get(n);
+      return t?.root.localName === "footnotes"
+        ? { kind: "notesPart", partName: n, noteKind: "footnote" }
+        : t?.root.localName === "endnotes"
+          ? { kind: "notesPart", partName: n, noteKind: "endnote" }
+          : null;
+    }
+    syncPackageFromStore(n) {
+      this.pkg = D(this.pkg, n.part);
+    }
+    pushUndoPointer(n) {
+      (this.undoOrder.push(n),
+        (this.redoOrder.length = 0),
+        this.undoOrder.length > this.historyLimit && this.undoOrder.shift(),
+        this.evictUnreachableStories());
+    }
+    evictUnreachableStories() {
+      let n = this.retainedStoryPartNames();
+      for (let [o] of [...this.stories])
+        if (!n.has(o)) {
+          this.stories.delete(o);
+          for (let [i, a] of [...this.rIdToPartName])
+            a === o && this.rIdToPartName.delete(i);
+        }
+      let t = this.retainedHyperlinkOwnerParts(n),
+        r = BO(this.pkg, t);
+      (r !== this.pkg && (this.pkg = r),
+        (this.shellHyperlinks = UO(
+          this.shellHyperlinks,
+          t,
+          this.pkg.mainDocumentPart,
+        )));
+    }
+    retainedStoryPartNames() {
+      let n = new Set(),
+        t = this.pkg;
+      for (let r of this.stories.keys()) t.parts.has(r) && n.add(r);
+      for (let r of this.undoOrder) this.retainPointerStoryParts(r, n);
+      for (let r of this.redoOrder) this.retainPointerStoryParts(r, n);
+      return n;
+    }
+    retainedHyperlinkOwnerParts(n) {
+      let t = new Set(n);
+      (t.add(this.pkg.mainDocumentPart), t.add(this.body.part.name));
+      for (let r of this.undoOrder) this.retainPointerHyperlinkOwners(r, t);
+      for (let r of this.redoOrder) this.retainPointerHyperlinkOwners(r, t);
+      return t;
+    }
+    retainPointerStoryParts(n, t) {
+      if (n.kind === "story") {
+        t.add(n.partName);
+        return;
+      }
+      for (let r of this.stories.keys())
+        (n.before.parts.has(r) || n.after.parts.has(r)) && t.add(r);
+    }
+    retainPointerHyperlinkOwners(n, t) {
+      if (n.kind === "story") {
+        t.add(n.partName);
+        return;
+      }
+      for (let r of n.before.parts.keys()) t.add(r);
+      for (let r of n.after.parts.keys()) t.add(r);
+    }
+    publish(n) {
+      this.lastChange = n;
+      for (let t of this.subscribers) t(n);
+    }
+    publishSynthetic(n, t, r, o) {
+      this.commitCounter += 1;
+      let i = this.packageRev - 1,
+        a = {
+          change: "model-change",
+          fromRevision: i < 0 ? 0 : i,
+          toRevision: this.packageRev,
+          commitId: `pkg-commit-${this.commitCounter}`,
+          origin: n,
+          dirty: [],
+          created: [...o],
+          deleted: [],
+          splitJoin: [],
+          dependencyKeys: [],
+          impact: t,
+          story: r,
+        };
+      return (this.publish(a), a);
+    }
+  };
+function v0(e, n) {
+  let r = (e.relationships.get(e.mainDocumentPart) ?? []).find(
+    (o) => o.id === n,
+  );
+  return r
+    ? r.type !== aN && r.type !== lN
+      ? { ok: false, reason: "wrong-relationship-type", detail: r.type }
+      : S0(e, r)
+    : { ok: false, reason: "dangling-relationship", detail: n };
+}
+function S0(e, n) {
+  let t = Ee(n);
+  if (t.mode === "External")
+    return { ok: false, reason: "external-relationship", detail: n.id };
+  if (!t.target.ok)
+    return {
+      ok: false,
+      reason: "bad-relationship-target",
+      detail: t.target.reason,
+    };
+  let r = e.parts.get(t.target.partName);
+  if (!r)
+    return { ok: false, reason: "missing-part", detail: t.target.partName };
+  let o = r.root.localName;
+  return o !== "hdr" && o !== "ftr"
+    ? { ok: false, reason: "not-a-story-part", detail: o || r.name }
+    : { ok: true, partName: r.name, part: r };
+}
+var A0 = 256,
+  M0 = 65535,
+  sN = 64;
+function wl(e, n) {
+  return e.length > n;
+}
+function dN(e) {
+  return typeof e != "string" || e.trim().length === 0
+    ? "invalid-author"
+    : wl(e, A0)
+      ? "resource-limit"
+      : Z(e)
+        ? null
+        : "invalid-author";
+}
+function cN(e) {
+  return typeof e != "string" || e.length === 0
+    ? "invalid-text"
+    : wl(e, M0)
+      ? "resource-limit"
+      : Z(e)
+        ? null
+        : "invalid-text";
+}
+function Kc(e) {
+  if (typeof e != "string") return { ok: false, rejection: "invalid-date" };
+  let n = e.trim();
+  if (wl(n, sN)) return { ok: false, rejection: "resource-limit" };
+  if (!Z(n)) return { ok: false, rejection: "invalid-date" };
+  let t = oi(n);
+  return t === null
+    ? { ok: false, rejection: "invalid-date" }
+    : wl(t, sN)
+      ? { ok: false, rejection: "resource-limit" }
+      : { ok: true, value: t };
+}
+function PH(e) {
+  if (e === void 0) return null;
+  let n = Kc(e);
+  return n.ok ? null : n.rejection;
+}
+function $c(e) {
+  switch (e) {
+    case "invalid-author":
+      return "invalid-author";
+    case "invalid-text":
+      return "invalid-text";
+    case "invalid-date":
+      return "invalid-property-value";
+    case "resource-limit":
+      return "resource-limit";
+  }
+}
+function uN(e, n) {
+  if (e.kind === "textValue") return e;
+  let t = n.get(e.id);
+  if (t !== void 0) return t;
+  let r = false,
+    o = [];
+  for (let i of e.children) {
+    let a = uN(i, n);
+    (a !== i && (r = true), o.push(a));
+  }
+  return r ? { ...e, children: o } : e;
+}
+function U0(e, n, t) {
+  let r = uN(e.root, n);
+  if (r.kind === "textValue")
+    return {
+      ok: false,
+      issues: [
+        { code: "known-node-invariant", path: e.root.id, nodeId: e.root.id },
+      ],
+    };
+  let o =
+    t === null
+      ? r
+      : {
+          ...r,
+          namespaceBindings: [
+            ...r.namespaceBindings,
+            { prefix: t, namespaceUri: W },
+          ],
+        };
+  return j(e, e.root.id, o, { deferValidation: true });
+}
+function fN(e, n, t) {
+  let r = new Map();
+  for (let i of n) {
+    if (i.stampParagraph === null) continue;
+    let a = r.get(i.commentsPartName);
+    (a || ((a = new Map()), r.set(i.commentsPartName, a)),
+      a.set(i.stampParagraph.id, {
+        paragraph: i.stampParagraph,
+        paraId: i.paraId,
+      }));
+  }
+  let o = e;
+  for (let [i, a] of r) {
+    let l = o.parts.get(i);
+    if (!l) return null;
+    let s = Yo(l.root),
+      d = s ?? "w14",
+      c = new Map();
+    for (let f of a.values())
+      c.set(f.paragraph.id, t(f.paragraph, f.paraId, d));
+    let u = U0(l, c, s === null ? d : null);
+    if (!u.ok) return null;
+    o = D(o, u.part);
+  }
+  return o;
+}
+function mN(e, n, t) {
+  let r = e.root.children.map((o) =>
+    o.kind === "textValue" ? o : (n.get(o.id) ?? o),
+  );
+  return F(e, e.root.id, [...r, ...t], { deferValidation: true });
+}
+var xN = "/word/comments.xml",
+  hN = "/word/commentsExtended.xml",
+  Yc =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
+  qc =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
+  L0 = [qc, "application/vnd.ms-word.commentsExtended+xml"],
+  yN =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
+  Zc =
+    "http://schemas.microsoft.com/office/2011/relationships/commentsExtended",
+  zt = "http://schemas.microsoft.com/office/word/2012/wordml";
+function No(e, n, t) {
+  for (let r of e.attributes)
+    if (r.localName === t && r.namespaceUri === n) return r.value;
+}
+function Oo(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: y,
+    localName: e,
+    prefix: "w",
+    value: n,
+  };
+}
+function wt(e, n, t, r, o, i, a, l = []) {
+  return {
+    id: e,
+    kind: n,
+    namespaceUri: t,
+    localName: o,
+    prefix: r,
+    namespaceBindings: l,
+    attributes: i,
+    children: a,
+  };
+}
+function ON(e, n, t, r, o) {
+  for (let i of ct(e, n)) {
+    if (i.type !== t) continue;
+    let a = Ve(n, i.rawTarget);
+    if (!a.ok) continue;
+    if (!e.parts.has(a.partName)) return a.partName;
+    let l = Xn(e, a.partName);
+    if (l !== null && (typeof r == "string" ? l === r : r.includes(l)))
+      return a.partName;
+  }
+  return o;
+}
+function Qc(e, n) {
+  return ON(e, n, yN, Yc, xN);
+}
+function NN(e, n) {
+  let t = hn(e, n),
+    r = Xa(e, n, t).extended;
+  return r !== null ? r : ON(e, n, Zc, L0, hN);
+}
+function B0(e) {
+  if (!e) return "0";
+  let n = -1,
+    t = (r) => {
+      if (r.kind !== "textValue") {
+        if (r.kind === "comment") {
+          let o = No(r, y, "id");
+          if (o !== void 0 && /^\d{1,10}$/.test(o)) {
+            let i = Number(o);
+            Number.isSafeInteger(i) && i <= 2147483647 && i > n && (n = i);
+          }
+        }
+        for (let o of r.children) t(o);
+      }
+    };
+  return (t(e.root), String(n + 1));
+}
+function pN(e) {
+  let n = new Set();
+  for (let t of e.parts.values()) for (let r of Mn(t.root)) n.add(r);
+  return n;
+}
+function F0(e, n) {
+  if (!e) return null;
+  let t = null,
+    r = (o) => {
+      if (!(t !== null || o.kind === "textValue")) {
+        if (o.kind === "comment" && No(o, y, "id") === n) {
+          for (let i = o.children.length - 1; i >= 0; i -= 1) {
+            let a = o.children[i];
+            if (a.kind !== "paragraph") continue;
+            let l = No(a, W, "paraId");
+            l !== void 0 && Yn(l) && (t = l.toUpperCase());
+            return;
+          }
+          return;
+        }
+        for (let i of o.children) r(i);
+      }
+    };
+  return (r(e.root), t);
+}
+function V0(e, n) {
+  if (!e) return null;
+  let t = null,
+    r = (o) => {
+      if (!(t !== null || o.kind === "textValue")) {
+        if (o.kind === "comment" && No(o, y, "id") === n) {
+          for (let i = o.children.length - 1; i >= 0; i -= 1) {
+            let a = o.children[i];
+            if (a.kind === "paragraph") {
+              t = a;
+              return;
+            }
+          }
+          return;
+        }
+        for (let i of o.children) r(i);
+      }
+    };
+  return (r(e.root), t);
+}
+function kN(e) {
+  let n = Yo(e.root);
+  if (n !== null) return { part: e, prefix: n };
+  let t = {
+    ...e.root,
+    namespaceBindings: [
+      ...e.root.namespaceBindings,
+      { prefix: "w14", namespaceUri: W },
+    ],
+  };
+  return { part: { ...e, root: t }, prefix: "w14" };
+}
+function bN(e, n, t) {
+  return wt(
+    e.id,
+    "paragraph",
+    e.namespaceUri,
+    e.prefix ?? "w",
+    e.localName,
+    [
+      ...e.attributes.filter(
+        (r) => !(r.namespaceUri === W && r.localName === "paraId"),
+      ),
+      {
+        kind: "genericExtension",
+        namespaceUri: W,
+        localName: "paraId",
+        prefix: t,
+        value: n,
+      },
+    ],
+    e.children,
+    e.namespaceBindings,
+  );
+}
+function W0(e, n, t, r) {
+  let o = e.parts.get(n);
+  if (!o) return e;
+  let i = kN(o),
+    a = E(i.part, t);
+  if (!a || a.kind !== "paragraph") return D(e, i.part);
+  let l = j(i.part, a.id, bN(a, r, i.prefix), { deferValidation: true });
+  return D(e, l.ok ? l.part : i.part);
+}
+function H0(e, n, t, r) {
+  let o = `${xN}#comment-${e}`,
+    i = t.text !== t.text.trim(),
+    a = wt(
+      `${o}.t`,
+      "text",
+      y,
+      "w",
+      "t",
+      i
+        ? [
+            {
+              kind: "xmlSpace",
+              namespaceUri: J,
+              localName: "space",
+              prefix: "xml",
+              value: "preserve",
+            },
+          ]
+        : [],
+      [{ id: `${o}.tv`, kind: "textValue", value: t.text }],
+    ),
+    l = wt(
+      `${o}.rPr`,
+      "runProperties",
+      y,
+      "w",
+      "rPr",
+      [],
+      [
+        wt(
+          `${o}.rStyle`,
+          "generic",
+          y,
+          "w",
+          "rStyle",
+          [Oo("val", "CommentReference")],
+          [],
+        ),
+      ],
+    ),
+    s = wt(`${o}.r`, "run", y, "w", "r", [], [l, a]),
+    d = wt(
+      `${o}.pPr`,
+      "paragraphProperties",
+      y,
+      "w",
+      "pPr",
+      [],
+      [
+        wt(
+          `${o}.pStyle`,
+          "generic",
+          y,
+          "w",
+          "pStyle",
+          [Oo("val", "CommentText")],
+          [],
+        ),
+      ],
+    ),
+    c = wt(
+      `${o}.p`,
+      "paragraph",
+      y,
+      "w",
+      "p",
+      [
+        {
+          kind: "genericExtension",
+          namespaceUri: W,
+          localName: "paraId",
+          prefix: r,
+          value: n,
+        },
+      ],
+      [d, s],
+    );
+  return wt(
+    o,
+    "comment",
+    y,
+    "w",
+    "comment",
+    [
+      Oo("id", e),
+      Oo("author", t.author),
+      ...(t.initials === void 0 ? [] : [Oo("initials", t.initials)]),
+      ...(t.date === void 0 ? [] : [Oo("date", t.date)]),
+    ],
+    [c],
+  );
+}
+function Gc(e, n) {
+  let t = re(n, { name: e, contentType: "application/xml" });
+  return t.ok ? t.part.root : null;
+}
+function jH(e, n) {
+  for (let h of [dN(n.author), cN(n.text)])
+    if (h) return { ok: false, reason: $c(h) };
+  let t;
+  if (n.date !== void 0) {
+    let h = Kc(n.date);
+    if (!h.ok) return { ok: false, reason: $c(h.rejection) };
+    t = h.value;
+  }
+  let r = { ...n, ...(t === void 0 ? {} : { date: t }) },
+    o = e.package,
+    i = e.part.name,
+    a = Qc(o, i),
+    l = NN(o, i),
+    s = o.parts.get(a),
+    d = B0(s),
+    c = mn(`${a}#${d}`, pN(o)),
+    u = n.replyToCommentId === void 0 ? null : F0(s, n.replyToCommentId),
+    f =
+      n.replyToCommentId !== void 0 && u === null
+        ? V0(s, n.replyToCommentId)
+        : null;
+  if (n.replyToCommentId !== void 0 && u === null && !f)
+    return { ok: false, reason: "unknown-revision" };
+  let m = f
+      ? mn(`${a}#parent-${n.replyToCommentId}`, new Set([...pN(o), c]))
+      : null,
+    g = u ?? m,
+    p = n.anchor.endParagraphId ?? n.anchor.paragraphId,
+    x = e.transact((h) => {
+      (h.applyPackage((N) => {
+        if (N.parts.has(a)) return N;
+        let k = Gc(a, `<w:comments xmlns:w="${y}"/>`);
+        if (!k) return N;
+        let O = Qt(N, a, k, Yc);
+        return ut(O, i, yN, "comments.xml").pkg;
+      }),
+        f && m && h.applyPackage((N) => W0(N, a, f.id, m)),
+        h.applyPackage((N) => {
+          let k = N.parts.get(a);
+          if (!k) return N;
+          let O = kN(k),
+            b = _(
+              O.part,
+              O.part.root.id,
+              O.part.root.children.length,
+              [H0(d, c, r, O.prefix)],
+              { deferValidation: true },
+            );
+          return b.ok ? D(N, b.part) : N;
+        }),
+        g !== null &&
+          (h.applyPackage((N) => {
+            if (N.parts.has(l)) return N;
+            let k = Gc(l, `<w15:commentsEx xmlns:w15="${zt}"/>`);
+            if (!k) return N;
+            let O = Qt(N, l, k, qc);
+            return ut(O, i, Zc, "commentsExtended.xml").pkg;
+          }),
+          h.applyPackage((N) => {
+            let k = N.parts.get(l);
+            if (!k) return N;
+            let b = [
+                ...(j0(k).has(g.toUpperCase())
+                  ? []
+                  : [Xc(`${l}#ex-${g}`, g, void 0, false)]),
+                Xc(`${l}#ex-${c}`, c, g, false),
+              ],
+              P = _(k, k.root.id, k.root.children.length, b, {
+                deferValidation: true,
+              });
+            return P.ok ? D(N, P.part) : N;
+          })),
+        h.applyTo(i, {
+          op: "insertCommentMarker",
+          paragraphId: p,
+          offset: n.anchor.end,
+          commentId: d,
+          marker: "reference",
+        }),
+        h.applyTo(i, {
+          op: "insertCommentMarker",
+          paragraphId: p,
+          offset: n.anchor.end,
+          commentId: d,
+          marker: "end",
+        }),
+        h.applyTo(i, {
+          op: "insertCommentMarker",
+          paragraphId: n.anchor.paragraphId,
+          offset: n.anchor.start,
+          commentId: d,
+          marker: "start",
+        }));
+    });
+  return x.ok
+    ? { ok: true, commentId: d, change: x.change }
+    : { ok: false, reason: x.reason };
+}
+function zc(e) {
+  for (let n = e.children.length - 1; n >= 0; n -= 1) {
+    let t = e.children[n];
+    if (t.kind === "paragraph") return t;
+  }
+  return null;
+}
+function gN(e) {
+  let n = zc(e);
+  if (!n) return null;
+  let t = No(n, W, "paraId");
+  return t !== void 0 && Yn(t) ? t.toUpperCase() : null;
+}
+function j0(e) {
+  let n = new Map();
+  if (!e) return n;
+  let t = (r) => {
+    if (r.kind !== "textValue") {
+      if (r.namespaceUri === zt && r.localName === "commentEx") {
+        let o = No(r, zt, "paraId");
+        o !== void 0 && Yn(o) && n.set(o.toUpperCase(), r);
+      }
+      for (let o of r.children) t(o);
+    }
+  };
+  return (t(e.root), n);
+}
+function _i(e, n) {
+  return {
+    kind: "genericExtension",
+    namespaceUri: zt,
+    localName: e,
+    prefix: "w15",
+    value: n,
+  };
+}
+function K0(e, n) {
+  return {
+    id: e.id,
+    kind: "generic",
+    namespaceUri: e.namespaceUri,
+    localName: e.localName,
+    ...(e.prefix === void 0 ? {} : { prefix: e.prefix }),
+    namespaceBindings: e.namespaceBindings,
+    attributes: n,
+    children: e.children,
+  };
+}
+function $0(e, n, t) {
+  let r = [],
+    o = false,
+    i = false;
+  for (let a of e.attributes) {
+    if (a.namespaceUri === zt && a.localName === "done") {
+      ((o = true),
+        r.push({
+          kind: "genericExtension",
+          namespaceUri: a.namespaceUri,
+          localName: a.localName,
+          ...(a.prefix === void 0 ? {} : { prefix: a.prefix }),
+          value: t ? "1" : "0",
+        }));
+      continue;
+    }
+    (a.namespaceUri === zt && a.localName === "paraIdParent" && (i = true),
+      r.push(a));
+  }
+  return (
+    !i && n !== void 0 && r.push(_i("paraIdParent", n)),
+    o || r.push(_i("done", t ? "1" : "0")),
+    K0(e, r)
+  );
+}
+function Xc(e, n, t, r) {
+  return {
+    id: e,
+    kind: "generic",
+    namespaceUri: zt,
+    localName: "commentEx",
+    prefix: "w15",
+    namespaceBindings: [],
+    attributes: [
+      _i("paraId", n),
+      ...(t === void 0 ? [] : [_i("paraIdParent", t)]),
+      _i("done", r ? "1" : "0"),
+    ],
+    children: [],
+  };
+}
+function KH(e, n, t) {
+  return G0(e, n, t, Ot());
+}
+function G0(e, n, t, r) {
+  let o = e.package,
+    i = e.part.name;
+  if (hn(o, i) === null) return { ok: false, reason: "unknown-comment" };
+  let l = yd(o, n, { storyPartName: i }, r);
+  if (!l.ok) return { ok: false, reason: "unknown-comment" };
+  let s = Qg(o, r);
+  if (s.truncated || r.truncated)
+    return { ok: false, reason: "unknown-comment" };
+  let d = s.used,
+    c = new Map(),
+    u = [];
+  for (let p of l.ids) {
+    let x = l.records.get(p);
+    if (!x) return { ok: false, reason: "unknown-comment" };
+    if (!zc(x.node)) return { ok: false, reason: "unknown-comment" };
+    let N = gN(x.node),
+      k = N ?? mn(`${x.partName}#done-${p}`, d);
+    (N === null && d.add(k), c.set(p, k));
+  }
+  for (let p of l.ids) {
+    let x = l.records.get(p),
+      h = zc(x.node),
+      N = c.get(p),
+      k = gN(x.node),
+      O = l.parentCommentIdByChildId.get(p),
+      b =
+        l.parentParaIdByCommentId.get(p) ?? (O === void 0 ? void 0 : c.get(O)),
+      P = l.commentExByParaId.get(N);
+    u.push({
+      paraId: N,
+      stampParagraph: k === null ? h : null,
+      commentsPartName: x.partName,
+      parentParaId: b,
+      existing: P?.node,
+      existingParentParaId: P?.parentParaId,
+      existingDone: P?.done ?? false,
+    });
+  }
+  if (u.length === 0) return { ok: false, reason: "unknown-comment" };
+  if (u.every((p) => p.existingDone === t))
+    return { ok: true, changed: false, change: null };
+  let f = l.extendedPartName ?? hN,
+    m = l.extendedPartName === null,
+    g = e.transact((p) => {
+      p.applyPackage((x) => {
+        let h = fN(x, u, bN);
+        if (h === null) return x;
+        let N = h;
+        if (!N.parts.has(f)) {
+          let R = Gc(f, `<w15:commentsEx xmlns:w15="${zt}"/>`);
+          if (!R) return x;
+          let w = Qt(N, f, R, qc);
+          N = m ? ut(w, i, Zc, "commentsExtended.xml").pkg : w;
+        }
+        let k = N.parts.get(f);
+        if (!k) return x;
+        let O = new Map(),
+          b = [];
+        for (let R of u) {
+          let w = R.existingParentParaId ?? R.parentParaId;
+          R.existing
+            ? O.set(R.existing.id, $0(R.existing, w, t))
+            : b.push(Xc(`${f}#done-${R.paraId}`, R.paraId, w, t));
+        }
+        let P = mN(k, O, b);
+        return P.ok ? D(N, P.part) : x;
+      });
+    });
+  return g.ok
+    ? { ok: true, changed: true, change: g.change }
+    : { ok: false, reason: g.reason };
+}
+function $H(e, n) {
+  let t = Qc(e, n);
+  return e.parts.has(t) && Xn(e, t) === Yc;
+}
+function GH(e, n) {
+  return Qc(e, n);
+}
+function zH(e, n) {
+  return NN(e, n);
+}
+var z0 = 256 * 1024,
+  X0 = 4096;
+function ej(e, n, t) {
+  let r = n.payload,
+    o = e.part.name,
+    i = t ?? o;
+  if (r) {
+    if (r.data.length > z0)
+      return { ok: false, reason: "payload-too-large", detail: "data" };
+    if (r.label.length > X0)
+      return { ok: false, reason: "payload-too-large", detail: "label" };
+  }
+  let a = new Set(Pe(e.part.root).map((f) => f.node.id)),
+    l = n.replaceControlId === void 0 ? [] : PN(e, o, n.replaceControlId),
+    s = null,
+    d,
+    c = e.transact((f) => {
+      if (n.replaceControlId !== void 0) {
+        f.apply({
+          op: "removeContentControl",
+          controlId: n.replaceControlId,
+          keepContent: false,
+        });
+        for (let p of l) f.applyPackage((x) => Rd(x, p.partName, p.nodeId));
+      }
+      let m = n.replaceUntil;
+      if (m !== void 0 && m <= n.offset) {
+        ((s = "invalid-range"), (d = "replaceUntil must be past offset"));
+        return;
+      }
+      if (
+        (m !== void 0 &&
+          f.apply({
+            op: "deleteText",
+            paragraphId: n.paragraphId,
+            start: n.offset,
+            end: m,
+          }),
+        !r)
+      ) {
+        f.apply({
+          op: "insertInlineContentControl",
+          paragraphId: n.paragraphId,
+          offset: n.offset,
+          tag: n.tag,
+          text: n.text,
+          ...(n.alias === void 0 ? {} : { alias: n.alias }),
+          ...(n.lock === void 0 ? {} : { lock: n.lock }),
+        });
+        return;
+      }
+      let g = null;
+      (f.applyPackage((p) => {
+        let x = Nx(p, i, r.namespaceUri, r.rootLocalName);
+        if (!x.part)
+          return (
+            (s = "store-not-authored"),
+            (d = `no customXml store could be created for ${r.namespaceUri}. The namespace must be free of control characters and quotes, the root name must be an XML name, and a store this document already carries for that namespace must use the same root name (${r.rootLocalName})`),
+            p
+          );
+        if (((g = Sx(x.part, r.rootLocalName, r.nodeId)), !g))
+          return (
+            (s = "unaddressable-payload"),
+            (d = `the node id ${JSON.stringify(r.nodeId)} or the namespace ${JSON.stringify(r.namespaceUri)} cannot be written into an XPath. Ids and root names must match [A-Za-z_][\\w.-]{0,127}; a namespace may not contain a quote, an angle bracket or an ampersand`),
+            p
+          );
+        let h = Ex(x.pkg, x.part.partName, {
+          id: r.nodeId,
+          label: r.label,
+          data: r.data,
+        });
+        return Rx(h, x.part.partName, r.nodeId)
+          ? h
+          : ((s = "store-not-authored"),
+            (d = "the payload node could not be written into the store"),
+            p);
+      }),
+        !(s !== null || !g) &&
+          f.apply({
+            op: "insertInlineContentControl",
+            paragraphId: n.paragraphId,
+            offset: n.offset,
+            tag: n.tag,
+            text: n.text,
+            ...(n.alias === void 0 ? {} : { alias: n.alias }),
+            ...(n.lock === void 0 ? {} : { lock: n.lock }),
+            dataBinding: g,
+          }));
+    });
+  if (s !== null)
+    return { ok: false, reason: s, ...(d === void 0 ? {} : { detail: d }) };
+  if (!c.ok)
+    return {
+      ok: false,
+      reason: c.reason,
+      ...(c.detail === void 0 ? {} : { detail: c.detail }),
+    };
+  let u = Y0(e, a);
+  return { ok: true, change: c.change, ...(u === void 0 ? {} : { nodeId: u }) };
+}
+function Y0(e, n) {
+  for (let t of Pe(e.part.root)) if (!n.has(t.node.id)) return t.node.id;
+}
+function PN(e, n, t) {
+  let r = Pe(e.part.root).find((i) => i.node.id === t);
+  if (!r) return [];
+  let o = [];
+  for (let i of gi(e.package, n)) {
+    let a = el(r.node, i.itemId);
+    a !== null && o.push({ partName: i.partName, nodeId: a });
+  }
+  return o;
+}
+function nj(e, n) {
+  let t = e.part.name,
+    r = PN(e, t, n),
+    o = e.transact((i) => {
+      i.apply({ op: "removeContentControl", controlId: n, keepContent: false });
+      for (let a of r) i.applyPackage((l) => Rd(l, a.partName, a.nodeId));
+    });
+  return o.ok
+    ? { ok: true, change: o.change }
+    : {
+        ok: false,
+        reason: o.reason,
+        ...(o.detail === void 0 ? {} : { detail: o.detail }),
+      };
+}
+function tj(e, n, t) {
+  if (!e.parts.has(n) || t.length === 0)
+    return { ok: true, pkg: e, removed: [] };
+  let r = e,
+    o = [];
+  for (let i of t) {
+    let a = pi(r, n, i);
+    if (!a) continue;
+    let l = Mx(r, a.itemId),
+      s = Ix(r, a.partName, l);
+    if (s.pkg === r && yi(r, a.partName).some((d) => !l.has(d.id)))
+      return {
+        ok: false,
+        reason: `the payload store for ${i} refused the sweep`,
+      };
+    ((r = s.pkg), o.push(...s.removed));
+  }
+  return { ok: true, pkg: r, removed: o };
+}
+function rj(e, n) {
+  let t = new Map(),
+    r = e.parts.get(n);
+  if (!r) return t;
+  let o = gi(e, n);
+  if (o.length === 0) return t;
+  let i = o.map((a) => ({
+    itemId: a.itemId,
+    nodes: new Map(yi(e, a.partName).map((l) => [l.id, l])),
+  }));
+  for (let a of Pe(r.root))
+    for (let l of i) {
+      let s = el(a.node, l.itemId);
+      if (s === null) continue;
+      let d = l.nodes.get(s);
+      if (d) {
+        t.set(a.node.id, { nodeId: s, label: d.label, data: d.data });
+        break;
+      }
+    }
+  return t;
+}
+function oj(e, n, t) {
+  let r = new Map(),
+    o = pi(e, n, t);
+  if (!o) return r;
+  for (let i of yi(e, o.partName))
+    r.set(i.id, { label: i.label, data: i.data });
+  return r;
+}
+var q0 = new Set(Wt),
+  Jc = new Set(Vt);
+function uj(e) {
+  return Jc.has(e);
+}
+function Rl(e, n, t) {
+  return !e || e.kind === "textValue"
+    ? void 0
+    : e.children.find(
+        (o) =>
+          o.kind === n ||
+          (o.kind === "generic" && o.localName === t && o.namespaceUri === y),
+      );
+}
+function eu(e, n) {
+  if (!e || e.kind === "textValue") return [];
+  let t = [];
+  for (let r of e.children) {
+    if (r.kind === "textValue" || !n.has(r.localName)) continue;
+    let o = Ll();
+    for (let i of r.attributes) o[i.localName] = i.value;
+    t.push(
+      Object.keys(o).length > 0
+        ? { localName: r.localName, attributes: o }
+        : { localName: r.localName },
+    );
+  }
+  return t;
+}
+function fj(e, n) {
+  let t = E(e, n);
+  return eu(Rl(t, "paragraphProperties", "pPr"), q0);
+}
+function mj(e, n) {
+  let t = E(e, n),
+    r = Rl(t, "paragraphProperties", "pPr");
+  return eu(Rl(r, "runProperties", "rPr"), Jc);
+}
+function Z0(e, n) {
+  let t = Array.isArray(n) ? n : [n],
+    r = new Set(t.map((i) => i.localName));
+  return [...e.filter((i) => !r.has(i.localName)), ...t];
+}
+function wN(e) {
+  let n = new Map();
+  for (let t of Y(e)) {
+    let r =
+      t.formatRunIds && t.formatRunIds.length > 0
+        ? t.formatRunIds
+        : t.runId
+          ? [t.runId]
+          : [];
+    for (let o of r) {
+      let i = n.get(o);
+      i
+        ? ((i.start = Math.min(i.start, t.start)),
+          (i.end = Math.max(i.end, t.end)))
+        : n.set(o, { start: t.start, end: t.end });
+    }
+  }
+  return n;
+}
+function Q0(e) {
+  let n = new Set();
+  for (let t of Y(e))
+    if (t.formatRunIds) for (let r of t.formatRunIds) n.add(r);
+  return n;
+}
+function pj(e, n, t, r, o) {
+  let i = E(e, n);
+  if (!i || i.kind !== "paragraph") return [];
+  let a = [],
+    l = wN(i),
+    s = Q0(i),
+    d = (c) => {
+      if (c.kind === "hyperlink") {
+        for (let g of c.children) d(g);
+        return;
+      }
+      if (
+        c.kind === "fldSimple" ||
+        (c.kind === "generic" && c.localName === "fldSimple")
+      ) {
+        for (let g of c.children) d(g);
+        return;
+      }
+      if (c.kind !== "run") return;
+      let u = l.get(c.id);
+      if (!u || u.end <= u.start) return;
+      let f = Math.max(u.start, t),
+        m = Math.min(u.end, r);
+      f >= m ||
+        a.push({
+          start: f,
+          end: m,
+          properties: Z0(eu(Rl(c, "runProperties", "rPr"), Jc), o),
+          ...(s.has(c.id) ? { targetRunIds: [c.id] } : {}),
+        });
+    };
+  for (let c of i.children) d(c);
+  return a;
+}
+function gj(e, n, t, r) {
+  let o = E(e, n);
+  if (!o || o.kind !== "paragraph") return [];
+  let i = wN(o),
+    a = [],
+    l = (s) => {
+      if (s.kind === "hyperlink") {
+        for (let u of s.children) l(u);
+        return;
+      }
+      if (
+        s.kind === "fldSimple" ||
+        (s.kind === "generic" && s.localName === "fldSimple")
+      ) {
+        for (let u of s.children) l(u);
+        return;
+      }
+      if (s.kind !== "run") return;
+      let d = i.get(s.id);
+      if (!d || d.end <= d.start) return;
+      (r > t
+        ? Math.max(d.start, t) < Math.min(d.end, r)
+        : d.start <= t && t < d.end) && a.push(s);
+    };
+  for (let s of o.children) l(s);
+  return a;
+}
+function nu(e) {
+  let n = EN.get(e.root);
+  if (n) return n;
+  let t = new Map(),
+    r = (a) => {
+      let l = RN.get(a);
+      if (l) {
+        for (let [d, c] of l) t.set(d, c);
+        return;
+      }
+      let s = new Map();
+      (eM(a, s), RN.set(a, s));
+      for (let [d, c] of s) t.set(d, c);
+    },
+    o = (a, l) => {
+      if (!(a.kind === "textValue" || l > 64)) {
+        if (a.kind === "paragraph") {
+          r(a);
+          return;
+        }
+        for (let s of a.children) o(s, l + 1);
+      }
+    };
+  o(e.root, 0);
+  let i = (a, l) => {
+    if (!(a.kind === "textValue" || l > 64)) {
+      if (a.kind === "paragraph") {
+        let s = IN.get(a);
+        if (!s) {
+          let d = [];
+          (CN(a, 0, d), (s = d), IN.set(a, s));
+        }
+        for (let [d, c] of s) t.set(d, c);
+        return;
+      }
+      if (a.kind === "tableRow") {
+        let s = El.get(a);
+        s || ((s = TN(a)), El.set(a, s));
+        for (let [d, c] of s) t.set(d, c);
+      }
+      for (let s of a.children) i(s, l + 1);
+    }
+  };
+  return (i(e.root, 0), EN.set(e.root, t), t);
+}
+function CN(e, n, t) {
+  if (!(e.kind === "textValue" || n > 64)) {
+    if (e.kind === "tableRow") {
+      let r = El.get(e);
+      r || ((r = TN(e)), El.set(e, r));
+      for (let o of r) t.push(o);
+    }
+    for (let r of e.children) CN(r, n + 1, t);
+  }
+}
+function TN(e) {
+  let n = null,
+    t = (a, l) => {
+      if (!(n || a.kind === "textValue" || l > 64)) {
+        if (a.kind === "paragraph") {
+          n = a;
+          return;
+        }
+        for (let s of a.children) t(s, l + 1);
+      }
+    };
+  if ((t(e, 0), !n)) return J0;
+  let r = { paragraphId: n.id, start: 0, end: 0 },
+    o = [],
+    i = (a, l, s) => {
+      if (a.kind === "textValue" || s > 64 || a.kind === "paragraph") return;
+      let d = l === "trPr" && (a.localName === "ins" || a.localName === "del"),
+        c =
+          l === "tcPr" &&
+          (a.localName === "cellIns" || a.localName === "cellDel");
+      (d || c) && o.push([a.id, r]);
+      for (let u of a.children) i(u, a.localName, s + 1);
+    };
+  return (i(e, void 0, 0), o);
+}
+var J0 = [],
+  RN = new WeakMap(),
+  EN = Bt(8),
+  El = new WeakMap(),
+  IN = new WeakMap();
+function eM(e, n) {
+  let t = _e(e),
+    r = (a, l, s, d) => {
+      if (!(a.kind === "textValue" || d > 64)) {
+        n.set(a.id, { paragraphId: e.id, start: l, end: s });
+        for (let c of a.children) r(c, l, s, d + 1);
+      }
+    },
+    o = (a, l) => {
+      if (a.kind === "textValue" || l > 64) return;
+      let s = t.spanOf(a);
+      if (a.kind === "run") {
+        if (!s) return;
+        n.set(a.id, { paragraphId: e.id, start: s.start, end: s.end });
+        for (let d of a.children)
+          d.kind === "runProperties" && r(d, s.start, s.end, l + 1);
+        return;
+      }
+      s && n.set(a.id, { paragraphId: e.id, start: s.start, end: s.end });
+      for (let d of a.children) o(d, l + 1);
+    };
+  for (let a of e.children) a.kind !== "paragraphProperties" && o(a, 0);
+  let i = e.children.find((a) => a.kind === "paragraphProperties");
+  i && r(i, t.length, t.length, 0);
+}
+var nM = {
+  ins: "insert",
+  del: "delete",
+  moveFrom: "moveFrom",
+  moveTo: "moveTo",
+};
+function Rj(e) {
+  return e.kind === "comment" ? `comment-${e.id}` : `revision-${e.id}`;
+}
+function Ej(e) {
+  let n = [],
+    t = (r) => {
+      if (r.kind === "textValue") {
+        n.push(r.value);
+        return;
+      }
+      for (let o of r.children) t(o);
+    };
+  for (let r of e.blocks) t(r);
+  return n.join("");
+}
+function Ij(e) {
+  if (e.initials && e.initials.trim().length > 0) return e.initials.trim();
+  let n = e.author.trim().split(/\s+/).filter(Boolean);
+  return n.length === 0
+    ? "?"
+    : n
+        .slice(0, 2)
+        .map((t) => t[0].toUpperCase())
+        .join("");
+}
+function Il(e, n) {
+  for (let t of e.attributes)
+    if (t.localName === n && t.namespaceUri === y) return t.value;
+}
+function Di(e) {
+  if (e.kind === "textValue") return e.value;
+  let n = "";
+  for (let t of e.children) n += Di(t);
+  return n;
+}
+function tu(e) {
+  return `${e.id}\0${e.author}\0${e.date ?? ""}`;
+}
+var tM = {
+  revisionInsert: "insert",
+  revisionDelete: "delete",
+  revisionMoveFrom: "moveFrom",
+  revisionMoveTo: "moveTo",
+};
+function rM(e) {
+  let n = e.root.kind !== "paragraph";
+  if (n) {
+    let r = vN.get(e.root);
+    if (r && r.name === e.name) return r.items;
+  }
+  let t = oM(e);
+  return (n && vN.set(e.root, { name: e.name, items: t }), t);
+}
+var vN = Bt(8);
+function oM(e) {
+  let n = nu(e),
+    t = new Map();
+  for (let o of Bx(e)) {
+    let i = Il(o.node, "id");
+    if (i === void 0) continue;
+    let a = Il(o.node, "author") ?? "",
+      l = Il(o.node, "author") === void 0,
+      s = Il(o.node, "date"),
+      d = s === void 0 ? { id: i, author: a } : { id: i, author: a, date: s },
+      c = o.propertyChange
+        ? "format"
+        : o.paragraphMark
+          ? "paragraphMark"
+          : (tM[o.node.kind] ?? "structural"),
+      u = o.paragraphMark ? nM[o.node.localName] : void 0,
+      f = n.get(o.node.id),
+      m = f
+        ? {
+            partName: e.name,
+            start: { paragraphId: f.paragraphId, offset: f.start },
+            end: { paragraphId: f.paragraphId, offset: f.end },
+          }
+        : null,
+      g =
+        c === "structural"
+          ? `structural\0${tu(d)}`
+          : `${o.node.localName}\0${tu(d)}`,
+      p = t.get(g);
+    if (p) {
+      (m &&
+        !p.ranges.some(
+          (x) =>
+            x.partName === m.partName &&
+            x.start.paragraphId === m.start.paragraphId &&
+            x.start.offset === m.start.offset &&
+            x.end.paragraphId === m.end.paragraphId &&
+            x.end.offset === m.end.offset,
+        ) &&
+        p.ranges.push(m),
+        c !== "structural" &&
+          p.revisionKind === "structural" &&
+          (p.revisionKind = c),
+        ((c === "insert" && p.revisionKind === "delete") ||
+          (c === "delete" && p.revisionKind === "insert") ||
+          p.revisionKind === "replace") &&
+          (p.revisionKind = "replace"),
+        (p.readOnly ||= o.refused || l),
+        o.nesting > p.nesting && (p.nesting = o.nesting),
+        c === "delete" || c === "moveFrom"
+          ? (p.deletedText += Di(o.node))
+          : c !== "format" && c !== "paragraphMark" && (p.text += Di(o.node)));
+      continue;
+    }
+    t.set(g, {
+      address: d,
+      revisionKind: c,
+      ...(u ? { markDirection: u } : {}),
+      author: a,
+      ...(s === void 0 ? {} : { date: s }),
+      text:
+        c === "format" ||
+        c === "paragraphMark" ||
+        c === "delete" ||
+        c === "moveFrom"
+          ? ""
+          : Di(o.node),
+      deletedText: c === "delete" || c === "moveFrom" ? Di(o.node) : "",
+      ranges: m ? [m] : [],
+      nesting: o.nesting,
+      readOnly: o.refused || l,
+    });
+  }
+  let r = [...t.values()].map((o) => ({
+    kind: "revision",
+    id: `${o.revisionKind}-${e.name}\0${tu(o.address)}`,
+    address: o.address,
+    addresses: [o.address],
+    revisionKind: o.revisionKind,
+    ...(o.markDirection ? { markDirection: o.markDirection } : {}),
+    author: o.author,
+    ...(o.date === void 0 ? {} : { date: o.date }),
+    text: o.revisionKind === "replace" ? o.text : o.text || o.deletedText,
+    replacedText: o.revisionKind === "replace" ? o.deletedText : "",
+    ranges: o.ranges,
+    nesting: o.nesting,
+    readOnly: o.readOnly,
+    replyIds: [],
+  }));
+  return iM(r, ru(e));
+}
+function iM(e, n) {
+  let t = aM(e),
+    r = t.filter(
+      (s) =>
+        (s.revisionKind === "insert" || s.revisionKind === "delete") &&
+        !s.readOnly &&
+        s.ranges.length > 0,
+    ),
+    o = new Set(),
+    i = new Map(),
+    a = new Map();
+  for (let s of r) {
+    if (s.revisionKind !== "insert") continue;
+    let d = s.ranges[0].start,
+      c = `${d.paragraphId}\0${d.offset}`,
+      u = a.get(c);
+    u ? u.push(s) : a.set(c, [s]);
+  }
+  for (let s of r) {
+    if (s.revisionKind !== "delete" || o.has(s.id)) continue;
+    let d = s.ranges[s.ranges.length - 1].end,
+      c = a.get(`${d.paragraphId}\0${d.offset}`) ?? [],
+      u =
+        c.length > 1
+          ? [...c].sort(
+              (f, m) =>
+                (f.text.length > 0 ? 0 : 1) - (m.text.length > 0 ? 0 : 1),
+            )
+          : c;
+    for (let f of u) {
+      if (o.has(f.id) || f.author !== s.author) continue;
+      (o.add(s.id), o.add(f.id));
+      let m = uM(s.ranges[0], f.ranges[0], n) ? s : f,
+        g = cM(s.date, f.date);
+      i.set(s.id, {
+        ...m,
+        id: `replace-${s.id}-${f.id}`,
+        revisionKind: "replace",
+        ...(g === void 0 ? {} : { date: g }),
+        addresses: dM([...s.addresses, ...f.addresses]),
+        text: f.text,
+        replacedText: s.text,
+        ranges: [...s.ranges, ...f.ranges],
+        replacedRangeCount: s.ranges.length,
+        readOnly: s.readOnly || f.readOnly,
+      });
+      break;
+    }
+  }
+  let l = [];
+  for (let s of t) {
+    let d = i.get(s.id);
+    if (d) {
+      l.push(d);
+      continue;
+    }
+    o.has(s.id) || l.push(s);
+  }
+  return l;
+}
+function aM(e) {
+  let n = e.filter(
+    (s) =>
+      (s.revisionKind === "insert" || s.revisionKind === "delete") &&
+      !s.readOnly &&
+      s.ranges.length > 0,
+  );
+  if (n.length < 2) return e;
+  let t = (s, d) =>
+      `${s.revisionKind}\0${s.author}\0${d.paragraphId}\0${d.offset}`,
+    r = new Map(),
+    o = new Set();
+  for (let s of n)
+    (r.set(t(s, s.ranges[0].start), s),
+      o.add(t(s, s.ranges[s.ranges.length - 1].end)));
+  let i = new Set(),
+    a = new Map();
+  for (let s of n) {
+    if (i.has(s.id) || o.has(t(s, s.ranges[0].start))) continue;
+    let d = [s],
+      c = s;
+    for (;;) {
+      let u = r.get(t(c, c.ranges[c.ranges.length - 1].end));
+      if (!u || u === c || i.has(u.id)) break;
+      (i.add(u.id), d.push(u), (c = u));
+    }
+    d.length > 1 && a.set(s.id, lM(d));
+  }
+  if (a.size === 0) return e;
+  let l = [];
+  for (let s of e) i.has(s.id) || l.push(a.get(s.id) ?? s);
+  return l;
+}
+function lM(e) {
+  let n = e[0],
+    t = [...n.addresses],
+    r = [...n.ranges],
+    o = n.text,
+    i = n.date;
+  for (let a of e.slice(1)) {
+    for (let l of a.addresses) t.some((s) => UN(s, l)) || t.push(l);
+    for (let l of a.ranges) r.push(l);
+    ((o += a.text), (i = sM(i, a.date)));
+  }
+  return {
+    ...n,
+    id: e.map((a) => a.id).join("+"),
+    addresses: t,
+    ranges: r,
+    text: o,
+    ...(i === void 0 ? {} : { date: i }),
+  };
+}
+function sM(e, n) {
+  if (e === void 0) return n;
+  if (n === void 0) return e;
+  let t = Date.parse(e),
+    r = Date.parse(n);
+  return Number.isNaN(t) || Number.isNaN(r) ? e : r > t ? n : e;
+}
+function dM(e) {
+  let n = [];
+  for (let t of e) n.some((r) => UN(r, t)) || n.push(t);
+  return n;
+}
+function UN(e, n) {
+  return (
+    e.id === n.id && e.author === n.author && (e.date ?? "") === (n.date ?? "")
+  );
+}
+function cM(e, n) {
+  if (n === void 0) return e;
+  if (e === void 0) return n;
+  let t = Date.parse(e),
+    r = Date.parse(n);
+  return Number.isNaN(t) || Number.isNaN(r) ? n : t > r ? e : n;
+}
+function uM(e, n, t) {
+  let r = t.get(e.start.paragraphId) ?? 0,
+    o = t.get(n.start.paragraphId) ?? 0;
+  return r !== o ? r < o : e.start.offset <= n.start.offset;
+}
+function fM(e, n, t) {
+  let r = new Map(n.map((c) => [c.commentId, c])),
+    o = new Map(),
+    i = new Map();
+  for (let c of e)
+    (c.paraId && o.set(c.paraId.toUpperCase(), c), i.set(c.id, c));
+  let a = new Map(),
+    l = new Map();
+  for (let c of e) {
+    let u = r.get(c.id);
+    if (
+      !u ||
+      u.orphaned ||
+      (u.start.paragraphId === u.end.paragraphId &&
+        u.start.offset === u.end.offset)
+    )
+      continue;
+    let f = `${u.start.paragraphId}:${u.start.offset}|${u.end.paragraphId}:${u.end.offset}`;
+    a.has(f) ? l.set(c.id, a.get(f)) : a.set(f, c.id);
+  }
+  let s = new Map();
+  for (let c of e) {
+    let u = c.paraId ? t.get(c.paraId.toUpperCase()) : void 0,
+      f = u?.parentParaId ? o.get(u.parentParaId) : void 0,
+      m = c.parentCommentId ? i.get(c.parentCommentId) : void 0,
+      g = u === void 0 ? l.get(c.id) : void 0,
+      p = g ? i.get(g) : void 0,
+      x = f ?? m ?? p;
+    x && x.id !== c.id && s.set(c.id, x.id);
+  }
+  for (let c of [...s.keys()]) {
+    let u = new Set([c]),
+      f = s.get(c);
+    for (; f !== void 0;) {
+      if (u.has(f)) {
+        s.delete(c);
+        break;
+      }
+      (u.add(f), (f = s.get(f)));
+    }
+  }
+  let d = new Map();
+  for (let [c, u] of s) {
+    let f = d.get(u);
+    f ? f.push(c) : d.set(u, [c]);
+  }
+  return e.map((c) => {
+    let u = r.get(c.id),
+      f = c.paraId ? t.get(c.paraId.toUpperCase()) : void 0,
+      m = s.get(c.id);
+    return {
+      kind: "comment",
+      id: c.id,
+      comment: c,
+      range: u ? { partName: u.partName, start: u.start, end: u.end } : null,
+      resolved: f?.done ?? false,
+      ...(m === void 0 ? {} : { parentId: m }),
+      replyIds: d.get(c.id) ?? [],
+      orphaned: u === void 0 || u.orphaned,
+    };
+  });
+}
+function Cj(e) {
+  let n = [e.storyPart],
+    t = new Set([e.storyPart.name]);
+  for (let d of e.furnitureParts ?? [])
+    t.has(d.name) || (t.add(d.name), n.push(d));
+  let r = e.commentsPart ? tx(e.commentsPart) : [],
+    o = e.commentsExtendedPart ? rx(e.commentsExtendedPart) : new Map(),
+    i = [],
+    a = [],
+    l = n.length === 1 ? ru(n[0]) : new Map();
+  for (let d of n) {
+    for (let f of rM(d)) i.push(f);
+    for (let f of nx(d)) a.push(f);
+    if (n.length === 1) continue;
+    let c = l,
+      u = c.size;
+    for (let [f, m] of ru(d)) c.has(f) || c.set(f, u + m);
+  }
+  return mM([...i, ...fM(r, a, o)]).sort((d, c) => DN(d, l) - DN(c, l));
+}
+function SN(e) {
+  return `${e.partName}\0${e.start.paragraphId}:${e.start.offset}|${e.end.paragraphId}:${e.end.offset}`;
+}
+function mM(e) {
+  let n = new Map();
+  for (let a of e)
+    if (a.kind === "revision")
+      for (let l of a.ranges ?? []) {
+        if (
+          l.start.paragraphId === l.end.paragraphId &&
+          l.start.offset === l.end.offset
+        )
+          continue;
+        let s = SN(l),
+          d = a.nesting ?? 0,
+          c = n.get(s);
+        (c === void 0 || d > c.nesting) && n.set(s, { id: a.id, nesting: d });
+      }
+  let t = new Map();
+  for (let a of e)
+    a.kind === "comment" &&
+      a.replyIds &&
+      a.replyIds.length > 0 &&
+      t.set(a.id, a.replyIds);
+  let r = (a) => {
+      let l = [],
+        s = new Set([a]),
+        d = [...(t.get(a) ?? [])];
+      for (; d.length > 0;) {
+        let c = d.shift();
+        s.has(c) || (s.add(c), l.push(c), d.push(...(t.get(c) ?? [])));
+      }
+      return l;
+    },
+    o = new Map(),
+    i = new Map();
+  for (let a of e) {
+    if (a.kind !== "comment" || a.parentId !== void 0 || a.orphaned || !a.range)
+      continue;
+    let l = n.get(SN(a.range))?.id;
+    if (l === void 0) continue;
+    let s = [a.id, ...r(a.id)];
+    for (let c of s) i.set(c, l);
+    let d = o.get(l);
+    d ? d.push(...s) : o.set(l, s);
+  }
+  return e.map((a) => {
+    if (a.kind === "revision") {
+      let l = o.get(a.id) ?? [];
+      return l.length === 0 && (a.replyIds ?? []).length === 0
+        ? a
+        : { ...a, replyIds: l };
+    }
+    if (a.kind === "comment") {
+      let l = i.get(a.id);
+      if (l === void 0) {
+        if (a.parentRevisionId === void 0) return a;
+        let { parentRevisionId: s, ...d } = a;
+        return d;
+      }
+      return a.parentRevisionId === l ? a : { ...a, parentRevisionId: l };
+    }
+    return a;
+  });
+}
+function ru(e) {
+  let n = AN.get(e.root);
+  if (n) return n;
+  let t = new Map(),
+    r = (o, i) => {
+      if (!(o.kind === "textValue" || i > 64)) {
+        if (o.kind === "paragraph") {
+          t.has(o.id) || t.set(o.id, t.size);
+          return;
+        }
+        if (o.kind === "table") {
+          let a = _N.get(o);
+          if (!a) {
+            let l = [],
+              s = (d, c) => {
+                if (!(d.kind === "textValue" || c > 64)) {
+                  if (d.kind === "paragraph") {
+                    l.push(d.id);
+                    return;
+                  }
+                  for (let u of d.children) s(u, c + 1);
+                }
+              };
+            for (let d of o.children) s(d, 0);
+            ((a = l), _N.set(o, a));
+          }
+          for (let l of a) t.has(l) || t.set(l, t.size);
+          return;
+        }
+        for (let a of o.children) r(a, i + 1);
+      }
+    };
+  return (r(e.root, 0), AN.set(e.root, t), t);
+}
+var AN = Bt(8);
+function Tj(e) {
+  let n = MN.get(e.root);
+  if (n) return n;
+  let t = new Map(),
+    r = (o, i) => {
+      if (!(o.kind === "textValue" || i > 64)) {
+        o.kind === "paragraph" && !t.has(o.id) && t.set(o.id, t.size);
+        for (let a of o.children) r(a, i + 1);
+      }
+    };
+  return (r(e.root, 0), MN.set(e.root, t), t);
+}
+var MN = Bt(8),
+  _N = new WeakMap();
+function pM(e) {
+  return e.kind === "comment" ? (e.range ? [e.range] : []) : e.ranges;
+}
+function gM(e) {
+  return pM(e)[0] ?? null;
+}
+function DN(e, n) {
+  let t = gM(e);
+  if (!t) return Number.MAX_SAFE_INTEGER;
+  let r = n.get(t.start.paragraphId);
+  return r === void 0
+    ? Number.MAX_SAFE_INTEGER
+    : r * 1e6 + Math.min(t.start.offset, 999999);
+}
+var Aj = 256,
+  Mj = 2e3,
+  LN = /[\p{L}\p{N}_]/u;
+function BN(e) {
+  let n = e.toLowerCase();
+  if (n.length === e.length) return n;
+  let t = "";
+  for (let r = 0; r < e.length; r += 1) {
+    let o = e[r],
+      i = o.toLowerCase();
+    t += i.length === 1 ? i : o;
+  }
+  return t;
+}
+function xM(e, n, t) {
+  let r = n > 0 ? e[n - 1] : void 0,
+    o = t < e.length ? e[t] : void 0;
+  return !((r !== void 0 && LN.test(r)) || (o !== void 0 && LN.test(o)));
+}
+function hM(e) {
+  return typeof e == "string" && e.length > 0 && e.length <= 256;
+}
+function _j(e, n, t, r = {}) {
+  let o = { matches: [], truncated: false };
+  if (!hM(n) || e.length === 0 || t <= 0) return o;
+  let i = r.matchCase === true,
+    a = r.wholeWord === true,
+    l = i ? n : BN(n),
+    s = i ? e : BN(e),
+    d = Math.max(0, r.from ?? 0),
+    c = Math.min(e.length, r.to ?? e.length),
+    u = [],
+    f = s.indexOf(l, d);
+  for (; f >= 0;) {
+    let m = f + l.length;
+    if (m > c) return { matches: u, truncated: false };
+    if (!a || xM(e, f, m)) {
+      if (u.length >= t) return { matches: u, truncated: true };
+      u.push({ start: f, length: l.length });
+    }
+    f = s.indexOf(l, m);
+  }
+  return { matches: u, truncated: false };
+}
+export {
+  yk as $,
+  ss as $a,
+  op as $b,
+  qs as $c,
+  ar as $d,
+  yi as $e,
+  oj as $f,
+  Pu as A,
+  b_ as Aa,
+  D as Ab,
+  jr as Ac,
+  xt as Ad,
+  li as Ae,
+  BB as Af,
+  BN as Ag,
+  nk as B,
+  re as Ba,
+  ks as Bb,
+  Kr as Bc,
+  Gr as Bd,
+  dd as Be,
+  Md as Bf,
+  xM as Bg,
+  CM as C,
+  C_ as Ca,
+  ct as Cb,
+  gp as Cc,
+  zr as Cd,
+  PL as Ce,
+  Ud as Cf,
+  hM as Cg,
+  Bi as D,
+  A as Da,
+  Xn as Db,
+  jR as Dc,
+  $E as Dd,
+  ZI as De,
+  rh as Df,
+  _j as Dg,
+  rk as E,
+  vf as Ea,
+  zn as Eb,
+  Op as Ec,
+  y1 as Ed,
+  ui as Ee,
+  ol as Ef,
+  br as F,
+  E as Fa,
+  Fr as Fb,
+  Ws as Fc,
+  O1 as Fd,
+  EL as Fe,
+  bl as Ff,
+  Ml as G,
+  je as Ga,
+  Ps as Gb,
+  bp as Gc,
+  ni as Gd,
+  IL as Ge,
+  f0 as Gf,
+  Fi as H,
+  F as Ha,
+  ut as Hb,
+  QR as Hc,
+  N1 as Hd,
+  ci as He,
+  ey as Hf,
+  wu as I,
+  _ as Ia,
+  Qt as Ib,
+  IU as Ic,
+  k1 as Id,
+  Bt as Ie,
+  Lc as If,
+  Ru as J,
+  j as Ja,
+  Dm as Jb,
+  Pp as Jc,
+  b1 as Jd,
+  qa as Je,
+  xo as Jf,
+  _l as K,
+  ie as Ka,
+  er as Kb,
+  nE as Kc,
+  P1 as Kd,
+  nx as Ke,
+  T0 as Kf,
+  Rt as L,
+  st as La,
+  Ke as Lb,
+  rE as Lc,
+  Jp as Ld,
+  tx as Le,
+  iN as Lf,
+  Vi as M,
+  ts as Ma,
+  ya as Mb,
+  AU as Mc,
+  eg as Md,
+  rx as Me,
+  dN as Mf,
+  Eu as N,
+  _f as Na,
+  Ko as Nb,
+  Yn as Nc,
+  ng as Nd,
+  pd as Ne,
+  cN as Nf,
+  Ee as O,
+  Df as Oa,
+  As as Ob,
+  ba as Oc,
+  Oe as Od,
+  QL as Oe,
+  Kc as Of,
+  Pr as P,
+  Gb as Pa,
+  qD as Pb,
+  Xo as Pc,
+  yt as Pd,
+  JL as Pe,
+  PH as Pf,
+  lk as Q,
+  en as Qa,
+  Ms as Qb,
+  mn as Qc,
+  Bn as Qd,
+  eB as Qe,
+  jH as Qf,
+  Dl as R,
+  Uf as Ra,
+  ha as Rb,
+  Mn as Rc,
+  Y as Rd,
+  mx as Re,
+  KH as Rf,
+  dk as S,
+  zb as Sa,
+  At as Sb,
+  Yo as Sc,
+  _e as Sd,
+  yx as Se,
+  $H as Sf,
+  Ll as T,
+  os as Ta,
+  pt as Tb,
+  gt as Tc,
+  D1 as Td,
+  Ox as Te,
+  GH as Tf,
+  UM as U,
+  D_ as Ua,
+  Vr as Ub,
+  Ks as Uc,
+  mg as Ud,
+  kd as Ue,
+  zH as Uf,
+  lt as V,
+  kn as Va,
+  OR as Vb,
+  mE as Vc,
+  pg as Vd,
+  Qa as Ve,
+  z0 as Vf,
+  fk as W,
+  vr as Wa,
+  nU as Wb,
+  Pa as Wc,
+  La as Wd,
+  px as We,
+  X0 as Wf,
+  Z as X,
+  nm as Xa,
+  kR as Xb,
+  KU as Xc,
+  tI as Xd,
+  gi as Xe,
+  ej as Xf,
+  BM as Y,
+  St as Ya,
+  rp as Yb,
+  Xs as Yc,
+  ii as Yd,
+  pi as Ye,
+  nj as Yf,
+  FM as Z,
+  Gn as Za,
+  oU as Zb,
+  Lp as Zc,
+  De as Zd,
+  Nx as Ze,
+  tj as Zf,
+  xk as _,
+  tP as _a,
+  Na as _b,
+  FE as _c,
+  sI as _d,
+  dB as _e,
+  rj as _f,
+  su as a,
+  VM as aa,
+  rm as ab,
+  bR as ac,
+  Zo as ad,
+  W1 as ae,
+  Rx as af,
+  q0 as ag,
+  du as b,
+  WM as ba,
+  TP as bb,
+  tr as bc,
+  t1 as bd,
+  H1 as be,
+  Ex as bf,
+  Jc as bg,
+  cu as c,
+  wr as ca,
+  Zt as cb,
+  sU as cc,
+  r1 as cd,
+  yg as ce,
+  Rd as cf,
+  uj as cg,
+  Yt as d,
+  $n as da,
+  im as db,
+  Us as dc,
+  zp as dd,
+  id as de,
+  Ix as df,
+  Rl as dg,
+  Po as e,
+  Ck as ea,
+  Q_ as eb,
+  dU as ec,
+  o1 as ed,
+  Cg as ee,
+  Cx as ef,
+  eu as eg,
+  hu as f,
+  $M as fa,
+  eD as fb,
+  Mt as fc,
+  i1 as fd,
+  vg as fe,
+  Tx as ff,
+  fj as fg,
+  VN as g,
+  Tk as ga,
+  nD as gb,
+  $o as gc,
+  a1 as gd,
+  Ha as ge,
+  vx as gf,
+  mj as gg,
+  yu as h,
+  he as ha,
+  tD as hb,
+  wR as hc,
+  l1 as hd,
+  Bg as he,
+  Sx as hf,
+  Z0 as hg,
+  Sl as i,
+  Sk as ia,
+  DP as ib,
+  Wr as ic,
+  s1 as id,
+  jg as ie,
+  LC as if,
+  wN as ig,
+  KN as j,
+  zM as ja,
+  VP as jb,
+  Ls as jc,
+  d1 as jd,
+  yL as je,
+  Mx as jf,
+  Q0 as jg,
+  yM as k,
+  Uu as ka,
+  Ur as kb,
+  cU as kc,
+  c1 as kd,
+  OL as ke,
+  el as kf,
+  pj as kg,
+  NM as l,
+  Nn as la,
+  HP as lb,
+  uU as lc,
+  u1 as ld,
+  ja as le,
+  Bx as lf,
+  gj as lg,
+  fe as m,
+  y as ma,
+  jP as mb,
+  Bs as mc,
+  f1 as md,
+  ld as me,
+  Vt as mf,
+  nu as mg,
+  kM as n,
+  J as na,
+  $P as nb,
+  lp as nc,
+  or as nd,
+  si as ne,
+  Wt as nf,
+  Rj as ng,
+  Al as o,
+  Se as oa,
+  ow as ob,
+  fU as oc,
+  sn as od,
+  Ka as oe,
+  tl as of,
+  Ej as og,
+  $ as p,
+  An as pa,
+  Vo as pb,
+  mU as pc,
+  Qs as pd,
+  NL as pe,
+  oo as pf,
+  Ij as pg,
+  bM as q,
+  We as qa,
+  Om as qb,
+  dp as qc,
+  Js as qd,
+  Qr as qe,
+  wn as qf,
+  rM as qg,
+  Ve as r,
+  Ne as ra,
+  km as rb,
+  DR as rc,
+  Ca as rd,
+  jI as re,
+  K as rf,
+  fM as rg,
+  kr as s,
+  Ob as sa,
+  cw as sb,
+  ka as sc,
+  Xp as sd,
+  Fn as se,
+  rn as sf,
+  Cj as sg,
+  me as t,
+  Mo as ta,
+  wm as tb,
+  pU as tc,
+  m1 as td,
+  zI as te,
+  Ze as tf,
+  mM as tg,
+  wM as u,
+  Cr as ua,
+  Rm as ub,
+  cp as uc,
+  p1 as ud,
+  Pe as ue,
+  zx as uf,
+  ru as ug,
+  RM as v,
+  Pf as va,
+  Lr as vb,
+  Hr as vc,
+  Qo as vd,
+  kL as ve,
+  Xx as vf,
+  Tj as vg,
+  JN as w,
+  wf as wa,
+  Em as wb,
+  up as wc,
+  Ta as wd,
+  bL as we,
+  _B as wf,
+  pM as wg,
+  ek as x,
+  Zl as xa,
+  Pm as xb,
+  Fs as xc,
+  Jo as xd,
+  sd as xe,
+  DB as xf,
+  gM as xg,
+  qt as y,
+  Ib as ya,
+  yD as yb,
+  xU as yc,
+  ed as yd,
+  di as ye,
+  UB as yf,
+  Aj as yg,
+  EM as z,
+  _o as za,
+  OD as zb,
+  Go as zc,
+  ir as zd,
+  $a as ze,
+  LB as zf,
+  Mj as zg,
+};

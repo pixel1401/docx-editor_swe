@@ -1,0 +1,1 @@
+'use strict';var chunkOHJQ7GPZ_cjs=require('../chunk-OHJQ7GPZ.cjs');Object.defineProperty(exports,"EditorFontError",{enumerable:true,get:function(){return chunkOHJQ7GPZ_cjs.a}});
