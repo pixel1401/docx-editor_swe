@@ -267,6 +267,37 @@ export function unloadableSourceReason(source: DocumentSource): string {
  */
 export function classifyCommand(command: EditorCommand): CommandSupport {
   switch (command.type) {
+    case 'insertFieldSdt': {
+      const fieldId =
+        typeof command.fieldId === 'number' && Number.isFinite(command.fieldId)
+          ? String(command.fieldId)
+          : command.fieldId;
+      if (
+        typeof fieldId !== 'string' ||
+        fieldId.length === 0 ||
+        fieldId.length > 53 ||
+        /[\u0000-\u001f\u007f-\u009f]/.test(fieldId)
+      ) {
+        return {
+          supported: false,
+          code: 'invalidArgs',
+          reason: 'insertFieldSdt requires a fieldId of 1-53 characters',
+        };
+      }
+      if (
+        typeof command.text !== 'string' ||
+        command.text.trim().length === 0 ||
+        command.text.length > 4_096 ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(command.text)
+      ) {
+        return {
+          supported: false,
+          code: 'invalidArgs',
+          reason: 'insertFieldSdt requires 1-4096 valid XML text characters',
+        };
+      }
+      return { supported: true, mutating: true };
+    }
     case 'toggleMark':
       return MARKS.has(command.mark)
         ? { supported: true, mutating: true }

@@ -48,6 +48,43 @@ export function execEditorCommand(
   }
 ): ExecResult | null {
   switch (command.type) {
+    case 'insertFieldSdt': {
+      const { anchor, head } = mounted.state().selection;
+      if (anchor.paragraphId !== head.paragraphId) {
+        return {
+          ok: false,
+          code: 'invalidArgs',
+          reason: 'insertFieldSdt cannot replace a selection across paragraphs',
+        };
+      }
+      const offset = Math.min(anchor.offset, head.offset);
+      const replaceUntil = Math.max(anchor.offset, head.offset);
+      const result = mounted.session.insertCustomNode(
+        {
+          paragraphId: anchor.paragraphId,
+          offset,
+          ...(replaceUntil > offset ? { replaceUntil } : {}),
+          tag: `docx-field:${String(command.fieldId)}`,
+          text: command.text,
+          alias: command.text,
+          lock: 'contentLocked',
+        },
+        { kind: 'body' }
+      );
+      if (!result.ok) {
+        return {
+          ok: false,
+          code: result.reason === 'locked' ? 'locked' : 'invalidArgs',
+          reason: `insertFieldSdt was refused: ${result.reason}`,
+        };
+      }
+      const after = offset + command.text.length;
+      mounted.setSelection({
+        anchor: { paragraphId: anchor.paragraphId, offset: after },
+        head: { paragraphId: anchor.paragraphId, offset: after },
+      });
+      break;
+    }
     case 'toggleMark': {
       const mark = MARKS.get(command.mark)!;
       mounted.toggleRunProperty(mark.localName, mark.attributes);

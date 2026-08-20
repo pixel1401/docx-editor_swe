@@ -1237,7 +1237,7 @@ export type EditorCommand = {
 }[keyof EditorCommands];
 
 // @public
-export interface EditorCommands extends EditorCommandShape<DocEdits>, EditorHeaderFooterCommands, EditorNoteCommands {
+export interface EditorCommands extends EditorCommandShape<DocEdits>, EditorHeaderFooterCommands, EditorNoteCommands, EditorFieldSdtCommands {
     clearFormatting: Record<never, never>;
     commitTableColumnDividerResize: {
         target: TableColumnDividerResizeTarget;
@@ -1472,6 +1472,14 @@ export interface EditorEvents {
     // (undocumented)
     error: (error: EditorError) => void;
     selectionChange: (snapshot: EditorSnapshot) => void;
+}
+
+// @public
+export interface EditorFieldSdtCommands {
+    insertFieldSdt: {
+        fieldId: string | number;
+        text: string;
+    };
 }
 
 // @public

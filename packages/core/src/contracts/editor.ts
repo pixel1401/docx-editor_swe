@@ -1,19 +1,14 @@
 /**
  * `@docx-editor.dev/core/contracts/editor` — the `Editor` contract adapters are written against.
- *
  * Commands go through `can` before `exec`; queries answer against the live, laid-out document.
- * Type-only where it can be, so an adapter can name the whole surface without importing the
- * engine.
- *
+ * Type-only where possible, so adapters can name the surface without importing the engine.
  * CONTRACT ONLY — declarations, not an implementation.
- *
  * @packageDocumentation
  * @public
  */
 
 import type { ContentControlSummary, DocEdits, DocQueries, DocQueryResults } from './document.ts';
-// Type-only, so the adapters reach the review vocabulary through THIS contract rather than
-// naming the layout lane, which they are not allowed to import.
+// Type-only: adapters reach review vocabulary through this contract, not the layout lane.
 import type {
   ReviewCommentItem,
   ReviewCustomItem,
@@ -45,6 +40,8 @@ import type {
   HeaderFooterState,
   NotePropertiesState,
 } from './editor-hf-notes.ts';
+import type { EditorFieldSdtCommands } from './editor-field-sdt.ts';
+export type { EditorFieldSdtCommands } from './editor-field-sdt.ts';
 import type {
   DrawingKind,
   DrawingLocks,
@@ -1038,7 +1035,11 @@ export interface TableColumnOccurrenceTarget {
  * closed union so an extension can widen it by declaration merging.
  */
 export interface EditorCommands
-  extends EditorCommandShape<DocEdits>, EditorHeaderFooterCommands, EditorNoteCommands {
+  extends
+    EditorCommandShape<DocEdits>,
+    EditorHeaderFooterCommands,
+    EditorNoteCommands,
+    EditorFieldSdtCommands {
   /** Switch how edits are written. A view command: it changes no document state. */
   setEditingMode: { mode: DocumentEditingMode };
   /**
