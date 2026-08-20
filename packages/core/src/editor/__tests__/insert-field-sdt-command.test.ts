@@ -77,6 +77,82 @@ describe('insertFieldSdt command', () => {
     expect(xml).toContain('<w:tag w:val="docx-field:42"/>');
   });
 
+  test('Backspace removes the whole field control from its outer edge', async () => {
+    const editor = mount();
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+
+    editor.surface!.deleteBackward();
+
+    expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('before after');
+    const xml = strFromU8(unzipSync(new Uint8Array(await editor.save()))['word/document.xml']!);
+    expect(xml).not.toContain('docx-field:name');
+  });
+
+  test('select-all deletion removes a content-locked field control', async () => {
+    const editor = mount();
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+    const length = editor.query({ type: 'paragraphs' })[0]!.text.length;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 0 },
+      head: { paragraphId, offset: length },
+    });
+
+    expect(editor.surface!.deleteSelection()).toBe(true);
+
+    expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('');
+    const xml = strFromU8(unzipSync(new Uint8Array(await editor.save()))['word/document.xml']!);
+    expect(xml).not.toContain('docx-field:name');
+  });
+
+  test('deleting the exact field selection removes it as one atomic node', async () => {
+    const editor = mount();
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 13 },
+    });
+
+    expect(editor.surface!.deleteSelection()).toBe(true);
+    expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('before after');
+    const xml = strFromU8(unzipSync(new Uint8Array(await editor.save()))['word/document.xml']!);
+    expect(xml).not.toContain('docx-field:name');
+  });
+
+  test('partial field selection remains content-locked', async () => {
+    const editor = mount();
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 8 },
+      head: { paragraphId, offset: 12 },
+    });
+
+    editor.surface!.deleteSelection();
+
+    expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('before [Name]after');
+    const xml = strFromU8(unzipSync(new Uint8Array(await editor.save()))['word/document.xml']!);
+    expect(xml).toContain('<w:tag w:val="docx-field:name"/>');
+  });
+
   test('refuses invalid ids before writing', () => {
     const editor = mount();
     const before = editor.surface!.session.packageRevision();

@@ -457,6 +457,11 @@ export interface InlineControlSpan {
   readonly end: number;
 }
 
+/** One inline control span plus its nearest inline-control parent, for destructive ranges. */
+export interface InlineControlTreeSpan extends InlineControlSpan {
+  readonly parentControlId: string | null;
+}
+
 function idsUnder(node: OoxmlNode, out: Set<string>): void {
   out.add(node.id);
   if (node.kind === 'textValue') return;
@@ -470,6 +475,13 @@ function spanOfControl(
 ): InlineControlSpan | null {
   const container = inlineContainerOf(paragraph, runId);
   if (!container || container.kind !== 'contentControl') return null;
+  return spanOfKnownControl(container, segments);
+}
+
+function spanOfKnownControl(
+  container: OoxmlElement,
+  segments: readonly Segment[]
+): InlineControlSpan | null {
   const ids = new Set<string>();
   idsUnder(container, ids);
   let start = Number.MAX_SAFE_INTEGER;
@@ -481,6 +493,24 @@ function spanOfControl(
   }
   if (end < 0) return null;
   return { controlId: container.id, start, end };
+}
+
+/** Every addressable inline control in a paragraph, outer controls before nested controls. */
+export function inlineControlTreeSpansOf(paragraph: OoxmlParagraphNode): InlineControlTreeSpan[] {
+  const segments = segmentsOf(paragraph);
+  const spans: InlineControlTreeSpan[] = [];
+  const walk = (node: OoxmlNode, parentControlId: string | null): void => {
+    if (node.kind === 'textValue') return;
+    const isControl = isContentControlNode(node);
+    const nextParent = isControl ? node.id : parentControlId;
+    if (isControl) {
+      const span = spanOfKnownControl(node, segments);
+      if (span) spans.push({ ...span, parentControlId });
+    }
+    for (const child of node.children) walk(child, nextParent);
+  };
+  walk(paragraph, null);
+  return spans;
 }
 
 /**

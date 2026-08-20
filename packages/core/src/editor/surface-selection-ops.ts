@@ -8,11 +8,13 @@
 import type { TreeDocxSession } from '@docx-editor.dev/core/binding';
 import { mergedPredecessorsOf } from '../layout/line-segments.ts';
 import {
+  findNode,
   parentNodeOf,
   type OoxmlElement,
   type OoxmlNode,
   type OoxmlPart,
 } from '@docx-editor.dev/core/store';
+import { inlineControlTreeSpansOf } from '../store/store/tree-op-segments.ts';
 import {
   documentOrder,
   paragraphTextFromLayout,
@@ -125,7 +127,11 @@ export interface RangeDeletionPlan {
 
 type TreeOp = Parameters<TreeDocxSession['applyTreeOps']>[0][number];
 /** Store unwrap op — typed in the content-control lane; planned here, validated there. */
-type RemoveContentControlOp = { readonly op: 'removeContentControl'; readonly controlId: string };
+type RemoveContentControlOp = {
+  readonly op: 'removeContentControl';
+  readonly controlId: string;
+  readonly keepContent?: boolean;
+};
 type PlannedOp = TreeOp | RemoveContentControlOp;
 
 /** Every paragraph id inside a subtree, in document order. */
@@ -226,6 +232,63 @@ function removableContentControlsIn(
 }
 
 /**
+ * Delete the selected text outside fully covered inline controls, then remove those controls
+ * as atomic nodes. This preserves `contentLocked`: partial edits still reach the store and are
+ * refused, while selecting the whole chip removes its wrapper and content together.
+ */
+function inlineAwareParagraphDeletion(
+  part: OoxmlPart,
+  paragraphId: string,
+  start: number,
+  end: number
+): { readonly textOps: PlannedOp[]; readonly controlOps: PlannedOp[] } {
+  const fallback = {
+    textOps: [{ op: 'deleteText', paragraphId, start, end } as PlannedOp],
+    controlOps: [],
+  };
+  const paragraph = findNode(part, paragraphId);
+  if (!paragraph || paragraph.kind !== 'paragraph') return fallback;
+
+  const spans = inlineControlTreeSpansOf(paragraph);
+  const byId = new Map(spans.map((span) => [span.controlId, span]));
+  const fullyCovered = new Set(
+    spans.filter((span) => start <= span.start && span.end <= end).map((span) => span.controlId)
+  );
+  const outermostCovered = spans
+    .filter((span) => {
+      if (!fullyCovered.has(span.controlId)) return false;
+      let parentId = span.parentControlId;
+      while (parentId) {
+        if (fullyCovered.has(parentId)) return false;
+        parentId = byId.get(parentId)?.parentControlId ?? null;
+      }
+      return true;
+    })
+    .sort((left, right) => left.start - right.start || right.end - left.end);
+  if (outermostCovered.length === 0) return fallback;
+
+  const textOps: PlannedOp[] = [];
+  let cursor = start;
+  for (const span of outermostCovered) {
+    if (cursor < span.start) {
+      textOps.push({ op: 'deleteText', paragraphId, start: cursor, end: span.start });
+    }
+    cursor = Math.max(cursor, span.end);
+  }
+  if (cursor < end) textOps.push({ op: 'deleteText', paragraphId, start: cursor, end });
+
+  return {
+    // Later ranges first: every delete shifts the offsets to its right.
+    textOps: textOps.reverse(),
+    controlOps: outermostCovered.map((span) => ({
+      op: 'removeContentControl',
+      controlId: span.controlId,
+      keepContent: false,
+    })),
+  };
+}
+
+/**
  * The plan that removes a document-ordered range, or an empty one when it is collapsed.
  *
  * A selection spanning paragraphs is trimmed at both ends and then JOINED back into one,
@@ -243,10 +306,9 @@ export function planRangeDeletion(
   const textOf = (paragraphId: string): string => paragraphTextFromLayout(layout, paragraphId);
   if (from.paragraphId === to.paragraphId) {
     if (from.offset === to.offset) return { ops: [], collapseTo: from };
+    const deletion = inlineAwareParagraphDeletion(part, from.paragraphId, from.offset, to.offset);
     return {
-      ops: [
-        { op: 'deleteText', paragraphId: from.paragraphId, start: from.offset, end: to.offset },
-      ],
+      ops: [...deletion.textOps, ...deletion.controlOps] as RangeDeletionPlan['ops'],
       collapseTo: from,
     };
   }
@@ -307,6 +369,7 @@ export function planRangeDeletion(
     survivorIndex === firstIndex ? from : { paragraphId: survivorId, offset: 0 };
 
   const ops: PlannedOp[] = [];
+  const inlineControlOps: PlannedOp[] = [];
   // Text first, and only for paragraphs that will still be there — a paragraph inside a
   // removed table needs no trimming, and trimming it would be work the removal undoes.
   for (let index = firstIndex; index <= lastIndex; index += 1) {
@@ -315,7 +378,11 @@ export function planRangeDeletion(
     const length = textOf(id).length;
     const start = index === firstIndex ? from.offset : 0;
     const end = index === lastIndex ? to.offset : length;
-    if (start < end) ops.push({ op: 'deleteText', paragraphId: id, start, end });
+    if (start < end) {
+      const deletion = inlineAwareParagraphDeletion(part, id, start, end);
+      ops.push(...deletion.textOps);
+      inlineControlOps.push(...deletion.controlOps);
+    }
   }
   // Then the blocks the range fully contains. Nothing in the paragraph vocabulary can do
   // this: a body paragraph and a cell paragraph have different parents, so collapsing
@@ -328,6 +395,7 @@ export function planRangeDeletion(
   for (const controlId of removableControls) {
     ops.push({ op: 'removeContentControl', controlId });
   }
+  ops.push(...inlineControlOps);
 
   // Then collapse the emptied paragraphs, WITHIN runs of consecutive sibling `w:p` elements
   // — reading a removed table OR a planned-unwrapped control as transparent, because by the
