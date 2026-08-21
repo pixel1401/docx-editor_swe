@@ -689,6 +689,23 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
     return slot;
   };
 
+  /** Reserve the paragraphs a structural table insertion will create before its anchor. */
+  const reserveTableParagraphs = (
+    plan: StoryPlan,
+    beforeParagraphId: string,
+    count: number
+  ): PlannedOperation | null => {
+    const anchor = plan.slotById.get(beforeParagraphId);
+    if (!anchor)
+      return refuse('invalid-handle', 'that paragraph is not in this story', beforeParagraphId);
+    const conflict = touch(plan, beforeParagraphId);
+    if (conflict) return conflict;
+    const position = positionOf(plan, anchor);
+    for (let index = 0; index < count; index += 1) insertSlot(plan, position + index);
+    plan.restructured.add(beforeParagraphId);
+    return null;
+  };
+
   const spanOf = (range: ResolvedRange): AutomationSpan => spanValue(range, handles);
 
   /** The story a resolved range lives in, or null when the document went away. */
@@ -2594,6 +2611,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
           controlOf,
           planFor,
           pinWrite,
+          reserveTableParagraphs,
           refuse,
           APPLIED
         );

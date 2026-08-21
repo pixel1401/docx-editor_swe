@@ -23,6 +23,11 @@ export function planContentControlTableReplacement<Plan>(
   controlOf: (handle: unknown) => ContentControlTarget | PlannedOperation,
   planFor: (reads: AutomationStoryReads) => Plan,
   pinWrite: (plan: Plan) => PlannedOperation | null,
+  reserveTableParagraphs: (
+    plan: Plan,
+    beforeParagraphId: string,
+    count: number
+  ) => PlannedOperation | null,
   refuse: Refuse,
   applied: AutomationValue
 ): PlannedOperation {
@@ -31,6 +36,8 @@ export function planContentControlTableReplacement<Plan>(
   const columns = operation.table?.columns;
   const rows = operation.table?.rows;
   const widthTwips = operation.table?.widthTwips ?? 9360;
+  const header = operation.table?.header;
+  const fullWidth = operation.table?.fullWidth;
   if (
     !Array.isArray(columns) ||
     columns.length === 0 ||
@@ -59,9 +66,27 @@ export function planContentControlTableReplacement<Plan>(
   if (!Number.isInteger(widthTwips) || widthTwips < columns.length || widthTwips > 9360) {
     return refuse('unsupported-content', 'table width is invalid', 'widthTwips');
   }
+  if (
+    header !== undefined &&
+    (typeof header !== 'object' ||
+      header === null ||
+      (header.bold !== undefined && typeof header.bold !== 'boolean') ||
+      (header.fillColor !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(header.fillColor)))
+  ) {
+    return refuse('unsupported-content', 'table header style is invalid', 'header');
+  }
+  if (fullWidth !== undefined && typeof fullWidth !== 'boolean') {
+    return refuse('unsupported-content', 'table fullWidth must be a boolean', 'fullWidth');
+  }
   const pin = pinWrite(planFor(found.reads));
   if (pin) return pin;
   const paragraphId = found.control.paragraphIds[0]!;
+  const reservation = reserveTableParagraphs(
+    planFor(found.reads),
+    paragraphId,
+    (rows.length + 1) * columns.length
+  );
+  if (reservation) return reservation;
   const ops: readonly TreeDocOp[] = [
     {
       op: 'insertTable',
@@ -70,6 +95,8 @@ export function planContentControlTableReplacement<Plan>(
       cols: columns.length,
       columnWidthTwips: Math.floor(widthTwips / columns.length),
       cellText: [columns, ...rows],
+      header,
+      fullWidth,
     },
     { op: 'removeContentControl', controlId: found.control.nodeId, keepContent: true },
     { op: 'deleteBlock', blockId: paragraphId },

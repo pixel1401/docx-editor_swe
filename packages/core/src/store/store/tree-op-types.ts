@@ -558,6 +558,13 @@ export type TreeDocOp =
       /** Width of every grid column, in twips. The caller divides the content width. */
       readonly columnWidthTwips: number;
       readonly cellText?: readonly (readonly string[])[];
+      /** Optional presentation for the first row, authored by a higher-level API. */
+      readonly header?: {
+        readonly bold?: boolean;
+        readonly fillColor?: string;
+      };
+      /** Author `w:tblW` as 100% (`pct=5000`) rather than automatic width. */
+      readonly fullWidth?: boolean;
     }
   | {
       /** Insert a fresh row above or below a canonical table row. */

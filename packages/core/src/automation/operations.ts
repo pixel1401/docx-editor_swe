@@ -75,6 +75,13 @@ export interface AutomationContentControlTable {
   readonly columns: readonly string[];
   readonly rows: readonly (readonly string[])[];
   readonly widthTwips?: number;
+  /** Make the first row a repeating, bold table header with an optional #RRGGBB fill. */
+  readonly header?: {
+    readonly bold?: boolean;
+    readonly fillColor?: string;
+  };
+  /** Use Word's 100% table width instead of an absolute table width. */
+  readonly fullWidth?: boolean;
 }
 
 /** The `ST_Lock` values an author may write. */
