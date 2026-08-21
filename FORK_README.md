@@ -117,6 +117,46 @@ Get-ChildItem packages/core/licenses
 
 ## Создание npm tarball
 
+### Быстрый вариант через Makefile
+
+`Makefile` берёт version из `packages/core/package.json`, выполняет build и
+создаёт publish-ready tarball во временной папке. Исходное дерево должно быть
+чистым и version должна быть уже закоммичена.
+
+```bash
+npm run core:npm-version
+npm run core:npm-tarball
+```
+
+В текущем Windows-окружении GNU Make не установлен. Поэтому используйте `npm
+run` выше. Если позже установите GNU Make, работают и `make npm-version`,
+`make npm-tarball`.
+
+В конце команда напечатает полный путь `Ready: ...tgz`. Публикация остаётся
+ручной:
+
+```bash
+npm publish "<путь-из-Ready>" --access public --dry-run
+npm publish "<путь-из-Ready>" --access public --userconfig /tmp/npm-publishrc
+```
+
+Для Git Bash `npm-publishrc` создаётся с granular token, не вставляя token в
+команду:
+
+```bash
+read -rs NPM_TOKEN
+printf '\n'
+export NPM_TOKEN
+printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > /tmp/npm-publishrc
+```
+
+После публикации удалите временный config и token из shell:
+
+```bash
+rm /tmp/npm-publishrc
+unset NPM_TOKEN
+```
+
 Не переименовывайте `packages/core` внутри source-ветки.
 React workspace ожидает имя `@docx-editor.dev/core`.
 
