@@ -10,7 +10,12 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const bun = process.platform === 'win32' ? 'bun.exe' : 'bun';
 
 const run = (command, args, options = {}) =>
-  execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options });
+  execFileSync(command, args, {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32' && command.endsWith('.cmd'),
+    ...options,
+  });
 
 const runText = (command, args) =>
   execFileSync(command, args, { cwd: root, encoding: 'utf8' }).trim();
