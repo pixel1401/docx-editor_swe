@@ -8,6 +8,8 @@ const coreDir = join(root, 'packages', 'core');
 const packageName = '@erzhan_npm/docx-editor-core';
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const bun = process.platform === 'win32' ? 'bun.exe' : 'bun';
+const tar =
+  process.platform === 'win32' ? join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
 
 const run = (command, args, options = {}) =>
   execFileSync(command, args, {
@@ -55,7 +57,7 @@ run(bun, ['run', 'build:packages']);
 run(bun, ['run', 'notices:generate']);
 
 run(npm, ['pack', coreDir, '--ignore-scripts', '--pack-destination', buildStage]);
-run('tar', ['-xf', findTarball(buildStage), '--strip-components=1', '-C', publishStage]);
+run(tar, ['-xf', findTarball(buildStage), '--strip-components=1', '-C', publishStage]);
 
 run(npm, [
   'pkg',
