@@ -7,13 +7,13 @@
 
 ## Основные понятия
 
-| Объект                        | Назначение                           |
-| ----------------------------- | ------------------------------------ |
-| `feat/free-insert-field-sdt`  | Исходный код SWE-изменений           |
-| `packages/core/src`           | Исходный код бесплатного core        |
-| `packages/core/dist`          | Результат локальной сборки           |
-| `pkg/core-field-sdt`          | Готовый пакет для установки с GitHub |
-| `@pixel1401/docx-editor-core` | Рекомендуемое имя пакета в npm       |
+| Объект                         | Назначение                           |
+| ------------------------------ | ------------------------------------ |
+| `feat/free-insert-field-sdt`   | Исходный код SWE-изменений           |
+| `packages/core/src`            | Исходный код бесплатного core        |
+| `packages/core/dist`           | Результат локальной сборки           |
+| `pkg/core-field-sdt`           | Готовый пакет для установки с GitHub |
+| `@erzhan_npm/docx-editor-core` | Рекомендуемое имя пакета в npm       |
 
 Папка `packages/core/dist` находится в `.gitignore`.
 Не добавляйте её в `feat/free-insert-field-sdt`.
@@ -151,7 +151,7 @@ tar -xf $SourceTarball.FullName --strip-components=1 -C $PublishStage
 
 ```powershell
 npm.cmd pkg set `
-    "name=@pixel1401/docx-editor-core" `
+    "name=@erzhan_npm/docx-editor-core" `
     "version=$PackageVersion" `
     "publishConfig.access=public" `
     "repository.type=git" `
@@ -186,7 +186,7 @@ npm.cmd publish $FinalTarball.FullName --access public --dry-run
 
 Проверьте следующие условия:
 
-- package name равен `@pixel1401/docx-editor-core`;
+- package name равен `@erzhan_npm/docx-editor-core`;
 - version равна новой версии;
 - пакет содержит `dist`;
 - пакет содержит `LICENSE` и `THIRD_PARTY_NOTICES.md`;
@@ -221,7 +221,7 @@ npm.cmd publish $FinalTarball.FullName --access public
 Первая SWE-версия на базе upstream `2.5.0`:
 
 ```text
-@pixel1401/docx-editor-core@2.5.0
+@erzhan_npm/docx-editor-core@2.5.0
 ```
 
 Следующие SWE-исправления:
@@ -245,7 +245,7 @@ React adapter ожидает module path `@docx-editor.dev/core`.
 ```json
 {
   "dependencies": {
-    "@docx-editor.dev/core": "npm:@pixel1401/docx-editor-core@2.5.0",
+    "@docx-editor.dev/core": "npm:@erzhan_npm/docx-editor-core@2.5.0",
     "@docx-editor.dev/react": "^2.5.0"
   }
 }

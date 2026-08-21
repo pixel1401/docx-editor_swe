@@ -172,12 +172,13 @@ function tableGrid(
   } as OoxmlNode;
 }
 
-function emptyParagraph(
+function paragraphWithText(
   w14Prefix: string | null,
   seed: string,
   usedParagraphIds: Set<string>,
   nextId: () => string,
-  wml: WmlFreshNamespaceContext
+  wml: WmlFreshNamespaceContext,
+  text = ''
 ): OoxmlParagraphNode {
   const identity: OoxmlAttribute[] = [];
   if (w14Prefix !== null) {
@@ -193,7 +194,29 @@ function emptyParagraph(
     ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
     namespaceBindings: [],
     attributes: identity,
-    children: [],
+    children:
+      text.length === 0
+        ? []
+        : [
+            fresh(
+              'r',
+              nextId,
+              wml,
+              [],
+              [
+                {
+                  id: nextId(),
+                  kind: 'text',
+                  namespaceUri: WML_NAMESPACE_URI,
+                  localName: 't',
+                  ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
+                  namespaceBindings: [],
+                  attributes: [],
+                  children: [{ id: nextId(), kind: 'textValue', value: text }],
+                } as OoxmlNode,
+              ]
+            ),
+          ],
   } as OoxmlParagraphNode;
 }
 
@@ -221,12 +244,13 @@ function buildTable(
         attribute('type', 'dxa', wml),
       ]);
       const cellProperties = fresh('tcPr', nextId, wml, [], [cellWidth]);
-      const paragraph = emptyParagraph(
+      const paragraph = paragraphWithText(
         w14Prefix,
         `${op.beforeParagraphId}:r${rowIndex}c${colIndex}`,
         usedParagraphIds,
         nextId,
-        wml
+        wml,
+        op.cellText?.[rowIndex]?.[colIndex] ?? ''
       );
       paragraphIds.push(paragraph.id);
       const cell = {
@@ -292,6 +316,20 @@ export function validateInsertTable(part: OoxmlPart, op: InsertTableOp): TreeOpR
   }
   if (op.columnWidthTwips * op.cols > MAX_TABLE_WIDTH_TWIPS) return 'invalid-property-value';
 
+  if (
+    op.cellText !== undefined &&
+    (!Array.isArray(op.cellText) ||
+      op.cellText.length !== op.rows ||
+      op.cellText.some(
+        (row) =>
+          !Array.isArray(row) ||
+          row.length !== op.cols ||
+          row.some((cell) => typeof cell !== 'string')
+      ))
+  ) {
+    return 'invalidArgs';
+  }
+
   const paragraph = findNode(part, op.beforeParagraphId);
   if (!paragraph) return 'unknown-paragraph';
   if (paragraph.kind !== 'paragraph') return 'not-a-paragraph';
@@ -328,7 +366,7 @@ export function applyInsertTable(
   const previous = index > 0 ? parent.children[index - 1] : undefined;
   const separator =
     previous && previous.kind !== 'textValue' && previous.localName === 'tbl'
-      ? emptyParagraph(w14Prefix, `${op.beforeParagraphId}:sep`, usedParagraphIds, nextId, wml)
+      ? paragraphWithText(w14Prefix, `${op.beforeParagraphId}:sep`, usedParagraphIds, nextId, wml)
       : null;
 
   const inserted: OoxmlNode[] = separator ? [separator, built.table] : [built.table];

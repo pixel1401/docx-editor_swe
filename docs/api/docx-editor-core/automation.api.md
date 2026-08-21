@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export const AUTOMATION_COMMAND_OPERATIONS: readonly ["insertText", "replaceSpan", "insertParagraph", "splitParagraph", "deleteParagraph", "selectSpan", "selectBookmark", "setFont", "setParagraphFormat", "setStyle", "setPageSetup", "deleteNote", "setListLevel", "insertListParagraph", "setHyperlink", "insertComment", "setCommentResolved", "replyToComment", "deleteComment", "acceptRevision", "rejectRevision", "acceptAllRevisions", "rejectAllRevisions", "setContentControlValue", "setContentControlProperties", "deleteContentControl", "insertContentControlText", "insertContentControl", "insertCustomNode"];
+export const AUTOMATION_COMMAND_OPERATIONS: readonly ["insertText", "replaceSpan", "insertParagraph", "splitParagraph", "deleteParagraph", "selectSpan", "selectBookmark", "setFont", "setParagraphFormat", "setStyle", "setPageSetup", "deleteNote", "setListLevel", "insertListParagraph", "setHyperlink", "insertComment", "setCommentResolved", "replyToComment", "deleteComment", "acceptRevision", "rejectRevision", "acceptAllRevisions", "rejectAllRevisions", "setContentControlValue", "replaceContentControlWithTable", "setContentControlProperties", "deleteContentControl", "insertContentControlText", "insertContentControl", "insertCustomNode"];
 
 // @public
 export const AUTOMATION_QUERY_OPERATIONS: readonly ["getDocument", "getBody", "getParagraphs", "getSpanParagraphs", "getText", "getSpanText", "getParagraphId", "search", "getFont", "getParagraphFormat", "getStyle", "getSections", "getPageSetup", "getFurniture", "getNotes", "getNoteBody", "getNoteText", "getNoteKind", "getLists", "getListId", "getListById", "getListParagraphs", "getParagraphList", "getListLevel", "getHyperlink", "getBookmarks", "getBookmarkName", "getBookmarkRange", "getComments", "getCommentReplies", "getCommentId", "getCommentAuthor", "getCommentDate", "getCommentText", "getCommentRange", "getCommentResolved", "getRevisions", "getRevisionType", "getRevisionAuthor", "getRevisionDate", "getRevisionRange", "getContentControls", "getContentControlById", "getContentControlsByTag", "getContentControlsByTitle", "getContentControlTag", "getContentControlTitle", "getContentControlFileId", "getContentControlSubtype", "getContentControlLock", "getContentControlIsBound", "getContentControlPlaceholderShown", "getContentControlTemporary", "getContentControlText", "getContentControlParagraphs", "getContentControlRange"];
@@ -61,6 +61,16 @@ export type AutomationContentControlScope = {
 
 // @public
 export type AutomationContentControlSubtype = 'richText' | 'plainText' | 'dropDownList' | 'comboBox' | 'date';
+
+// @public (undocumented)
+export interface AutomationContentControlTable {
+    // (undocumented)
+    readonly columns: readonly string[];
+    // (undocumented)
+    readonly rows: readonly (readonly string[])[];
+    // (undocumented)
+    readonly widthTwips?: number;
+}
 
 // @public
 export type AutomationContentControlValue = {
@@ -875,6 +885,10 @@ export type AutomationOperation =
     readonly op: 'setContentControlValue';
     readonly contentControl: AutomationHandle;
     readonly value: AutomationContentControlValue;
+} | {
+    readonly op: 'replaceContentControlWithTable';
+    readonly contentControl: AutomationHandle;
+    readonly table: AutomationContentControlTable;
 }
 /** Author tag, title or lock. An omitted member is left as it is; `null` removes it. */
 | {

@@ -1,28 +1,6 @@
-// What each operation MEANS, as reads off a snapshot and `TreeDocOp`s for one transaction.
-//
-// INTERNAL, and the only place in the lane that decides anything. `host.ts` runs a batch;
-// this file is what a batch is made of. Keeping it separate is not tidiness: the planner is
-// pure with respect to the document — it reads a snapshot and produces ops — so every semantic
-// question ("what does inserting a paragraph before another one do to identity", "what does
-// deleting across a paragraph mark leave behind") is answered in one testable place instead of
-// being distributed across two host adapters.
-//
-// THREE RULES HOLD EVERYTHING TOGETHER:
-//
-// 1. QUERIES ANSWER FROM THE START OF THE BATCH. A read is a read of the state the caller's
-//    decisions were made against.
-//
-// 2. COMMANDS ARE PLANNED FROM THE START OF THE BATCH AND APPLIED IN ORDER. Offsets a caller
-//    supplies are validated against the state it could see. Inside the transaction the ops run
-//    in sequence, so two writes to one paragraph shift each other exactly as two sequential
-//    edits would.
-//
-// 3. A PARAGRAPH THAT ONE COMMAND RESTRUCTURES BELONGS TO THAT COMMAND. Splitting, deleting, or
-//    inserting beside a paragraph changes what its offsets mean; a second command addressing it
-//    in the same batch would be planned against coordinates that no longer describe it. That is
-//    `conflicting-operations` — refused, never guessed at. It costs nothing real: the common
-//    shape, one structural edit per paragraph per sync, is untouched.
-//
+// Pure batch-operation planner: turns snapshot reads into `TreeDocOp`s.
+// Queries use the batch start. Commands run in order, but one structural write owns a paragraph:
+// later commands against changed coordinates are refused as `conflicting-operations`.
 import type { OoxmlProperty, TreeDocOp } from '../store/store/tree-ops.ts';
 import {
   findOccurrences,
@@ -50,6 +28,7 @@ import type {
   AutomationSelectionMode,
 } from './operations.ts';
 import { createBatchCommandPolicy } from './batch-command-policy.ts';
+import { planContentControlTableReplacement } from './content-control-table-plan.ts';
 import type {
   AutomationCapabilities,
   AutomationError,
@@ -2608,6 +2587,16 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
           answer: () => APPLIED,
         };
       }
+
+      case 'replaceContentControlWithTable':
+        return planContentControlTableReplacement(
+          operation,
+          controlOf,
+          planFor,
+          pinWrite,
+          refuse,
+          APPLIED
+        );
 
       case 'setContentControlProperties': {
         const found = controlOf(operation.contentControl);

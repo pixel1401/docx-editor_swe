@@ -3941,6 +3941,7 @@ export type TreeDocOp = {
     readonly rows: number;
     readonly cols: number;
     readonly columnWidthTwips: number;
+    readonly cellText?: readonly (readonly string[])[];
 } | {
     readonly op: 'insertTableRow';
     readonly tableId: string;

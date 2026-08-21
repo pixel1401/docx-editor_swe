@@ -79,6 +79,7 @@ export {
   type AutomationContentControlRangeLocation,
   type AutomationContentControlScope,
   type AutomationContentControlSubtype,
+  type AutomationContentControlTable,
   type AutomationContentControlValue,
   type AutomationOperation,
   type AutomationOperationKind,

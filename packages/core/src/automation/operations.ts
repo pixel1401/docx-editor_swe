@@ -71,6 +71,12 @@ export type AutomationContentControlValue =
   | { readonly kind: 'checkbox'; readonly checked: boolean }
   | { readonly kind: 'date'; readonly iso: string };
 
+export interface AutomationContentControlTable {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+  readonly widthTwips?: number;
+}
+
 /** The `ST_Lock` values an author may write. */
 export type AutomationContentControlLock =
   | 'unlocked'
@@ -652,6 +658,11 @@ export type AutomationOperation =
       readonly contentControl: AutomationHandle;
       readonly value: AutomationContentControlValue;
     }
+  | {
+      readonly op: 'replaceContentControlWithTable';
+      readonly contentControl: AutomationHandle;
+      readonly table: AutomationContentControlTable;
+    }
   /** Author tag, title or lock. An omitted member is left as it is; `null` removes it. */
   | {
       readonly op: 'setContentControlProperties';
@@ -832,6 +843,7 @@ export const AUTOMATION_COMMAND_OPERATIONS = [
   'acceptAllRevisions',
   'rejectAllRevisions',
   'setContentControlValue',
+  'replaceContentControlWithTable',
   'setContentControlProperties',
   'deleteContentControl',
   'insertContentControlText',
