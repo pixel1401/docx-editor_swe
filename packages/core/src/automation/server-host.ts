@@ -47,6 +47,7 @@ import type { AutomationCapabilities, AutomationHost } from './protocol.ts';
 /** What a headless host can do. It paints nothing, so it claims nothing about painting. */
 export const SERVER_AUTOMATION_CAPABILITIES: AutomationCapabilities = Object.freeze({
   document: true,
+  forceContentControlText: true,
   save: true,
   events: true,
   selection: false,

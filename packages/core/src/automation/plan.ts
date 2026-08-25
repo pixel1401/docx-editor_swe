@@ -2587,6 +2587,13 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
       }
 
       case 'setContentControlValue': {
+        if (operation.force === true && !capabilities.forceContentControlText) {
+          return refuse(
+            'unsupported-capability',
+            'this host cannot force content-control text replacement',
+            'forceContentControlText'
+          );
+        }
         const found = controlOf(operation.contentControl);
         if (!('control' in found)) return found;
         const value = contentControlValueOf(operation.value);
@@ -2599,7 +2606,12 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
           kind: 'command',
           story: found.reads.story,
           ops: [
-            { op: 'setContentControlValue', controlId: found.control.nodeId, value: value.value },
+            {
+              op: 'setContentControlValue',
+              controlId: found.control.nodeId,
+              value: value.value,
+              ...(operation.force === true ? { force: true } : {}),
+            },
           ],
           answer: () => APPLIED,
         };

@@ -139,6 +139,22 @@ describe('capabilities gate the operations they name', () => {
     }
   });
 
+  test('a host without the server force capability cannot bypass an SDT lock', () => {
+    const { host } = fixture({ forceContentControlText: false });
+    const response = host.execute({
+      operations: [
+        {
+          op: 'setContentControlValue',
+          contentControl: bodyHandle(host),
+          value: { kind: 'text', text: 'replacement' },
+          force: true,
+        },
+      ],
+    });
+    expect(response.ok).toBe(false);
+    expect(errorCodeAt(response, 0)).toBe('unsupported-capability');
+  });
+
   test('a host without the events capability never notifies', () => {
     const { host, publish } = fixture({ events: false });
     let seen = 0;
@@ -219,6 +235,7 @@ describe('the operation vocabulary declares which operations write', () => {
       'acceptAllRevisions',
       'rejectAllRevisions',
       'setContentControlValue',
+      'replaceContentControlWithTable',
       'setContentControlProperties',
       'deleteContentControl',
       'insertContentControlText',

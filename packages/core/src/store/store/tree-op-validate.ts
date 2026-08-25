@@ -460,7 +460,9 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
     if (owner) return owner;
   }
 
-  if (op.op !== 'deleteBlock') {
+  const isForcedControlText = op.op === 'setContentControlValue' && op.force === true;
+
+  if (op.op !== 'deleteBlock' && !isForcedControlText) {
     const lockRefusal = contentControlLockRefusal(part, op);
     if (lockRefusal) return lockRefusal;
   }
@@ -468,8 +470,10 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
   // A binding is the same shape of refusal from the other direction: not "you may not change
   // this" but "this engine cannot change it without desyncing the part it mirrors". Checked here
   // so every content mutation meets it, not only the value write that names the control.
-  const bindingRefusal = contentControlBindingRefusal(part, op);
-  if (bindingRefusal) return bindingRefusal;
+  if (!isForcedControlText) {
+    const bindingRefusal = contentControlBindingRefusal(part, op);
+    if (bindingRefusal) return bindingRefusal;
+  }
 
   if (
     op.op === 'setContentControlProperties' ||
@@ -479,6 +483,10 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
     const control = findNode(part, op.controlId);
     if (!control) return 'unknown-content-control';
     if (control.kind !== 'contentControl') return 'not-a-content-control';
+    if (op.op === 'setContentControlValue' && op.force === true) {
+      if (typeof op.value === 'string') return null;
+      return op.value.kind === 'text' ? null : 'typeMismatch';
+    }
     if (op.op === 'setContentControlProperties') {
       if (op.tag === undefined && op.alias === undefined && op.lock === undefined) {
         return 'invalidArgs';
@@ -552,6 +560,7 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
   }
 
   if (op.op === 'setContentControlValue') {
+    if (op.force === true) return 'typeMismatch';
     if (typeof op.value !== 'string') return 'typeMismatch';
     return validateSetContentControlValue(part, op.controlId, op.value);
   }

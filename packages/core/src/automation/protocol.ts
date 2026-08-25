@@ -67,6 +67,11 @@ export interface AutomationHandle<K extends AutomationObjectKind = AutomationObj
 export interface AutomationCapabilities {
   /** Reading and editing document content. Every document operation requires it. */
   readonly document: boolean;
+  /**
+   * Server-only legacy-template escape hatch. Browser/editor hosts must omit it or report false;
+   * they cannot bypass an SDT lock or binding.
+   */
+  readonly forceContentControlText?: boolean;
   /** Serializing the current document back to DOCX bytes. */
   readonly save: boolean;
   /** Change notification through {@link AutomationHost.subscribe}. */

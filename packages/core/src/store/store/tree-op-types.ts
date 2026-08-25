@@ -757,6 +757,8 @@ export type TreeDocOp =
       readonly controlId: string;
       /** String is the editor-facing v2 form; structured input is the automation form. */
       readonly value: string | ContentControlValueInput;
+      /** Explicit legacy-template escape hatch; only text values are supported. */
+      readonly force?: boolean;
     }
   | {
       /**

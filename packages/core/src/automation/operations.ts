@@ -664,6 +664,12 @@ export type AutomationOperation =
       readonly op: 'setContentControlValue';
       readonly contentControl: AutomationHandle;
       readonly value: AutomationContentControlValue;
+      /**
+       * Server-side escape hatch for legacy templates. Replaces the control's OOXML text even
+       * when Word marks it locked, bound, or as a typed form control. The binding and typed
+       * control metadata are removed so Word cannot restore the old value on open.
+       */
+      readonly force?: boolean;
     }
   | {
       readonly op: 'replaceContentControlWithTable';
