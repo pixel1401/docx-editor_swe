@@ -33,6 +33,41 @@ function mount(text = 'before after') {
 }
 
 describe('insertFieldSdt command', () => {
+  test('formats a mixed selection and retains styles and locks after reopening', async () => {
+    const editor = mount('before after');
+    const paragraphId = editor.surface!.session.paragraphIds()[0]!;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 7 },
+      head: { paragraphId, offset: 7 },
+    });
+    editor.exec({ type: 'insertFieldSdt', fieldId: 'name', text: '[Name]' });
+    const text = editor.query({ type: 'paragraphs' })[0]!.text;
+    editor.surface!.setSelection({
+      anchor: { paragraphId, offset: 0 },
+      head: { paragraphId, offset: text.length },
+    });
+    editor.exec({ type: 'toggleMark', mark: 'bold' });
+    editor.exec({ type: 'setMarkAttr', mark: 'color', attr: 'val', value: 'FF0000' });
+    expect(editor.surface!.state().lastRejection).toBeNull();
+    const bytes = new Uint8Array(await editor.save());
+    const xml = strFromU8(unzipSync(bytes)['word/document.xml']!);
+    expect(xml.match(/<w:b\/>/g)).toHaveLength(3);
+    expect(xml.match(/<w:color w:val="FF0000"\/>/g)).toHaveLength(4);
+    expect(xml).toContain('<w:tag w:val="docx-field:name"/>');
+    expect(xml).toContain('<w:lock w:val="contentLocked"/>');
+    const reopened = createDocxEditor({
+      container: document.createElement('div'),
+      document: bytes,
+    });
+    expect(reopened.query({ type: 'paragraphs' })[0]!.text).toBe(text);
+    const reopenedXml = strFromU8(
+      unzipSync(new Uint8Array(await reopened.save()))['word/document.xml']!
+    );
+    expect(reopenedXml.match(/<w:color w:val="FF0000"\/>/g)).toHaveLength(4);
+    editor.destroy();
+    reopened.destroy();
+  });
+
   test('saves exact field tag, alias, text, and content lock', async () => {
     const editor = mount();
     const paragraphId = editor.surface!.session.paragraphIds()[0]!;

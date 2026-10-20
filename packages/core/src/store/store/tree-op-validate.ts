@@ -10,6 +10,7 @@ import { findNode } from '../package/ooxml-edit.ts';
 import { isValidXmlText } from '../package/sinks.ts';
 import { isAuthorableDataBinding } from '../package/custom-node-payloads.ts';
 import { validateDeleteBlock } from './tree-op-blocks.ts';
+import { contentEditLockedAt } from './field-sdt-formatting.ts';
 import {
   INSERTABLE_CONTENT_CONTROL_TYPES,
   contentControlBindingRefusal,
@@ -263,7 +264,8 @@ function rangeTouchesContentRestriction(
   paragraph: OoxmlParagraphNode,
   start: number,
   end: number,
-  bias?: 'left' | 'right'
+  bias?: 'left' | 'right',
+  formatting = false
 ): TreeOpRejection | null {
   const segments = segmentsOf(paragraph);
   const overlappingRunIds = new Set(
@@ -292,7 +294,7 @@ function rangeTouchesContentRestriction(
   }
   for (const runId of overlappingRunIds) {
     if (isBoundAt(part, runId)) return 'bound';
-    if (effectiveContentLockAt(part, runId).content) return 'locked';
+    if (contentEditLockedAt(part, runId, formatting)) return 'locked';
   }
   const control = contentControlAtCaret(part, paragraph, start, end, bias);
   if (control) {
@@ -302,10 +304,8 @@ function rangeTouchesContentRestriction(
     ) {
       return 'bound';
     }
-    // Empty paragraphs have no overlapping runs, so content lock must be read from the
-    // control itself — otherwise an empty `contentLocked` / `sdtContentLocked` control
-    // would admit the first insertion.
-    if (effectiveLockOf(part, control).content) return 'locked';
+    // Empty paragraphs still inherit the control's content lock.
+    if (contentEditLockedAt(part, control.id, formatting)) return 'locked';
     if (isTemporaryControl(control) && effectiveLockOf(part, control).wrapper) {
       return 'locked';
     }
@@ -797,7 +797,7 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
         if (propertiesRejection) return propertiesRejection;
       }
       if (isBoundAt(part, op.paragraphId)) return 'bound';
-      if (effectiveContentLockAt(part, op.paragraphId).content) return 'locked';
+      if (contentEditLockedAt(part, op.paragraphId, true)) return 'locked';
       return null;
     case 'setListNumbering': {
       const level = op.level ?? 0;
@@ -881,13 +881,13 @@ export function validateTreeOp(part: OoxmlPart, op: TreeDocOp): TreeOpRejection 
         const propertiesRejection = validateProperties(op.properties, RUN_PROPERTY_SET);
         if (propertiesRejection) return propertiesRejection;
       }
-      return rejectContentEdit(part, paragraph, op.start, op.end);
+      return rangeTouchesContentRestriction(part, paragraph, op.start, op.end, undefined, true);
     }
     case 'setParagraphProperties': {
       const propertiesRejection = validateProperties(op.properties, PARAGRAPH_PROPERTY_SET);
       if (propertiesRejection) return propertiesRejection;
       if (isBoundAt(part, op.paragraphId)) return 'bound';
-      if (effectiveContentLockAt(part, op.paragraphId).content) return 'locked';
+      if (contentEditLockedAt(part, op.paragraphId, true)) return 'locked';
       return null;
     }
     case 'insertInlineContentControl': {

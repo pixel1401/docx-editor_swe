@@ -34,6 +34,7 @@ export interface AutomationBatchResponse {
 export interface AutomationCapabilities {
     readonly document: boolean;
     readonly events: boolean;
+    readonly forceContentControlText?: boolean;
     readonly layout: boolean;
     readonly save: boolean;
     readonly scrolling: boolean;
@@ -66,6 +67,11 @@ export type AutomationContentControlSubtype = 'richText' | 'plainText' | 'dropDo
 export interface AutomationContentControlTable {
     // (undocumented)
     readonly columns: readonly string[];
+    readonly fullWidth?: boolean;
+    readonly header?: {
+        readonly bold?: boolean;
+        readonly fillColor?: string;
+    };
     // (undocumented)
     readonly rows: readonly (readonly string[])[];
     // (undocumented)
@@ -885,6 +891,7 @@ export type AutomationOperation =
     readonly op: 'setContentControlValue';
     readonly contentControl: AutomationHandle;
     readonly value: AutomationContentControlValue;
+    readonly force?: boolean;
 } | {
     readonly op: 'replaceContentControlWithTable';
     readonly contentControl: AutomationHandle;

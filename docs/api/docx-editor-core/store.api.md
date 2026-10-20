@@ -3942,6 +3942,11 @@ export type TreeDocOp = {
     readonly cols: number;
     readonly columnWidthTwips: number;
     readonly cellText?: readonly (readonly string[])[];
+    readonly header?: {
+        readonly bold?: boolean;
+        readonly fillColor?: string;
+    };
+    readonly fullWidth?: boolean;
 } | {
     readonly op: 'insertTableRow';
     readonly tableId: string;
@@ -4057,6 +4062,7 @@ export type TreeDocOp = {
     readonly op: 'setContentControlValue';
     readonly controlId: string;
     readonly value: string | ContentControlValueInput;
+    readonly force?: boolean;
 } | {
     readonly op: 'setContentControlProperties';
     readonly controlId: string;

@@ -46,6 +46,7 @@ import {
   runPropertiesNodeOf,
 } from './tree-op-nodes.ts';
 import { splitRunsAt } from './tree-op-apply.ts';
+import { contentEditLockedAt, isFieldSdtFormatting } from './field-sdt-formatting.ts';
 import {
   insertionLandingNodeId,
   paragraphLength,
@@ -863,11 +864,7 @@ function revisionNodeRemovesContent(node: OoxmlNode, action: RevisionOpAction): 
 }
 
 /**
- * Whether a lock refuses an op, checked before any tree work.
- *
- * Resolved from the op's REACH rather than from a list of op names: a template that locks a field
- * means the field, and a caller who could still restyle it, renumber it, accept a tracked change
- * inside it or retarget the link it holds has not been stopped by anything.
+ * Refuse edits that reach locked content, except formatting of field labels.
  */
 export function contentControlLockRefusal(part: OoxmlPart, op: TreeDocOp): TreeOpRejection | null {
   const reach = treeOpReach(op);
@@ -883,7 +880,10 @@ export function contentControlLockRefusal(part: OoxmlPart, op: TreeDocOp): TreeO
   for (const touch of resolveReach(part, reach).touches) {
     if (namedControlAnswersForItself && !touch.discarded) continue;
     const resolved = resolveContentControlLock(touch.locks);
-    if (lockForbidsEdit(resolved)) return 'locked';
+    const contentLocked = isFieldSdtFormatting(op)
+      ? contentEditLockedAt(part, touch.control.id, true)
+      : lockForbidsEdit(resolved);
+    if (contentLocked) return 'locked';
     if ((touch.removed || touch.discarded) && lockForbidsRemoval(resolved)) return 'locked';
   }
   return null;
