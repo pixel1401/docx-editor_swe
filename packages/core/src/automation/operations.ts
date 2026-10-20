@@ -57,6 +57,19 @@ export type AutomationContentControlValue =
   | { readonly kind: 'checkbox'; readonly checked: boolean }
   | { readonly kind: 'date'; readonly iso: string };
 
+export interface AutomationContentControlTable {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+  readonly widthTwips?: number;
+  /** Make the first row a repeating, bold table header with an optional #RRGGBB fill. */
+  readonly header?: {
+    readonly bold?: boolean;
+    readonly fillColor?: string;
+  };
+  /** Use Word's 100% table width instead of an absolute table width. */
+  readonly fullWidth?: boolean;
+}
+
 /** The `ST_Lock` values an author may write. */
 export type AutomationContentControlLock =
   | 'unlocked'
@@ -791,6 +804,17 @@ export type AutomationOperation =
       readonly op: 'setContentControlValue';
       readonly contentControl: AutomationHandle;
       readonly value: AutomationContentControlValue;
+      /**
+       * Server-side escape hatch for legacy templates. Replaces the control's OOXML text even
+       * when Word marks it locked, bound, or as a typed form control. The binding and typed
+       * control metadata are removed so Word cannot restore the old value on open.
+       */
+      readonly force?: boolean;
+    }
+  | {
+      readonly op: 'replaceContentControlWithTable';
+      readonly contentControl: AutomationHandle;
+      readonly table: AutomationContentControlTable;
     }
   /** Author tag, title or lock. An omitted member is left as it is; `null` removes it. */
   | {

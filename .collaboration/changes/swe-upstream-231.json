@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The SWE fork uses upstream 2.5 and custom field lock handling.",
+  "after": "SWE field insertion and server template replacement use upstream 2.31 canonical operations; formatting uses its opt-in lock policy.",
+  "reason": "The port writes existing SDT, paragraph, run and table node kinds with unchanged identities and format fields. Released readers retain their meaning. Forced and table template replacements refuse tracked editing.",
+  "tests": [
+    "packages/core/src/editor/__tests__/insert-field-sdt-command.test.ts",
+    "packages/core/src/automation/__tests__/swe-template-compatibility.test.ts",
+    "packages/core/src/automation/__tests__/automation-content-control-tables.test.ts"
+  ],
+  "changeset": "insert-field-sdt-command",
+  "migration": null
+}

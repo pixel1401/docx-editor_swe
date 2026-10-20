@@ -84,6 +84,7 @@ import type {
   AutomationTextProjection,
 } from './operations.ts';
 import { createBatchCommandPolicy } from './batch-command-policy.ts';
+import { planContentControlTableReplacement } from './content-control-table-plan.ts';
 import type {
   AutomationCapabilities,
   AutomationError,
@@ -489,6 +490,23 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
     plan.order.splice(position, 0, slot);
     plan.created.push(slot);
     return slot;
+  };
+
+  /** Reserve the paragraphs a structural table insertion will create before its anchor. */
+  const reserveTableParagraphs = (
+    plan: StoryPlan,
+    beforeParagraphId: string,
+    count: number
+  ): PlannedOperation | null => {
+    const anchor = plan.slotById.get(beforeParagraphId);
+    if (!anchor)
+      return refuse('invalid-handle', 'that paragraph is not in this story', beforeParagraphId);
+    const conflict = touch(plan, beforeParagraphId);
+    if (conflict) return conflict;
+    const position = positionOf(plan, anchor);
+    for (let index = 0; index < count; index += 1) insertSlot(plan, position + index);
+    plan.restructured.add(beforeParagraphId);
+    return null;
   };
 
   const spanOf = (range: ResolvedRange): AutomationSpan => spanValue(range, handles);
@@ -2571,6 +2589,15 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
       }
 
       case 'setContentControlValue': {
+        if (operation.force === true && tracked)
+          return refuse('unsupported-capability', 'force requires direct editing');
+        if (operation.force === true && !capabilities.forceContentControlText) {
+          return refuse(
+            'unsupported-capability',
+            'this host cannot force content-control text replacement',
+            'forceContentControlText'
+          );
+        }
         const found = controlOf(operation.contentControl);
         if (!('control' in found)) return found;
         const value = contentControlValueOf(operation.value);
@@ -2583,11 +2610,29 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
           kind: 'command',
           story: found.reads.story,
           ops: [
-            { op: 'setContentControlValue', controlId: found.control.nodeId, value: value.value },
+            {
+              op: 'setContentControlValue',
+              controlId: found.control.nodeId,
+              value: value.value,
+              ...(operation.force === true ? { force: true } : {}),
+            },
           ],
           answer: () => APPLIED,
         };
       }
+
+      case 'replaceContentControlWithTable':
+        if (tracked)
+          return refuse('unsupported-capability', 'table replacement requires direct editing');
+        return planContentControlTableReplacement(
+          operation,
+          controlOf,
+          planFor,
+          pinWrite,
+          reserveTableParagraphs,
+          refuse,
+          APPLIED
+        );
 
       case 'setContentControlProperties': {
         const found = controlOf(operation.contentControl);

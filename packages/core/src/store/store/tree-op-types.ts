@@ -656,6 +656,14 @@ export type TreeDocOp =
       readonly columnWidthTwips: number;
       /** Propose the complete table through native row and cell insertion revisions. */
       readonly revision?: RevisionAttributionInput;
+      readonly cellText?: readonly (readonly string[])[];
+      /** Optional presentation for the first row, authored by a higher-level API. */
+      readonly header?: {
+        readonly bold?: boolean;
+        readonly fillColor?: string;
+      };
+      /** Author `w:tblW` as 100% (`pct=5000`) rather than automatic width. */
+      readonly fullWidth?: boolean;
     }
   | {
       /** Insert a fresh row above or below a canonical table row. */
@@ -898,6 +906,8 @@ export type TreeDocOp =
       readonly controlId: string;
       /** String is the editor-facing v2 form; structured input is the automation form. */
       readonly value: string | ContentControlValueInput;
+      /** Explicit legacy-template escape hatch; only text values are supported. */
+      readonly force?: boolean;
     }
   | {
       /**

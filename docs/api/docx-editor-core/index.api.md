@@ -1817,7 +1817,7 @@ export type EditorCommand = {
 }[keyof EditorCommands];
 
 // @public
-export interface EditorCommands extends EditorCommandShape<DocEdits>, EditorHeaderFooterCommands, EditorNoteCommands, EditorFormatPainterCommands, EditorBookmarkCommands {
+export interface EditorCommands extends EditorCommandShape<DocEdits>, EditorHeaderFooterCommands, EditorNoteCommands, EditorFormatPainterCommands, EditorBookmarkCommands, EditorFieldSdtCommands {
     clearFormatting: Record<never, never>;
     commitTableColumnDividerResize: {
         leftWidthTwips: number;
@@ -2090,6 +2090,14 @@ export interface EditorEvents {
 export interface EditorExecOptions extends HistoryGroupOptions {
     readonly historyGroup?: HistoryGroup;
     readonly scope?: EditorScope;
+}
+
+// @public
+export interface EditorFieldSdtCommands {
+    insertFieldSdt: {
+        fieldId: string | number;
+        text: string;
+    };
 }
 
 // @public

@@ -116,7 +116,11 @@ function borderSide(
   ]);
 }
 
-function tableProperties(nextId: () => string, wml: WmlFreshNamespaceContext): OoxmlNode {
+function tableProperties(
+  nextId: () => string,
+  wml: WmlFreshNamespaceContext,
+  fullWidth: boolean
+): OoxmlNode {
   const borders = fresh(
     'tblBorders',
     nextId,
@@ -126,11 +130,11 @@ function tableProperties(nextId: () => string, wml: WmlFreshNamespaceContext): O
       borderSide(side, nextId, wml)
     )
   );
-  // `w:tblW` 0/auto with a full `w:tblGrid`: the grid carries the widths, and an
-  // authored total would fight the section the table is later moved into.
+  // A caller can explicitly request the Word-compatible 100% form. Otherwise the grid
+  // carries the widths and the table remains auto-sized.
   const width = fresh('tblW', nextId, wml, [
-    attribute('w', '0', wml),
-    attribute('type', 'auto', wml),
+    attribute('w', fullWidth ? '5000' : '0', wml),
+    attribute('type', fullWidth ? 'pct' : 'auto', wml),
   ]);
   // Word's own default for a new table: banding off, first row and first column
   // emphasised if a style is later applied.
@@ -177,12 +181,14 @@ function tableGrid(
   } as OoxmlNode;
 }
 
-function emptyParagraph(
+function paragraphWithText(
   w14Prefix: string | null,
   seed: string,
   usedParagraphIds: Set<string>,
   nextId: () => string,
-  wml: WmlFreshNamespaceContext
+  wml: WmlFreshNamespaceContext,
+  text = '',
+  bold = false
 ): OoxmlParagraphNode {
   const identity: OoxmlAttribute[] = [];
   if (w14Prefix !== null) {
@@ -198,7 +204,30 @@ function emptyParagraph(
     ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
     namespaceBindings: [],
     attributes: identity,
-    children: [],
+    children:
+      text.length === 0
+        ? []
+        : [
+            fresh(
+              'r',
+              nextId,
+              wml,
+              [],
+              [
+                ...(bold ? [fresh('rPr', nextId, wml, [], [fresh('b', nextId, wml)])] : []),
+                {
+                  id: nextId(),
+                  kind: 'text',
+                  namespaceUri: WML_NAMESPACE_URI,
+                  localName: 't',
+                  ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
+                  namespaceBindings: [],
+                  attributes: [],
+                  children: [{ id: nextId(), kind: 'textValue', value: text }],
+                } as OoxmlNode,
+              ]
+            ),
+          ],
   } as OoxmlParagraphNode;
 }
 
@@ -226,13 +255,34 @@ function buildTable(
         attribute('w', String(op.columnWidthTwips), wml),
         attribute('type', 'dxa', wml),
       ]);
-      const cellProperties = fresh('tcPr', nextId, wml, [], [cellWidth]);
-      const paragraph = emptyParagraph(
+      const isHeader = rowIndex === 0 && op.header !== undefined;
+      const headerFill = isHeader ? op.header?.fillColor : undefined;
+      const cellProperties = fresh(
+        'tcPr',
+        nextId,
+        wml,
+        [],
+        [
+          cellWidth,
+          ...(headerFill
+            ? [
+                fresh('shd', nextId, wml, [
+                  attribute('val', 'clear', wml),
+                  attribute('color', 'auto', wml),
+                  attribute('fill', headerFill.slice(1).toUpperCase(), wml),
+                ]),
+              ]
+            : []),
+        ]
+      );
+      const paragraph = paragraphWithText(
         w14Prefix,
         `${op.beforeParagraphId}:r${rowIndex}c${colIndex}`,
         usedParagraphIds,
         nextId,
-        wml
+        wml,
+        op.cellText?.[rowIndex]?.[colIndex] ?? '',
+        isHeader && op.header?.bold === true
       );
       paragraphIds.push(paragraph.id);
       const cell = {
@@ -248,6 +298,10 @@ function buildTable(
       cellIds.push(cell.id);
       cells.push(cell);
     }
+    const rowProperties =
+      rowIndex === 0 && op.header !== undefined
+        ? fresh('trPr', nextId, wml, [], [fresh('tblHeader', nextId, wml)])
+        : null;
     const row = {
       id: nextId(),
       kind: 'tableRow',
@@ -256,7 +310,7 @@ function buildTable(
       ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
       namespaceBindings: [],
       attributes: [],
-      children: cells,
+      children: rowProperties ? [rowProperties, ...cells] : cells,
     } as OoxmlTableRowNode;
     rows.push(
       op.revision ? withTrackedRowMarker(row, 'ins', revisionId!, op.revision, nextId, wml) : row
@@ -273,7 +327,7 @@ function buildTable(
     namespaceBindings: wml.rowBinding ? [wml.rowBinding] : [],
     attributes: [],
     children: [
-      tableProperties(nextId, wml),
+      tableProperties(nextId, wml, op.fullWidth === true),
       tableGrid(op.cols, op.columnWidthTwips, nextId, wml),
       ...rows,
     ],
@@ -300,7 +354,30 @@ export function validateInsertTable(part: OoxmlPart, op: InsertTableOp): TreeOpR
   ) {
     return 'invalid-property-value';
   }
+  if (
+    op.header !== undefined &&
+    (typeof op.header !== 'object' ||
+      (op.header.bold !== undefined && typeof op.header.bold !== 'boolean') ||
+      (op.header.fillColor !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(op.header.fillColor)))
+  ) {
+    return 'invalidArgs';
+  }
+  if (op.fullWidth !== undefined && typeof op.fullWidth !== 'boolean') return 'invalidArgs';
   if (op.columnWidthTwips * op.cols > MAX_TABLE_WIDTH_TWIPS) return 'invalid-property-value';
+
+  if (
+    op.cellText !== undefined &&
+    (!Array.isArray(op.cellText) ||
+      op.cellText.length !== op.rows ||
+      op.cellText.some(
+        (row) =>
+          !Array.isArray(row) ||
+          row.length !== op.cols ||
+          row.some((cell) => typeof cell !== 'string')
+      ))
+  ) {
+    return 'invalidArgs';
+  }
 
   const paragraph = findNode(part, op.beforeParagraphId);
   if (!paragraph) return 'unknown-paragraph';
@@ -339,7 +416,7 @@ export function applyInsertTable(
   const previous = index > 0 ? parent.children[index - 1] : undefined;
   let separator =
     previous && previous.kind !== 'textValue' && previous.localName === 'tbl'
-      ? emptyParagraph(w14Prefix, `${op.beforeParagraphId}:sep`, usedParagraphIds, nextId, wml)
+      ? paragraphWithText(w14Prefix, `${op.beforeParagraphId}:sep`, usedParagraphIds, nextId, wml)
       : null;
 
   if (separator && op.revision) {

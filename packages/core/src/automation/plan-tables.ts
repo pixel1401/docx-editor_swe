@@ -81,6 +81,7 @@ export function planTableOperation(
   operation: AutomationOperation,
   context: TablePlannerContext
 ): PlannedOperation | null {
+  if (operation.op === 'replaceContentControlWithTable') return null;
   if (!TABLE_OPS.has(operation.op)) return null;
   const { handles, reads: packages } = context;
   if (operation.op === 'getTables' || operation.op === 'insertTable') {

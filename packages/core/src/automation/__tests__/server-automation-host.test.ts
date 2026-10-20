@@ -99,6 +99,7 @@ describe('opening untrusted bytes', () => {
   test('a real package opens and reports what it can do', () => {
     const host = open();
     expect(host.capabilities).toEqual({
+      forceContentControlText: true,
       document: true,
       save: true,
       events: true,

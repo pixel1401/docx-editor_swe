@@ -8,6 +8,7 @@
 import type { EditorCommand } from '../contracts/editor.ts';
 
 const COMMANDS: Readonly<Record<EditorCommand['type'], true>> = {
+  insertFieldSdt: true,
   acceptAllRevisions: true,
   acceptRevision: true,
   addComment: true,

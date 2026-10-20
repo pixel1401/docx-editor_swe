@@ -1,5 +1,7 @@
 import type { ResolvedRevisionMarkup } from './revision-markup.ts';
 import type { ResolvedReviewPane } from './review-pane.ts';
+import type { EditorFieldSdtCommands } from './editor-field-sdt.ts';
+export type { EditorFieldSdtCommands } from './editor-field-sdt.ts';
 /**
  * `@docx-editor.dev/core/contracts/editor` — the `Editor` contract adapters are written against.
  *
@@ -963,10 +965,8 @@ export type {
 
 /**
  * Every command the editor accepts, keyed by name with its payload as the value.
- *
- * Extends the document-level {@link DocEdits} vocabulary with the things only a LIVE editor has:
- * selection, view state, chrome modes, header/footer and note editing. An interface rather than a
- * closed union so an extension can widen it by declaration merging.
+ * Extends {@link DocEdits} with selection, views, fields, headers, footers and notes.
+ * Declaration merging lets extensions add commands.
  */
 export interface EditorCommands
   extends
@@ -974,7 +974,8 @@ export interface EditorCommands
     EditorHeaderFooterCommands,
     EditorNoteCommands,
     EditorFormatPainterCommands,
-    EditorBookmarkCommands {
+    EditorBookmarkCommands,
+    EditorFieldSdtCommands {
   /** Switch how edits are written. A view command: it changes no document state. */
   setEditingMode: { mode: DocumentEditingMode };
   /**

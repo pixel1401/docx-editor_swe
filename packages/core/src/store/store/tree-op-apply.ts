@@ -144,6 +144,7 @@ import {
   applyRemoveContentControl as applyAutomationRemoveContentControl,
   applySetContentControlProperties as applyAutomationSetContentControlProperties,
   applySetContentControlValue as applyAutomationSetContentControlValue,
+  applyForceContentControlText,
   clearPlaceholder,
   placeholderControlForInsertion,
 } from './tree-op-content-controls.ts';
@@ -237,6 +238,8 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
   if (op.op === 'replaceStoryBlocks') {
     return applyReplaceStoryBlocks(part, op.storyRootId, op.paragraphs, options);
   }
+  if (op.op === 'setContentControlValue' && op.force === true)
+    return applyForceContentControlText(part, op, options);
   if (op.op === 'setContentControlValue' && typeof op.value !== 'string') {
     return applyAutomationSetContentControlValue(part, op, options);
   }
@@ -380,6 +383,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     return applyRemoveContentControl(part, op.controlId, options);
   if (op.op === 'setContentControlValue') {
     if (typeof op.value !== 'string') return { ok: false, reason: 'typeMismatch' };
+    if (op.force === true) return applyForceContentControlText(part, op, options);
     return applySetContentControlValue(part, op.controlId, op.value, options);
   }
   if (op.op === 'setSectionProperties') return applySetSectionProperties(part, op, options);

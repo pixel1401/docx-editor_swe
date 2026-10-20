@@ -371,6 +371,34 @@ describe('a script writes through the same refusals the keyboard meets', () => {
     expect(savedMainXml(host)).toContain('w:dataBinding');
   });
 
+  test('force text replaces a locked bound typed control as plain text', () => {
+    const host = open(
+      docx(
+        `<w:sdt><w:sdtPr><w:tag w:val="legacy"/><w:lock w:val="contentLocked"/>` +
+          `<w:dataBinding w:xpath="/root[1]/a[1]" w:storeItemID="{GUID}"/>` +
+          `<w:date w:fullDate="2026-08-25T00:00:00Z"/></w:sdtPr><w:sdtContent>` +
+          `<w:p><w:r><w:t>old</w:t></w:r></w:p></w:sdtContent></w:sdt>`
+      )
+    );
+    const control = controlsOf(host, roots(host).body)[0]!;
+    const written = host.execute({
+      operations: [
+        {
+          op: 'setContentControlValue',
+          contentControl: control,
+          value: { kind: 'text', text: 'replacement' },
+          force: true,
+        },
+      ],
+    });
+
+    expect(written.results[0]?.status).toBe('ok');
+    const xml = savedMainXml(host);
+    expect(xml).toContain('replacement');
+    expect(xml).not.toContain('w:dataBinding');
+    expect(xml).not.toContain('w:date');
+  });
+
   test('a dropdown refuses a value it does not declare', () => {
     const host = open(
       docx(

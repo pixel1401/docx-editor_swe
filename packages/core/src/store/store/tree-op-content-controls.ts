@@ -375,13 +375,10 @@ const TREE_OP_REACH: {
       range: { start: offset, end: offset },
     })),
   }),
-  // A join restructures both paragraphs: whatever either one held ends up somewhere else.
+  // The first paragraph retains its controls; only the second paragraph moves.
   joinParagraphs: (op) => ({
     kind: 'nodes',
-    targets: [
-      { nodeId: op.firstId, structural: true },
-      { nodeId: op.secondId, structural: true },
-    ],
+    targets: [{ nodeId: op.firstId }, { nodeId: op.secondId, structural: true }],
   }),
   setParagraphProperties: (op) => whole(op.paragraphId),
   setParagraphMarkProperties: (op) => whole(op.paragraphId),
@@ -1385,6 +1382,7 @@ interface PropertyEdits {
   readonly fullDate?: string;
   readonly checked?: boolean;
   readonly temporary?: false;
+  readonly forcePlainText?: boolean;
 }
 
 /**
@@ -1439,6 +1437,17 @@ export function editedProperties(
   if (edits.id !== undefined) setSimple('id', String(edits.id));
   if (edits.showingPlaceholder !== undefined) setFlag('showingPlcHdr', edits.showingPlaceholder);
   if (edits.temporary === false) setFlag('temporary', false);
+  if (edits.forcePlainText) {
+    children = children.filter(
+      (child) =>
+        child.kind === 'textValue' ||
+        !(
+          (child.namespaceUri === WML_NAMESPACE_URI &&
+            ['dataBinding', 'date', 'dropDownList', 'comboBox'].includes(child.localName)) ||
+          (child.namespaceUri === W14_NAMESPACE_URI && child.localName === 'checkbox')
+        )
+    );
+  }
   if (edits.lastValue !== undefined) {
     children = children.map((child) => {
       if (
@@ -1613,6 +1622,58 @@ export function applySetContentControlValue(
       control,
       rebuilt
     ),
+  };
+}
+
+/**
+ * Legacy server-template path. This intentionally bypasses Word form semantics and rewrites the
+ * control as plain text. It is opt-in: interactive editing must keep the normal lock/binding/type
+ * protections above.
+ */
+export function applyForceContentControlText(
+  part: OoxmlPart,
+  op: Extract<TreeDocOp, { op: 'setContentControlValue' }>,
+  options?: EditOptions
+): TreeOpResult {
+  const resolved = resolveControl(part, op.controlId);
+  if (typeof resolved === 'string') return { ok: false, reason: resolved };
+  const text =
+    typeof op.value === 'string' ? op.value : op.value.kind === 'text' ? op.value.text : null;
+  if (text === null) return { ok: false, reason: 'typeMismatch' };
+
+  const nextId = createNodeIdAllocator(part);
+  const sdtPr = contentControlPropertiesContainerOf(resolved.control);
+  const content = contentControlContentNodeOf(resolved.control);
+  const nextProperties = editedProperties(sdtPr, { forcePlainText: true }, nextId);
+  const inline = isInlineControl(part, resolved.control.id);
+  const children =
+    contentWithText(content, text, nextId, inline) ??
+    contentWithText(undefined, text, nextId, inline);
+  if (!children) return { ok: false, reason: 'unsupported' };
+  const nextContent = {
+    ...(content ??
+      wmlElement(nextId, 'sdtContent', { kind: 'contentControlContent' as OoxmlNode['kind'] })),
+    children,
+  } as OoxmlNode;
+  const rebuilt = {
+    ...resolved.control,
+    children: [
+      nextProperties,
+      ...resolved.control.children.filter(
+        (child) =>
+          child.kind !== 'contentControlProperties' && child.kind !== 'contentControlContent'
+      ),
+      nextContent,
+    ],
+  } as OoxmlNode;
+  const written = replaceNode(part, resolved.control.id, rebuilt, options);
+  if (!written.ok) {
+    return { ok: false, reason: 'tree-invariant', detail: JSON.stringify(written.issues) };
+  }
+  return {
+    ok: true,
+    part: written.part,
+    effect: contentControlEffect(resolved.control.id, 'flow-structural'),
   };
 }
 

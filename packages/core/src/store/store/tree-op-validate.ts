@@ -282,8 +282,9 @@ export function validateTreeOp(
   // OPT-IN: restyling does not rewrite what a control SAYS, so a host that protects the words and
   // not their look lets it past the content half of the lock. Neither op it covers removes a
   // control, so the removal half has nothing to ask; `w:dataBinding` still refuses below.
+  const isForcedControlText = op.op === 'setContentControlValue' && op.force === true;
   const restylePasses = restylePassesContentLock(op, policy);
-  if (op.op !== 'deleteBlock' && !restylePasses) {
+  if (op.op !== 'deleteBlock' && !restylePasses && !isForcedControlText) {
     const lockRefusal = contentControlLockRefusal(part, op);
     if (lockRefusal) return lockRefusal;
   }
@@ -291,9 +292,19 @@ export function validateTreeOp(
   // A binding is the same shape of refusal from the other direction: not "you may not change
   // this" but "this engine cannot change it without desyncing the part it mirrors". Checked here
   // so every content mutation meets it, not only the value write that names the control.
-  const bindingRefusal = contentControlBindingRefusal(part, op);
-  if (bindingRefusal) return bindingRefusal;
+  if (!isForcedControlText) {
+    const bindingRefusal = contentControlBindingRefusal(part, op);
+    if (bindingRefusal) return bindingRefusal;
+  }
   if (isDrawingTreeDocOp(op)) return null;
+  if (isForcedControlText) {
+    const control = findNode(part, op.controlId);
+    if (!control) return 'unknown-content-control';
+    if (control.kind !== 'contentControl') return 'not-a-content-control';
+    const text =
+      typeof op.value === 'string' ? op.value : op.value.kind === 'text' ? op.value.text : null;
+    return text === null ? 'typeMismatch' : isValidXmlText(text) ? null : 'invalidArgs';
+  }
 
   if (
     op.op === 'setContentControlProperties' ||

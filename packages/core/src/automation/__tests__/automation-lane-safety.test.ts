@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const LANE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,7 +92,7 @@ describe('the lane imports nothing that assumes a browser', () => {
   test('it reaches only provider-neutral store, collaboration, layout and export lanes', () => {
     // Every assertion below is over this list. Keep its setup guard on the actual graph test.
     expect(files.length).toBeGreaterThanOrEqual(6);
-    expect(files.map((file) => file.split('/').pop())).toContain('server-host.ts');
+    expect(files.map((file) => basename(file))).toContain('server-host.ts');
     // The DAG entry says `mayImport: ['store']`. This is the same rule read off the source,
     // which is the half a declaration cannot enforce.
     const foreign: string[] = [];
@@ -107,8 +107,13 @@ describe('the lane imports nothing that assumes a browser', () => {
         if (target.startsWith(join(CORE_SRC, 'export'))) continue;
         // Contracts only where a file is DOM-free and holds no behavior: the history group
         // handle types a headless runtime names. Most contract files name DOM types.
-        if (NEUTRAL_CONTRACT_FILES.has(relative(CORE_SRC, target).replace(/\.ts$/, ''))) continue;
-        foreign.push(`${file.split('/').pop()} -> ${specifier}`);
+        if (
+          NEUTRAL_CONTRACT_FILES.has(
+            relative(CORE_SRC, target).replaceAll('\\', '/').replace(/\.ts$/, '')
+          )
+        )
+          continue;
+        foreign.push(`${basename(file)} -> ${specifier}`);
       }
     }
     expect(foreign).toEqual([]);
@@ -170,7 +175,7 @@ describe('the lane touches no DOM and no unsafe sink', () => {
         .replace(/'(?:\\.|[^'\\])*'/g, "''")
         .replace(/"(?:\\.|[^"\\])*"/g, '""');
       for (const pattern of globals) {
-        if (pattern.test(source)) hits.push(`${file.split('/').pop()} ${String(pattern)}`);
+        if (pattern.test(source)) hits.push(`${basename(file)} ${String(pattern)}`);
       }
     }
     expect(hits).toEqual([]);
@@ -180,7 +185,7 @@ describe('the lane touches no DOM and no unsafe sink', () => {
     const references = files.flatMap((file) => {
       const source = withoutComments(readFileSync(file, 'utf8'));
       return [...source.matchAll(/globalThis\s*\.\s*(\w+)/g)].map(
-        (match) => `${file.split('/').pop()} globalThis.${match[1]}`
+        (match) => `${basename(file)} globalThis.${match[1]}`
       );
     });
     expect(references).toEqual(['handles.ts globalThis.crypto']);
@@ -205,8 +210,7 @@ describe('the lane touches no DOM and no unsafe sink', () => {
     ];
     for (const file of files) {
       const source = withoutComments(readFileSync(file, 'utf8'));
-      for (const sink of sinks)
-        if (source.includes(sink)) hits.push(`${file.split('/').pop()} ${sink}`);
+      for (const sink of sinks) if (source.includes(sink)) hits.push(`${basename(file)} ${sink}`);
     }
     expect(hits).toEqual([]);
   });

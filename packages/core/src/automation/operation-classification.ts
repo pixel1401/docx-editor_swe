@@ -133,6 +133,7 @@ export const AUTOMATION_COMMAND_OPERATIONS = [
   'acceptAllRevisions',
   'rejectAllRevisions',
   'setContentControlValue',
+  'replaceContentControlWithTable',
   'setContentControlProperties',
   'deleteContentControl',
   'insertContentControlText',

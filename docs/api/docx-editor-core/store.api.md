@@ -4770,8 +4770,14 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly op: 'deleteBlock';
 } | {
     readonly beforeParagraphId: string;
+    readonly cellText?: readonly (readonly string[])[];
     readonly cols: number;
     readonly columnWidthTwips: number;
+    readonly fullWidth?: boolean;
+    readonly header?: {
+        readonly bold?: boolean;
+        readonly fillColor?: string;
+    };
     readonly op: 'insertTable';
     readonly revision?: RevisionAttributionInput;
     readonly rows: number;
@@ -4916,6 +4922,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly op: 'convertAllNotes';
 } | {
     readonly controlId: string;
+    readonly force?: boolean;
     readonly op: 'setContentControlValue';
     readonly value: string | ContentControlValueInput;
 } | {

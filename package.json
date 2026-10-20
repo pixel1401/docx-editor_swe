@@ -32,6 +32,8 @@
   ],
   "type": "module",
   "scripts": {
+    "core:npm-tarball": "node scripts/create-core-npm-tarball.mjs",
+    "core:npm-version": "node scripts/create-core-npm-tarball.mjs --version",
     "api:check": "node scripts/api-extractor.mjs",
     "api:extract": "node scripts/api-extractor.mjs --local",
     "build": "bun run build:packages:demo && bun run build:react && bun run build:vue && bun run build:igloo:source && bun run build:markdown:source && bun run build:pdf:source && bun run build:assemble && bun run check:demo-deployment",
