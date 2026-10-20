@@ -252,7 +252,7 @@
     },
     "packages/core": {
       "name": "@docx-editor.dev/core",
-      "version": "2.5.0",
+      "version": "2.5.5",
       "dependencies": {
         "@docx-editor.dev/i18n": "^2.5.0",
         "bidi-js": "1.0.3",
@@ -375,7 +375,6 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "emf-converter": "2.0.2",
-        "harfbuzzjs": "1.6.0",
       },
       "devDependencies": {
         "@docx-editor.dev/core": "workspace:*",
